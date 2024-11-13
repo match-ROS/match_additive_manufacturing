@@ -126,15 +126,10 @@ class PathFollowerNode:
         elif angle_diff < -math.pi:
             angle_diff += 2 * math.pi
     
-        print("Angle to target: ", angle_to_target)
-
-
         self.controller_output.angular.z = angle_diff*1.0
 
     def move_toward_target(self, speed):
         self.controller_output.linear.x = speed*1.0
-        #twist.linear.x = speed
-        print("Speed: ", self.controller_output)
         self.cmd_vel_pub.publish(self.controller_output)
 
 if __name__ == '__main__':
