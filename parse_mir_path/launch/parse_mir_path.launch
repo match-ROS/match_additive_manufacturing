@@ -1,0 +1,12 @@
+<launch>
+    <!-- Node that runs the path transformer script -->
+    <node name="retrieve_and_publish_mir_path" pkg="parse_mir_path" type="retrieve_and_publish_path.py" output="screen">
+        <!-- Transformation parameters -->
+        <param name="tx" value="-51.615323" />
+        <param name="ty" value="-39.752500" />
+        <param name="tz" value="0.0" />
+        <param name="rx" value="0.0" />
+        <param name="ry" value="0.0" />
+        <param name="rz" value="0.0" />
+    </node>
+</launch>
