@@ -2,7 +2,7 @@
 import rospy
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Twist, Pose, Quaternion
-from std_msgs.msg import Empty, Bool
+from std_msgs.msg import Empty, Bool, Int32
 from tf.transformations import euler_from_quaternion
 import tf.transformations as tr
 import math
@@ -16,14 +16,18 @@ class PathFollowerNode:
         self.path = []
         self.velocities = []
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.15)
+        self.Kp = rospy.get_param("~Kp", 1.0)
+        self.Kw = rospy.get_param("~Kw", 1.0)
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
+        self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.control_rate = rospy.get_param("~control_rate", 100)
         
         # Subscriber
         rospy.Subscriber(self.mir_path_topic, Path, self.path_callback)
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
+        rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
         
         # Publisher 
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
@@ -37,13 +41,7 @@ class PathFollowerNode:
         self.is_active = False
         self.controller_output = Twist()
         self.broadcaster = TransformBroadcaster()
-
-    def path_callback(self, msg):
-        self.path = msg.poses
-        self.calculate_velocities()
-
-    def pose_callback(self, msg):
-        self.current_pose = msg
+        self.ur_trajectory_index = 0
 
     def calculate_velocities(self):
         self.velocities = []
@@ -74,7 +72,7 @@ class PathFollowerNode:
             rate = rospy.Rate(self.control_rate)
             while not rospy.is_shutdown() and self.is_active and not self.reached_target(target_position):
                 self.align_robot(target_position)
-                self.move_toward_target(speed)
+                self.move_toward_target(speed,idx)
                 rate.sleep() 
             
             if not self.is_active:
@@ -126,11 +124,24 @@ class PathFollowerNode:
         elif angle_diff < -math.pi:
             angle_diff += 2 * math.pi
     
-        self.controller_output.angular.z = angle_diff*1.0
+        self.controller_output.angular.z = angle_diff*self.Kw
 
-    def move_toward_target(self, speed):
-        self.controller_output.linear.x = speed*1.0
+    def move_toward_target(self, speed, mir_idx):
+        # compute index error
+        index_error = self.ur_trajectory_index - mir_idx
+        
+        self.controller_output.linear.x = speed* self.Kp * (1.0 + 0.1*index_error)
         self.cmd_vel_pub.publish(self.controller_output)
+
+    def path_callback(self, msg):
+        self.path = msg.poses
+        self.calculate_velocities()
+
+    def pose_callback(self, msg):
+        self.current_pose = msg
+
+    def trajectory_index_callback(self, msg):
+        self.ur_trajectory_index = msg.data
 
 if __name__ == '__main__':
     PathFollowerNode()
