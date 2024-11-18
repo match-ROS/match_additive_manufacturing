@@ -27,6 +27,10 @@
         <arg name="node_start_delay" value="$(arg node_start_delay)" />
     </include>
 
+    <xacro:include filename="$(find print_sim)/urdf/keyence_line_laser.gazebo.xacro" />
+    <xacro:keyence_line_laser parent_link="UR10_r/tcp" />
+
+
     <!-- launch virtual object -->
     <!-- <include file="$(find virtual_object)/launch/virtual_object.launch" /> -->
 
