@@ -28,9 +28,7 @@
     </include>
 
 
-    <!-- launch keyence line laser -->
-    <xacro:include filename="$(find print_sim)/urdf/test_keyence.xacro" /> 
-    <!-- <xacro:keyence_line_laser parent_link="UR10_r/tcp" /> -->
+
 
 
     <!-- launch virtual object -->
