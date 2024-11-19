@@ -1,6 +1,9 @@
 <launch xmlns:xacro="http://ros.org/wiki/xacro">
     <!-- Basic launch file for one robot in the match_world_common map-->
   
+     <!-- Set GAZEBO_MODEL_PATH relativ zum ROS-Paket -->
+    <env name="GAZEBO_MODEL_PATH" value="$(optenv GAZEBO_MODEL_PATH):$(find component)/models/meshes" />
+
     <include file="$(find match_gazebo)/launch/scale.launch">
     </include>
   
