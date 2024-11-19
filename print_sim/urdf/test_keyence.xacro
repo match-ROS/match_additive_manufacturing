@@ -1,7 +1,0 @@
-<?xml version="1.0" ?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-  <!-- <xacro:include filename="$(find print_sim)/urdf/keyence_line_laser.gazebo.xacro" /> -->
-  <!-- <xacro:keyence_line_laser parent_link="base_link" /> -->
-
-</robot>
