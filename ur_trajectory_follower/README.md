@@ -1,10 +1,7 @@
 # UR Trajectory Follower
 
-This ROS package allows a UR robot to follow a given path. The package is designed to be flexible and easy to use, with launch files and Python scripts to be generated in the future.
+This ROS package allows the UR robot to follow a given path to print while driving. For this, the movement of the mobile platform has to be taken into account.
 
-## Features
-- Follow a predefined path with a UR robot
-- Easy integration with other ROS packages
 
 ## Installation
 Clone this repository into your catkin workspace and build the package:
@@ -22,7 +19,7 @@ To be updated with launch file and Python script usage.
 
 ### Input Topics
 - `/ur_trajectory_follower/goal_path` (type: `nav_msgs/Path`): The path that the UR robot should follow.
-- `/ur_trajectory_follower/feed_rate` (type: `std_msgs/Float64`): The current feed rate setting of the UR robot in world coordinates in m/s.
+- `/ur_trajectory_follower/feed_rate` (type: `std_msgs/Float64`): The current feed rate setting of the UR robot in world coordinates in m/s. (Or as factor of the path velocity)
 - `/ur_trajectory_follower/lateral_nozzle_pose_override` (type: `double`): Setting to control the nozzle height while printing.
 
 ### Output Topics
@@ -33,8 +30,14 @@ To be updated with launch file and Python script usage.
 - `/ur_trajectory_follower/stop` (type: `std_srvs/Trigger`): Service to stop following the path.
 
 ## Parameters
-- `~feed_rate` (type: `double`, default: `0.1`): Target velocity of the UR robot in world coordinates in m/s.
+- `~feed_rate` (type: `double`, default: `0.1`): Target velocity of the UR robot in world coordinates in m/s. (Or dt)
 - `~lateral_nozzle_pose` (type: `double`, default: `0.1`): Pose of nozzle to ur path.
+
+
+## Scripts
+- `ur_vel_induced_by_mir.py`: Calculates the velocity of the UR robot induced by the movement of the mobile platform.
+- `combine_twists.py`: Combines a list of twists into a single twist, to be used as a velocity command for the UR robot.
+- `orthogonal_error_correction.py`: Takes a normalized vector orthogonal to the path (normal) as well as goal pose and current pose of the ur nozzle and calculates a twist for a control to follow the path more accurately.
 
 ## Future Work
 - Add launch files for easy startup

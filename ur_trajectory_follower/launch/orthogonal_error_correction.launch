@@ -1,0 +1,13 @@
+<launch>
+    <node
+        pkg="ur_trajectory_follower"
+        type="orthogonal_error_correction.py"
+        name="orthogonal_error_correction"
+        output="screen">
+        
+        <!-- Remap topics -->
+        <remap from="~current_endeffector_pose" to="/current_endeffector_pose"/>
+        <remap from="~goal_endeffector_pose" to="/goal_endeffector_pose"/>
+        <remap from="~normal_vector" to="/normal_vector"/>
+    </node>
+</launch>
