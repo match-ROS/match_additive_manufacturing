@@ -10,9 +10,11 @@ class LayerSpawner:
     def __init__(self):
         # Initialize the node
         rospy.init_node('layer_spawner')
+        self.current_layer_topic = rospy.get_param('~current_layer_topic', '/current_layer')
 
         # Get the base pose from parameter server
-        self.base_pose = rospy.get_param('~base_pose', [51.615323, 39.752500, 0.0])
+        self.base_pose = rospy.get_param('~object_center_pose', [43.289831, 39.752500, 0.0])
+        self.base_pose = rospy.get_param('~object_center_pose', [0.0, 0.0, 0.0])
         self.current_layer = -1
 
         # Path to the STL file

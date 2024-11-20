@@ -92,6 +92,17 @@ def publish_paths():
         pose_stamped.header.stamp = rospy.Time.now()
         pose_stamped.header.frame_id = "map"
         original_path.poses.append(pose_stamped)
+
+    # find the center of a bounding box placed around the path
+    x_min = min(x_coords)
+    x_max = max(x_coords)
+    y_min = min(y_coords)
+    y_max = max(y_coords)
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
+    print(f"Center of the bounding box: ({center_x}, {center_y})")
+
+
     
     # Transform and fill transformed Path message
     transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
