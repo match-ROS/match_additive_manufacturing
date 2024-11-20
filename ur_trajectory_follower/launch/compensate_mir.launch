@@ -1,0 +1,13 @@
+<launch>
+    <node name="ur_vel_induced_by_mir" pkg="ur_trajectory_follower" type="ur_vel_induced_by_mir.py" output="screen">
+        <!-- Custom parameters -->
+        <param name="base_mir_frame_id" value="/mur620/base_link" />
+        <param name="base_ur_frame_id" value="/mur620/UR10_l/base_link" />
+        
+        <!-- Topic remapping -->
+        <remap from="~ur_pose" to="/mur620/UR10_l/tcp_pose" />
+        <remap from="~mir_cmd_vel" to="/mur620/mobile_base_controller/cmd_vel" />
+
+        <remap from="~ur_cmd_vel_local" to="~ur_cmd_vel_local" />
+    </node>
+</launch>

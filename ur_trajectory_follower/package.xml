@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>parse_ur_path</name>
+  <name>ur_trajectory_follower</name>
   <version>0.0.0</version>
-  <description>The parse_ur_path package</description>
+  <description>The ur_trajectory_follower package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/parse_ur_path</url> -->
+  <!-- <url type="website">http://wiki.ros.org/ur_trajectory_follower</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->
@@ -49,10 +49,20 @@
   <!-- Use doc_depend for packages you need only for building documentation: -->
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>geometry_msgs</depend>
-  <depend>rospy</depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>rospy</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
 
-  <depend>additive_manufacturing_msgs</depend>
+  <!-- python -->
+  <exec_depend>python-numpy</exec_depend>
+  
+  <depend>ddynamic_reconfigure_python</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
