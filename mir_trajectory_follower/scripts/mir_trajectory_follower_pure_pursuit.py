@@ -15,7 +15,7 @@ class PurePursuitNode:
         
         # Config
         self.path = []
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 1.0)
+        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.25)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
@@ -24,6 +24,7 @@ class PurePursuitNode:
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
         self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.control_rate = rospy.get_param("~control_rate", 100)
+        self.dT = rospy.get_param("~dT", 0.2)
         
         # Subscriber
         rospy.Subscriber(self.mir_path_topic, Path, self.path_callback)
@@ -45,6 +46,7 @@ class PurePursuitNode:
         self.ur_trajectory_index = 0
         self.current_lookahead_point = None
         self.current_mir_path_index = 0
+        self.time_stamp_old = rospy.Time.now()
 
     def start_callback(self, msg):
         if not self.path:
@@ -61,9 +63,15 @@ class PurePursuitNode:
 
         rate = rospy.Rate(self.control_rate)
         while not rospy.is_shutdown() and self.is_active:
+            # Überprüfe, ob Pfad und aktuelle Pose vorhanden sind
             if not self.path or self.current_pose is None:
                 continue
             
+            # Increment index if time has passed - the index is not incremented by reaching the lookahead point only time
+            if rospy.Time.now() - self.time_stamp_old > rospy.Duration(self.dT):
+                self.time_stamp_old = rospy.Time.now()
+                self.last_index += 1
+
             # Berechne den Lookahead-Punkt
             lookahead_point = self.find_lookahead_point()
             if lookahead_point is None:
@@ -75,20 +83,20 @@ class PurePursuitNode:
             self.apply_control(curvature)
 
             # Beende die Pfadverfolgung, wenn der Zielpunkt erreicht ist
-            if self.reached_target(self.path[-1].pose.position):
-                self.is_active = False
-                self.completion_pub.publish(Bool(data=True))
-                rospy.loginfo("Pfadverfolgung abgeschlossen.")
-                break
+            # if self.reached_target(self.path[-1].pose.position):
+            #     self.is_active = False
+            #     self.completion_pub.publish(Bool(data=True))
+            #     rospy.loginfo("Pfadverfolgung abgeschlossen.")
+            #     break
             
+
+
             rate.sleep()
 
     def find_lookahead_point(self):
         # Suche im Pfadausschnitt
         search_range = self.path[self.last_index:self.last_index + self.search_range]
         print("last_index", self.last_index)
-
-        self.is_point_reached(search_range[0].pose.position)
 
         for idx, pose in enumerate(search_range):
             position = pose.pose.position
@@ -107,28 +115,6 @@ class PurePursuitNode:
                 rospy.loginfo(f"Lookahead point updated: Index {self.last_index}")
                 return position
         return None
-
-    def is_point_reached(self, point):
-        """Überprüft, ob ein gegebener Punkt innerhalb der distance_threshold erreicht wurde."""
-
-        # broadcast the point
-        self.broadcaster.sendTransform(
-            (point.x, point.y, point.z),
-            (0, 0, 0, 1),
-            rospy.Time.now(),
-            "current_idx_point",
-            "map"
-        )
-
-        if self.current_pose is None:
-            return False
-        
-        distance = self.calculate_distance(self.current_pose.position, point)
-        if distance < self.distance_threshold:
-            self.last_index += 1
-            return True
-        return False
-
 
     def calculate_curvature(self, lookahead_point):
         # Aktuelle Position und Orientierung
@@ -149,9 +135,10 @@ class PurePursuitNode:
     def apply_control(self, curvature):
         # Berechne die Steuerbefehle
         index_error = self.ur_trajectory_index - (self.last_index)    
+        distance_error = self.calculate_distance(self.current_pose.position, self.path[self.last_index].pose.position)
 
         velocity = Twist()
-        velocity.linear.x = self.Kv * self.velocities[self.last_index] * (1.0 + 0.1*index_error) # Konstante Geschwindigkeit
+        velocity.linear.x = self.Kv * self.velocities[self.last_index] * (1/self.dT) + 0.1 * distance_error# * (1.0 + 0.1*index_error) 
         velocity.angular.z = velocity.linear.x * curvature
         self.cmd_vel_pub.publish(velocity)
 
@@ -163,13 +150,6 @@ class PurePursuitNode:
             distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
             speed = distance  # Goal: reach the next point in 1 second
             self.velocities.append(speed)
-
-    def reached_target(self, target_position):
-        if self.current_pose is None:
-            return False
-        
-        distance = self.calculate_distance(self.current_pose.position, target_position)
-        return distance < self.distance_threshold
 
     def path_callback(self, msg):
         self.path = msg.poses
