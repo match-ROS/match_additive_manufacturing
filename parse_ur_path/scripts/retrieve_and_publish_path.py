@@ -9,11 +9,13 @@ import math
 from additive_manufacturing_msgs.msg import Vector3Array
 
 # Add the parent directory to the Python path
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
+parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(parent_dir+ "/component/")
 
 # Import mir_path to retrieve mirX and mirY
-from path import ur_path
+from print_path import xTCP
+from print_path import yTCP
+from print_path import zTCP
 
 class PathTransfomer:
     def __init__(self):
@@ -25,9 +27,9 @@ class PathTransfomer:
         self.normals_pub = rospy.Publisher('/ur_path_normals', Vector3Array, queue_size=10)
         
         # Retrieve the original path
-        self.x_coords = ur_path.toolX()
-        self.y_coords = ur_path.toolY()
-        self.z_coords = ur_path.toolZ()
+        self.x_coords = xTCP.xTCP()
+        self.y_coords = yTCP.yTCP()
+        self.z_coords = zTCP.zTCP()
         
         # Get transformation parameters from ROS params
         self.tx = rospy.get_param('~tx', 0.0)

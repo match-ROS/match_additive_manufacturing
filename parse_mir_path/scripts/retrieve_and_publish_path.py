@@ -8,11 +8,15 @@ import tf.transformations as tf
 import math
 
 # Add the parent directory to the Python path
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
+parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+print(f"Parent directory: {parent_dir}")
+sys.path.append(parent_dir+ "/component/")
 
 # Import mir_path to retrieve mirX and mirY
-from path import mir_path
+from print_path import xMIR
+from print_path import yMIR
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
@@ -55,8 +59,8 @@ def publish_paths():
     transformed_pub = rospy.Publisher('/mir_path_transformed', Path, queue_size=10)
     
     # Retrieve the original path
-    x_coords = mir_path.mirX()
-    y_coords = mir_path.mirY()
+    x_coords = xMIR.xMIR() 
+    y_coords = yMIR.yMIR()
     
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
@@ -77,8 +81,8 @@ def publish_paths():
     # Fill original Path message
     for i in range(1, len(x_coords)-1):
         pose_stamped = PoseStamped()
-        pose_stamped.pose.position.x = x_coords[i]
-        pose_stamped.pose.position.y = y_coords[i]
+        pose_stamped.pose.position.x = x_coords[i] / 1000.0
+        pose_stamped.pose.position.y = y_coords[i] / 1000.0
         pose_stamped.pose.position.z = 0  # assuming z=0 for 2D path
         
         # the path should always face towards the next point
