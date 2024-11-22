@@ -1,0 +1,13 @@
+<launch xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- Arguments -->
+    <arg name="robot_names" default="mur620a" />
+    <arg name="UR_prefix" default="UR10_l" />
+
+    <node name="switch_URs_to_twist_control" pkg="mur_examples" type="switch_URs_to_twist_control.py" output="screen">
+        <!-- Transformation parameters -->
+        <param name="robot_names" value="robot_names" />
+        <param name="UR_prefix" value="UR_prefix" />
+    </node>
+
+  </launch>
