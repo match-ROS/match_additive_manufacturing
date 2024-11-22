@@ -81,8 +81,8 @@ def publish_paths():
     # Fill original Path message
     for i in range(1, len(x_coords)-1):
         pose_stamped = PoseStamped()
-        pose_stamped.pose.position.x = x_coords[i] / 1000.0
-        pose_stamped.pose.position.y = y_coords[i] / 1000.0
+        pose_stamped.pose.position.x = x_coords[i]
+        pose_stamped.pose.position.y = y_coords[i]
         pose_stamped.pose.position.z = 0  # assuming z=0 for 2D path
         
         # the path should always face towards the next point

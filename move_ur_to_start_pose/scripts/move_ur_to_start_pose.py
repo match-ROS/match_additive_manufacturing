@@ -21,6 +21,8 @@ class MoveManipulatorToTarget:
         # Initialize parameters
         self.path_topic = rospy.get_param('~path_topic', '/ur_path')
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'mur620a/UR10_r/base_link')
+        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.1)
+        self.spray_distance = rospy.get_param('~spray_distance', 0.1)
         
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
@@ -45,6 +47,8 @@ class MoveManipulatorToTarget:
 
         # Get the first TCP pose from the path
         target_tcp_pose = path_msg.poses[0]
+        # the target pose is the pose of the path, we need to compute the actual tcp pose
+        target_tcp_pose.pose.position.z += self.tcp_nozzle_distance + self.spray_distance
         
         # Get the current pose of the manipulator base in the map frame
         try:
