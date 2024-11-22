@@ -41,7 +41,7 @@ class LayerSpawner:
         layer_pose = Pose()
         layer_pose.position.x = self.base_pose[0]
         layer_pose.position.y = self.base_pose[1]
-        layer_pose.position.z = self.base_pose[2] + layer_number * 0.1  # Assuming each layer is 0.1m thick
+        layer_pose.position.z = self.base_pose[2] + layer_number * 0.05  # Assuming each layer is 0.1m thick
         layer_pose.orientation.w = 1.0
 
         # Spawn the model in Gazebo
