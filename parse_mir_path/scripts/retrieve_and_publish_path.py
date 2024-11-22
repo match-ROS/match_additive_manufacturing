@@ -36,8 +36,6 @@ def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
         orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
         q = tf.quaternion_from_euler(0, 0, orientation)
 
-        
-
         pose_stamped.pose.orientation.x = q[0]
         pose_stamped.pose.orientation.y = q[1]
         pose_stamped.pose.orientation.z = q[2]
