@@ -44,15 +44,16 @@ class TrajectoryPlotCallback(BaseCallback):
                 
             # Selektiere die erste Umgebung und alle Zeitschritte
             trajectory = np.array(trajectory)
+            print(f"Trajectory shape: {trajectory.shape}")
             single_env_trajectory = trajectory[:, 0, :]  # Alle Zeitschritte für Umgebung 0
             # Trajectory is recorded for the first environment only
             trajectory = np.array(trajectory)
             plt.plot(single_env_trajectory[:, 0], single_env_trajectory[:, 1], label="Optimierte Trajektorie", linestyle="-", linewidth=2)
             print(f"Trajectory shape: {trajectory.shape}")
-            print(f"Trajectory: {trajectory}")
             plt.figure(figsize=(8, 6))
-            plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie")
+            #plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie")
             plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], c='red', label="TCP Trajektorie")
+            plt.scatter(self.env.base_trajectory[:, 0], self.env.base_trajectory[:, 1], c='green', label="Basis Trajektorie")
             plt.legend()
             plt.title(f"Trajektorienvergleich nach {self.n_calls} Schritten")
             plt.xlabel("x")
@@ -66,8 +67,11 @@ if __name__ == "__main__":
     tcp_trajectory = np.array([xTCP.xTCP(), yTCP.yTCP()]).T
     base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
 
+    print("lenght of tcp_trajectory: ", len(tcp_trajectory))
+    print("lenght of base_trajectory: ", len(base_trajectory))
+
     # Anzahl der parallelen Umgebungen
-    num_cpu = 24
+    num_cpu = 1
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     # RL-Agenten initialisieren
@@ -83,7 +87,7 @@ if __name__ == "__main__":
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
-    model.learn(total_timesteps=50000, callback=plot_callback)
+    model.learn(total_timesteps=1, callback=plot_callback)
 
 
 
