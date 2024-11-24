@@ -32,18 +32,24 @@ class TrajectoryPlotCallback(BaseCallback):
         self.plot_freq = plot_freq
 
     def _on_step(self) -> bool:
-        # Plotten nach jeder `plot_freq` Anzahl von Schritten
+        # Plot after every `plot_freq` steps
         if self.n_calls % self.plot_freq == 0:
             obs = self.env.reset()
             trajectory = []
-            done = False
-            while not done:
+            done = np.array([False] * self.env.num_envs)  # Initialize 'done' array
+            while not np.any(done):  # Continue until all environments are done
                 action, _ = self.model.predict(obs)
                 obs, reward, done, _ = self.env.step(action)
-                trajectory.append(obs)
-
-            # Trajektorie plotten
+                trajectory.append(obs[0])  # Append trajectory of the first environment
+                
+            # Selektiere die erste Umgebung und alle Zeitschritte
             trajectory = np.array(trajectory)
+            single_env_trajectory = trajectory[:, 0, :]  # Alle Zeitschritte für Umgebung 0
+            # Trajectory is recorded for the first environment only
+            trajectory = np.array(trajectory)
+            plt.plot(single_env_trajectory[:, 0], single_env_trajectory[:, 1], label="Optimierte Trajektorie", linestyle="-", linewidth=2)
+            print(f"Trajectory shape: {trajectory.shape}")
+            print(f"Trajectory: {trajectory}")
             plt.figure(figsize=(8, 6))
             plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie")
             plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], c='red', label="TCP Trajektorie")
@@ -61,7 +67,7 @@ if __name__ == "__main__":
     base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 16
+    num_cpu = 24
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     # RL-Agenten initialisieren
@@ -74,7 +80,7 @@ if __name__ == "__main__":
     )
 
     # Callback erstellen
-    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
+    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
     model.learn(total_timesteps=50000, callback=plot_callback)
