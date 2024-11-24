@@ -62,6 +62,17 @@ class TrajectoryPlotCallback(BaseCallback):
             plt.show()
         return True
     
+class ResetTrajectoryCallback(BaseCallback):
+    def __init__(self, reset_freq, verbose=0):
+        super(ResetTrajectoryCallback, self).__init__(verbose)
+        self.reset_freq = reset_freq
+
+    def _on_step(self) -> bool:
+        # Überprüfe, ob die Umgebung zurückgesetzt werden soll
+        if self.num_timesteps % self.reset_freq == 0:
+            self.training_env.env_method("reset")
+        return True
+
 
 if __name__ == "__main__":
     # Lade die Trajektorien
@@ -98,7 +109,8 @@ if __name__ == "__main__":
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
-    model.learn(total_timesteps=1, callback=plot_callback)
+    reset_callback = ResetTrajectoryCallback(reset_freq=1000)
+    model.learn(total_timesteps=10000, callback=reset_callback)
 
 
 

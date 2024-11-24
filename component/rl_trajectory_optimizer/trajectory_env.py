@@ -12,6 +12,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
+        self.scale_factor = 0.001
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
@@ -84,6 +85,14 @@ class TrajectoryOptimizationEnv(gym.Env):
                         new_trajectory[i] += direction_prev * abs(a)
                     continue
 
+                # if i > 1:
+                #     print(f"Vorheriger Punkt {i-1}: {self.current_trajectory[i - 1]}")
+                #     print(f"Aktueller Punkt {i}: {self.current_trajectory[i]}")
+                #     print(f"Nächster Punkt {i+1}: {self.current_trajectory[i + 1]}")
+                #     print(f"Aktion: {a}")
+                #     print(f"Neue Position des Punktes {i}: {new_trajectory[i]}")
+
+
                 # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
                 direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
                 direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
@@ -94,13 +103,15 @@ class TrajectoryOptimizationEnv(gym.Env):
 
                 # Bewegung proportional zur Aktion
                 if a > 0:  # Bewegung in Richtung des nächsten Punktes
-                    new_trajectory[i] += direction_next * a
+                    new_trajectory[i] += direction_next * a * self.scale_factor
                 elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
-                    new_trajectory[i] += direction_prev * abs(a)
+                    new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
 
+        # Aktualisiere die Trajektorie
+        self.current_trajectory = new_trajectory
 
         # Plot der Trajektorienänderung
-        if self.step_counter % 100 == 0:
+        if self.step_counter % 10000 == 0:
             self.plot_trajectory_change(self.initial_trajectory, self.current_trajectory, self.step_counter)
         # Abstand zur TCP berechnen
         distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
@@ -129,20 +140,23 @@ class TrajectoryOptimizationEnv(gym.Env):
         )
 
         # Penalize exceeding velocity thresholds
-        max_velocity = 0.5  # Example threshold
+        max_velocity = 0.3  # Example threshold
         velocity_threshold_penalty = np.sum(velocities[np.linalg.norm(velocities, axis=1) > max_velocity])
 
         reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 1.0 * distance_penalty
 
         # Penalize exceeding acceleration thresholds
-        max_acceleration = 1.0  # Example threshold
+        max_acceleration = 0.2  # Example threshold
         acceleration_threshold_penalty = np.sum(accelerations[np.linalg.norm(accelerations, axis=1) > max_acceleration])
         reward -= velocity_threshold_penalty + acceleration_threshold_penalty
 
+        deviation = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
+        reward = -np.sum(deviation)  # Bestrafe Abweichungen von der Ausgangstrajektorie
+
         # Log or plot velocities and accelerations
-        print(f"Max Velocity: {np.max(np.linalg.norm(velocities, axis=1))}")
-        print(f"Max Acceleration: {np.max(np.linalg.norm(accelerations, axis=1))}")
-        print(f"Belohnung: {reward}")
+        # print(f"Max Velocity: {np.max(np.linalg.norm(velocities, axis=1))}")
+        # print(f"Max Acceleration: {np.max(np.linalg.norm(accelerations, axis=1))}")
+        # print(f"Belohnung: {reward}")
 
 
         # Status: Episode beendet?
