@@ -12,7 +12,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.002
+        self.scale_factor = 0.001
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
@@ -129,39 +129,47 @@ class TrajectoryOptimizationEnv(gym.Env):
         velocities, accelerations = self.calculate_velocities_and_accelerations(self.current_trajectory)
 
 
-        # Belohnung berechnen (Beispiel)
-        velocity_penalty = np.sum(np.linalg.norm(velocities, axis=1))
-        acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1))
-        distance_penalty = np.sum(
-            np.maximum(
-                np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1) - self.max_distance,
-                0,
-            )
-        )
+        # # Belohnung berechnen (Beispiel)
+        # velocity_penalty = np.sum(np.linalg.norm(velocities, axis=1))
+        # acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1))
+        # distance_penalty = np.sum(
+        #     np.maximum(
+        #         np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1) - self.max_distance,
+        #         0,
+        #     )
+        # )
 
-        # Penalize exceeding velocity thresholds
-        max_velocity = 0.3  # Example threshold
-        velocity_threshold_penalty = np.sum(velocities[np.linalg.norm(velocities, axis=1) > max_velocity])
+        # # Penalize exceeding velocity thresholds
+        # max_velocity = 0.3  # Example threshold
+        # velocity_threshold_penalty = np.sum(velocities[np.linalg.norm(velocities, axis=1) > max_velocity])
 
-        reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 0.01 * distance_penalty
+        # reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 0.1 * distance_penalty
 
-        # Penalize exceeding acceleration thresholds
-        max_acceleration = 0.2  # Example threshold
-        acceleration_threshold_penalty = np.sum(accelerations[np.linalg.norm(accelerations, axis=1) > max_acceleration])
-        reward -= velocity_threshold_penalty + acceleration_threshold_penalty
 
-        deviation = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
 
+        # deviation = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
+
+        # speed_changes = np.diff(self.current_trajectory, axis=0)
+        # smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
+
+
+        # reward = -np.sum(deviation) - 0.1 * smoothness_penalty # Bestrafe Abweichungen von der Ausgangstrajektorie
+
+        # 1. Strafe für Abweichungen von der TCP-Trajektorie
+        distances = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
+        distance_penalty = np.sum(np.maximum(distances - self.max_distance, 0))
+
+        # 2. Bestrafe ungleichmäßige Geschwindigkeiten (scharfe Änderungen)
         speed_changes = np.diff(self.current_trajectory, axis=0)
         smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
 
+        # 3. Bestrafe hohe Beschleunigungen
+        accelerations = np.diff(speed_changes, axis=0)
+        acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1)**2)
 
-        reward = -np.sum(deviation) - 0.1 * smoothness_penalty # Bestrafe Abweichungen von der Ausgangstrajektorie
+        # Gesamt-Reward
+        reward = -1.0 * distance_penalty - 0.1 * smoothness_penalty - 0.05 * acceleration_penalty
 
-        # Log or plot velocities and accelerations
-        # print(f"Max Velocity: {np.max(np.linalg.norm(velocities, axis=1))}")
-        # print(f"Max Acceleration: {np.max(np.linalg.norm(accelerations, axis=1))}")
-        # print(f"Belohnung: {reward}")
 
 
         # Status: Episode beendet?

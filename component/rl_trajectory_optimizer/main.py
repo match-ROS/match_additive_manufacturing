@@ -6,7 +6,7 @@ import os, sys
 from stable_baselines3.common.callbacks import BaseCallback
 import matplotlib.pyplot as plt
 from stable_baselines3.common.env_checker import check_env
-
+from stable_baselines3.common.logger import configure
 
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -79,10 +79,8 @@ if __name__ == "__main__":
     tcp_trajectory = np.array([xTCP.xTCP(), yTCP.yTCP()]).T
     base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
 
-
-
-    print("lenght of tcp_trajectory: ", len(tcp_trajectory))
-    print("lenght of base_trajectory: ", len(base_trajectory))
+    log_dir = "./ppo_logs"
+    new_logger = configure(log_dir, ["stdout", "tensorboard"])
 
 
     env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
@@ -96,23 +94,26 @@ if __name__ == "__main__":
     num_cpu = 16
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
+    env.max_steps_per_episode = 100 # Kürzere Episoden für schnelleres Training
+
     # RL-Agenten initialisieren
     #model = PPO("MlpPolicy", vec_env, verbose=2)
     model = PPO(
         "MlpPolicy",
         env,
-        clip_range=0.05,
-        ent_coef=0.05,
-        learning_rate=1e-4,
+        clip_range=0.01,
+        ent_coef=0.2,
         verbose=1,
         tensorboard_log="./ppo_tensorboard_logs/"
     )
+
+    model.set_logger(new_logger)
 
     # Callback erstellen
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
-    reset_callback = ResetTrajectoryCallback(reset_freq=1000)
+    reset_callback = ResetTrajectoryCallback(reset_freq=2000)
     model.learn(total_timesteps=20000, callback=reset_callback)
 
 
