@@ -5,6 +5,7 @@ from trajectory_env import TrajectoryOptimizationEnv
 import os, sys
 from stable_baselines3.common.callbacks import BaseCallback
 import matplotlib.pyplot as plt
+from stable_baselines3.common.env_checker import check_env
 
 
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -67,8 +68,14 @@ if __name__ == "__main__":
     tcp_trajectory = np.array([xTCP.xTCP(), yTCP.yTCP()]).T
     base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
 
+
+
     print("lenght of tcp_trajectory: ", len(tcp_trajectory))
     print("lenght of base_trajectory: ", len(base_trajectory))
+
+
+    env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
+    check_env(env, warn=True)
 
     # Anzahl der parallelen Umgebungen
     num_cpu = 1
@@ -78,7 +85,7 @@ if __name__ == "__main__":
     #model = PPO("MlpPolicy", vec_env, verbose=2)
     model = PPO(
         "MlpPolicy",
-        vec_env,
+        env,
         verbose=1,
         tensorboard_log="./ppo_tensorboard_logs/"
     )

@@ -11,12 +11,18 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-
+        self.max_distance = 2.0
         # Action space: Flach (1928,)
+        # self.action_space = spaces.Box(
+        #     low=-max_displacement,
+        #     high=max_displacement,
+        #     shape=(964 * 2,),  # Flach
+        #     dtype=np.float32
+        # )
         self.action_space = spaces.Box(
-            low=-max_displacement,
-            high=max_displacement,
-            shape=(964 * 2,),  # Flach
+            low=-1,
+            high=1,
+            shape=(964 * 2,),  # Flache Struktur
             dtype=np.float32
         )
 
@@ -24,7 +30,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=self.base_trajectory.shape,
+            shape=(964 * 2,),  # Abgeflachte Struktur
             dtype=np.float32
         )
 
@@ -33,29 +39,39 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         """
-        Reset die Umgebung und initialisiere den Zufallszahlengenerator (falls erforderlich).
+        Reset die Umgebung und initialisiere den Zufallszahlengenerator.
         """
         if seed is not None:
-            # Initialisiere den Zufallszahlengenerator
             self.np_random, _ = gym.utils.seeding.np_random(seed)
-        self.current_trajectory = self.base_trajectory.copy()  # Zurücksetzen der Trajektorie
-        return self.current_trajectory  # Rückgabe der initialen Observation
+        
+        # Setze die Trajektorie zurück
+        self.current_trajectory = self.base_trajectory.copy()
+        
+        # Rückgabe als float32
+        return self.current_trajectory.flatten().astype(np.float32), {}
+
 
 
     def step(self, action):
-        # Reshape der Aktion in die ursprüngliche Struktur (964, 2)
-        action = action.reshape((964, 2))
+        # Skaliere und reshaped die Aktion
+        action = action.reshape((964, 2)) * 0.1
 
-        # Wende die Aktion an (z. B. Verschiebung der Punkte)
+        # Wende die Aktion an
         self.current_trajectory += action
 
-        # Berechnung der Belohnung
+        # Belohnung berechnen (Beispiel)
         distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
         distance_penalty = np.sum((distances[distances > self.max_distance] - self.max_distance) ** 2)
         reward = -distance_penalty
 
-        done = False  # Episode bleibt offen, bis Bedingung erfüllt ist
-        return self.current_trajectory, reward, done, {}
+        # Status: Episode beendet?
+        terminated = False  # Setze deine Bedingung hier, z. B. ob das Ziel erreicht wurde
+        truncated = False   # Setze dies auf True, wenn eine zeitliche Begrenzung erreicht wurde
+
+        # Rückgabe der Werte
+        return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
+
+
 
 
 
