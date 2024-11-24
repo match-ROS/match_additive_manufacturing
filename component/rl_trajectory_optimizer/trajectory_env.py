@@ -41,7 +41,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         """
         if seed is not None:
             self.np_random, _ = gym.utils.seeding.np_random(seed)
-        
+            
         # Setze die Trajektorie zurück
         self.current_trajectory = self.base_trajectory.copy()
         
@@ -68,9 +68,22 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         for i, a in enumerate(action):
             if i > 0 and i < len(self.current_trajectory) - 1:
-                if i == 0 or i == len(self.current_trajectory) - 1:
-                    # Keine Bewegung für Randpunkte
+                
+                if i == 0:
+                    direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+                    direction_next /= np.linalg.norm(direction_next) + 1e-8
+                    if a > 0:  # Bewegung in Richtung des nächsten Punktes
+                        new_trajectory[i] += direction_next * a
                     continue
+
+                # Spezialfall: Letzter Punkt (keine Bewegung zum nächsten)
+                if i == len(self.current_trajectory) - 1:
+                    direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+                    direction_prev /= np.linalg.norm(direction_prev) + 1e-8
+                    if a < 0:  # Bewegung in Richtung des vorherigen Punktes
+                        new_trajectory[i] += direction_prev * abs(a)
+                    continue
+
                 # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
                 direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
                 direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
@@ -79,29 +92,12 @@ class TrajectoryOptimizationEnv(gym.Env):
                 direction_prev /= np.linalg.norm(direction_prev) + 1e-8
                 direction_next /= np.linalg.norm(direction_next) + 1e-8
 
-            # Bewegung proportional zur Aktion
-            if a > 0:  # Bewegung in Richtung des nächsten Punktes
-                new_trajectory[i] += direction_next * a
-            elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
-                new_trajectory[i] += direction_prev * abs(a)
+                # Bewegung proportional zur Aktion
+                if a > 0:  # Bewegung in Richtung des nächsten Punktes
+                    new_trajectory[i] += direction_next * a
+                elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
+                    new_trajectory[i] += direction_prev * abs(a)
 
-        # # Aktualisiere die Trajektorie
-        # self.current_trajectory = new_trajectory
-
-        # # Aktion umwandeln in Trajektorie
-        # # Berechne die Richtungen der Bewegung (Vektoren entlang der Trajektorie)
-        # directions = np.diff(self.current_trajectory, axis=0)
-        # directions = np.vstack((directions, directions[-1]))  # Kopiere den letzten Vektor für den letzten Punkt
-
-        # # Normiere die Richtungen, um Skalierungsfehler zu vermeiden
-        # norms = np.linalg.norm(directions, axis=1, keepdims=True)
-        # directions = directions / (norms + 1e-8)  # Vermeidung von Division durch Null
-
-        # # Multipliziere jede Aktion mit ihrer Richtung
-        # # action[:, np.newaxis] erweitert die Dimension von (964,) auf (964, 1)
-
-        # self.current_trajectory += action * directions
-        # #self.current_trajectory += action[1, np.newaxis] * directions  # Bewegungen nur entlang der Richtung
 
         # Plot der Trajektorienänderung
         if self.step_counter % 100 == 0:
@@ -158,8 +154,12 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.step_counter += 1
         self.rewards.append(reward)
 
+        obs = self.current_trajectory[:, 0].astype(np.float32)
+
         # Rückgabe der Werte
-        return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
+        #return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
+        return obs, reward, terminated, truncated, {}
+
 
     def render(self, mode="human"):
         """
