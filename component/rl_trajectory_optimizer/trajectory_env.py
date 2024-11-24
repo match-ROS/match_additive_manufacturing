@@ -12,7 +12,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.001
+        self.scale_factor = 0.002
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
@@ -143,7 +143,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         max_velocity = 0.3  # Example threshold
         velocity_threshold_penalty = np.sum(velocities[np.linalg.norm(velocities, axis=1) > max_velocity])
 
-        reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 1.0 * distance_penalty
+        reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 0.01 * distance_penalty
 
         # Penalize exceeding acceleration thresholds
         max_acceleration = 0.2  # Example threshold
@@ -151,7 +151,12 @@ class TrajectoryOptimizationEnv(gym.Env):
         reward -= velocity_threshold_penalty + acceleration_threshold_penalty
 
         deviation = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
-        reward = -np.sum(deviation)  # Bestrafe Abweichungen von der Ausgangstrajektorie
+
+        speed_changes = np.diff(self.current_trajectory, axis=0)
+        smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
+
+
+        reward = -np.sum(deviation) - 0.1 * smoothness_penalty # Bestrafe Abweichungen von der Ausgangstrajektorie
 
         # Log or plot velocities and accelerations
         # print(f"Max Velocity: {np.max(np.linalg.norm(velocities, axis=1))}")

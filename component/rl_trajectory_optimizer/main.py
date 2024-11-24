@@ -93,7 +93,7 @@ if __name__ == "__main__":
     # obs, reward, terminated, truncated, info = env.step(action)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 1
+    num_cpu = 16
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     # RL-Agenten initialisieren
@@ -101,6 +101,9 @@ if __name__ == "__main__":
     model = PPO(
         "MlpPolicy",
         env,
+        clip_range=0.05,
+        ent_coef=0.05,
+        learning_rate=1e-4,
         verbose=1,
         tensorboard_log="./ppo_tensorboard_logs/"
     )
@@ -110,7 +113,7 @@ if __name__ == "__main__":
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=1000)
-    model.learn(total_timesteps=10000, callback=reset_callback)
+    model.learn(total_timesteps=20000, callback=reset_callback)
 
 
 
