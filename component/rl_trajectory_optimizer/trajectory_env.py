@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import numpy as np
 import gym
+#import gymnasium as gym
 from gym import spaces
 
 class TrajectoryOptimizationEnv(gym.Env):

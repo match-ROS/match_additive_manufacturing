@@ -3,6 +3,9 @@ import numpy as np
 from stable_baselines3 import PPO
 from trajectory_env import TrajectoryOptimizationEnv
 import os, sys
+from stable_baselines3.common.callbacks import BaseCallback
+import matplotlib.pyplot as plt
+
 
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -10,32 +13,80 @@ parent_dir = os.path.dirname(os.path.abspath(__file__))
 print(f"Parent directory: {parent_dir}")
 sys.path.append(parent_dir)
 
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
+# Funktion zum Erstellen einer neuen Umgebung
+def make_env():
+    return TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
+
 
 from print_path import xMIR, yMIR, xTCP, yTCP
 
-# Lade die Trajektorien
-tcp_trajectory = np.array([xTCP.xTCP(), yTCP.yTCP()]).T
-base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
 
-# Umgebung erstellen
-env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
 
-# RL-Agent initialisieren
-model = PPO("MlpPolicy", env, verbose=1)
+class TrajectoryPlotCallback(BaseCallback):
+    def __init__(self, env, tcp_trajectory, plot_freq=10000, verbose=0):
+        super(TrajectoryPlotCallback, self).__init__(verbose)
+        self.env = env
+        self.tcp_trajectory = tcp_trajectory
+        self.plot_freq = plot_freq
 
-# Training starten
-print("Starte Training...")
-model.learn(total_timesteps=10000)
-print("Training abgeschlossen!")
+    def _on_step(self) -> bool:
+        # Plotten nach jeder `plot_freq` Anzahl von Schritten
+        if self.n_calls % self.plot_freq == 0:
+            obs = self.env.reset()
+            trajectory = []
+            done = False
+            while not done:
+                action, _ = self.model.predict(obs)
+                obs, reward, done, _ = self.env.step(action)
+                trajectory.append(obs)
 
-# Modell speichern
-model.save("ppo_trajectory_optimizer")
-print("Modell gespeichert.")
+            # Trajektorie plotten
+            trajectory = np.array(trajectory)
+            plt.figure(figsize=(8, 6))
+            plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie")
+            plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], c='red', label="TCP Trajektorie")
+            plt.legend()
+            plt.title(f"Trajektorienvergleich nach {self.n_calls} Schritten")
+            plt.xlabel("x")
+            plt.ylabel("y")
+            plt.show()
+        return True
+    
 
-# Optimierte Trajektorie testen
-obs = env.reset()
-done = False
-while not done:
-    action, _ = model.predict(obs)
-    obs, reward, done, _ = env.step(action)
-    env.render()
+if __name__ == "__main__":
+    # Lade die Trajektorien
+    tcp_trajectory = np.array([xTCP.xTCP(), yTCP.yTCP()]).T
+    base_trajectory = np.array([xMIR.xMIR(), yMIR.yMIR()]).T
+
+    # Anzahl der parallelen Umgebungen
+    num_cpu = 16
+    vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
+
+    # RL-Agenten initialisieren
+    #model = PPO("MlpPolicy", vec_env, verbose=2)
+    model = PPO(
+        "MlpPolicy",
+        vec_env,
+        verbose=1,
+        tensorboard_log="./ppo_tensorboard_logs/"
+    )
+
+    # Callback erstellen
+    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
+
+    # Training starten mit Callback
+    model.learn(total_timesteps=50000, callback=plot_callback)
+
+
+
+
+    # Training starten
+    # print("Starte Training...")
+    # model.learn(total_timesteps=10000)
+    # print("Training abgeschlossen!")
+
+    # Modell speichern
+    model.save("ppo_trajectory_optimizer")
+    print("Modell gespeichert.")
