@@ -101,6 +101,11 @@ class TrajectoryOptimizationEnv(gym.Env):
                 direction_prev /= np.linalg.norm(direction_prev) + 1e-8
                 direction_next /= np.linalg.norm(direction_next) + 1e-8
 
+                # if both points are the same, set direction to 0
+                if self.current_trajectory[i - 1][0] == self.current_trajectory[i + 1][0] and self.current_trajectory[i - 1][1] == self.current_trajectory[i + 1][1]:
+                    direction_prev = 0
+                    direction_next = 0
+
                 # Bewegung proportional zur Aktion
                 if a > 0:  # Bewegung in Richtung des nächsten Punktes
                     new_trajectory[i] += direction_next * a * self.scale_factor

@@ -113,7 +113,7 @@ if __name__ == "__main__":
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
-    reset_callback = ResetTrajectoryCallback(reset_freq=2000)
+    reset_callback = ResetTrajectoryCallback(reset_freq=100)
     model.learn(total_timesteps=20000, callback=reset_callback)
 
 
