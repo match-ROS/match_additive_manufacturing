@@ -77,6 +77,10 @@ if __name__ == "__main__":
     env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
     check_env(env, warn=True)
 
+    # obs = env.reset()
+    # action = env.action_space.sample()
+    # obs, reward, terminated, truncated, info = env.step(action)
+
     # Anzahl der parallelen Umgebungen
     num_cpu = 1
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
