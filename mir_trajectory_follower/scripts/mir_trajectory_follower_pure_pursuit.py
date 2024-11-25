@@ -76,7 +76,7 @@ class PurePursuitNode:
             lookahead_point = self.find_lookahead_point()
             if lookahead_point is None:
                 rospy.loginfo_throttle(5,"No valid lookahead point found. Stopping.")
-                break
+                continue
 
             # Berechne die Krümmung und Steuerung
             curvature = self.calculate_curvature(lookahead_point)
@@ -156,6 +156,15 @@ class PurePursuitNode:
 
     def pose_callback(self, msg):
         self.current_pose = msg
+        # broadcast current pose
+        self.broadcaster.sendTransform(
+            (msg.position.x, msg.position.y, msg.position.z),
+            (msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
+            rospy.Time.now(),
+            "current_pose",
+            "map"
+        )
+
 
     def trajectory_index_callback(self, msg):
         self.ur_trajectory_index = msg.data

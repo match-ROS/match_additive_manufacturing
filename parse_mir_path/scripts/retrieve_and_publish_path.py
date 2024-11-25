@@ -17,6 +17,7 @@ sys.path.append(parent_dir+ "/component/")
 # Import mir_path to retrieve mirX and mirY
 from print_path import xMIR
 from print_path import yMIR
+from print_path import nL
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
@@ -59,6 +60,7 @@ def publish_paths():
     # Retrieve the original path
     x_coords = xMIR.xMIR() 
     y_coords = yMIR.yMIR()
+    layer_number = nL.nL()
     
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
@@ -81,7 +83,7 @@ def publish_paths():
         pose_stamped = PoseStamped()
         pose_stamped.pose.position.x = x_coords[i]
         pose_stamped.pose.position.y = y_coords[i]
-        pose_stamped.pose.position.z = 0  # assuming z=0 for 2D path
+        pose_stamped.pose.position.z = layer_number[i]  # assuming z=0 for 2D path
         
         # the path should always face towards the next point
         orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
