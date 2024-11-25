@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100)
-    model.learn(total_timesteps=20000, callback=reset_callback)
+    model.learn(total_timesteps=40000, callback=reset_callback)
 
 
 

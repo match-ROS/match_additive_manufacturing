@@ -12,7 +12,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.001
+        self.scale_factor = 0.01
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
@@ -68,49 +68,64 @@ class TrajectoryOptimizationEnv(gym.Env):
         new_trajectory = self.current_trajectory.copy()
 
         for i, a in enumerate(action):
-            if i > 0 and i < len(self.current_trajectory) - 1:
-                
-                if i == 0:
-                    direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-                    direction_next /= np.linalg.norm(direction_next) + 1e-8
-                    if a > 0:  # Bewegung in Richtung des nächsten Punktes
-                        new_trajectory[i] += direction_next * a
-                    continue
-
-                # Spezialfall: Letzter Punkt (keine Bewegung zum nächsten)
-                if i == len(self.current_trajectory) - 1:
-                    direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-                    direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-                    if a < 0:  # Bewegung in Richtung des vorherigen Punktes
-                        new_trajectory[i] += direction_prev * abs(a)
-                    continue
-
-                # if i > 1:
-                #     print(f"Vorheriger Punkt {i-1}: {self.current_trajectory[i - 1]}")
-                #     print(f"Aktueller Punkt {i}: {self.current_trajectory[i]}")
-                #     print(f"Nächster Punkt {i+1}: {self.current_trajectory[i + 1]}")
-                #     print(f"Aktion: {a}")
-                #     print(f"Neue Position des Punktes {i}: {new_trajectory[i]}")
-
-
-                # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
-                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+            if i == 0:
+                # Erster Punkt: Nur Bewegung in Richtung des nächsten Punktes möglich
                 direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+                new_trajectory[i] += direction_next * a * self.scale_factor
+                continue
 
-                # Normiere die Richtungen
-                direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-                direction_next /= np.linalg.norm(direction_next) + 1e-8
+            if i == len(self.current_trajectory) - 1:
+                # Letzter Punkt: Nur Bewegung in Richtung des vorherigen Punktes möglich
+                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
+                continue
 
-                # if both points are the same, set direction to 0
-                if self.current_trajectory[i - 1][0] == self.current_trajectory[i + 1][0] and self.current_trajectory[i - 1][1] == self.current_trajectory[i + 1][1]:
-                    direction_prev = 0
-                    direction_next = 0
+            # Mittlere Punkte: Bewegung in Richtung des vorherigen oder nächsten Punktes
+            if a > 0:
+                # Bewegung in Richtung des nächsten Punktes
+                direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+                new_trajectory[i] += direction_next * a * self.scale_factor
+            elif a < 0:
+                # Bewegung in Richtung des vorherigen Punktes
+                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
 
-                # Bewegung proportional zur Aktion
-                if a > 0:  # Bewegung in Richtung des nächsten Punktes
-                    new_trajectory[i] += direction_next * a * self.scale_factor
-                elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
-                    new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
+        # for i, a in enumerate(action):
+        #     if i > 0 and i < len(self.current_trajectory) - 1:
+                
+        #         if i == 0:
+        #             direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+        #             direction_next /= np.linalg.norm(direction_next) + 1e-8
+        #             if a > 0:  # Bewegung in Richtung des nächsten Punktes
+        #                 new_trajectory[i] += direction_next * a
+        #             continue
+
+        #         # Spezialfall: Letzter Punkt (keine Bewegung zum nächsten)
+        #         if i == len(self.current_trajectory) - 1:
+        #             direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+        #             direction_prev /= np.linalg.norm(direction_prev) + 1e-8
+        #             if a < 0:  # Bewegung in Richtung des vorherigen Punktes
+        #                 new_trajectory[i] += direction_prev * abs(a)
+        #             continue
+
+        #         # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
+        #         direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+        #         direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+
+        #         # Normiere die Richtungen
+        #         direction_prev /= np.linalg.norm(direction_prev) + 1e-8
+        #         direction_next /= np.linalg.norm(direction_next) + 1e-8
+
+        #         # if both points are the same, set direction to 0
+        #         if self.current_trajectory[i - 1][0] == self.current_trajectory[i + 1][0] and self.current_trajectory[i - 1][1] == self.current_trajectory[i + 1][1]:
+        #             direction_prev = 0
+        #             direction_next = 0
+
+        #         # Bewegung proportional zur Aktion
+        #         if a > 0:  # Bewegung in Richtung des nächsten Punktes
+        #             new_trajectory[i] += direction_next * a * self.scale_factor
+        #         elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
+        #             new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
 
         # Aktualisiere die Trajektorie
         self.current_trajectory = new_trajectory
@@ -130,29 +145,9 @@ class TrajectoryOptimizationEnv(gym.Env):
         )
 
 
-        # Calculate velocities and accelerations
-        velocities, accelerations = self.calculate_velocities_and_accelerations(self.current_trajectory)
+        velocities = np.linalg.norm(np.diff(self.current_trajectory, axis=0), axis=1) / self.time_step
+        velocity_rmse = np.sqrt(np.mean((velocities) ** 2))
 
-
-        # # Belohnung berechnen (Beispiel)
-        # velocity_penalty = np.sum(np.linalg.norm(velocities, axis=1))
-        # acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1))
-        # distance_penalty = np.sum(
-        #     np.maximum(
-        #         np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1) - self.max_distance,
-        #         0,
-        #     )
-        # )
-
-        # # Penalize exceeding velocity thresholds
-        # max_velocity = 0.3  # Example threshold
-        # velocity_threshold_penalty = np.sum(velocities[np.linalg.norm(velocities, axis=1) > max_velocity])
-
-        # reward = -0.1 * velocity_penalty - 0.5 * acceleration_penalty - 0.1 * distance_penalty
-
-
-
-        # deviation = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
 
         # speed_changes = np.diff(self.current_trajectory, axis=0)
         # smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
@@ -172,8 +167,13 @@ class TrajectoryOptimizationEnv(gym.Env):
         accelerations = np.diff(speed_changes, axis=0)
         acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1)**2)
 
+        print(f"Distance penalty: {distance_penalty}")
+        print(f"Smoothness penalty: {smoothness_penalty}")
+        print(f"Acceleration penalty: {acceleration_penalty}")
+        print(f"Velocity RMSE: {velocity_rmse}")
+
         # Gesamt-Reward
-        reward = -1.0 * distance_penalty - 0.1 * smoothness_penalty - 0.05 * acceleration_penalty
+        reward = -1.0 * distance_penalty - 0.1 * smoothness_penalty - 0.05 * acceleration_penalty - 0.5 * velocity_rmse
 
 
 
