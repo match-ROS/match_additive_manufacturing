@@ -23,7 +23,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.action_space = spaces.Box(
             low=-1,
             high=1,
-            shape=(len(self.base_trajectory),),  # Eine Aktion pro Punkt
+            shape=(len(self.base_trajectory),2),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
 
@@ -31,7 +31,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(len(self.base_trajectory),),  # Eine Observation pro Punkt
+            shape=(len(self.base_trajectory),2),  # Eine Observation pro Punkt
             dtype=np.float32
         )
 
@@ -48,7 +48,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Setze die Trajektorie zurück
         self.current_trajectory = self.base_trajectory.copy()
         
-        obs = self.current_trajectory.flatten()[:len(self.base_trajectory)]  # Beispiel: Nur die ersten 964 Werte
+        # Beobachtung ist die aktuelle Trajektorie
+        obs = self.current_trajectory  # 2D-Array mit Form (964, 2)
         return obs.astype(np.float32), {}
 
     def calculate_velocities_and_accelerations(self,trajectory):
@@ -72,38 +73,48 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
 
- 
+    
     def step(self, action):
-
-        # Plot der Trajektorienänderung
-        if self.step_counter % 1000 == 0:
-            self.plot_trajectory_change(self.initial_trajectory, self.current_trajectory, self.step_counter)
-            self.calculate_and_plot_profiles(self.current_trajectory, step_number=self.step_counter)
-
         new_trajectory = self.current_trajectory.copy()
 
-        for i, a in enumerate(action):
+        for i, (a_along, a_orthogonal) in enumerate(action):
             if i == 0:
-                # Erster Punkt: Nur Bewegung in Richtung des nächsten Punktes möglich
+                # Erster Punkt: Erlaube Bewegung entlang des nächsten Punktes und orthogonal
                 direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_next * a * self.scale_factor
+                orthogonal_direction = np.array([-direction_next[1], direction_next[0]])  # 90° Rotation
+                orthogonal_direction /= np.linalg.norm(orthogonal_direction)  # Normieren
+                
+                new_trajectory[i] += (
+                    direction_next * a_along * self.scale_factor +
+                    orthogonal_direction * a_orthogonal * self.scale_factor
+                )
                 continue
 
             if i == len(self.current_trajectory) - 1:
-                # Letzter Punkt: Nur Bewegung in Richtung des vorherigen Punktes möglich
+                # Letzter Punkt: Erlaube Bewegung entlang des vorherigen Punktes und orthogonal
                 direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
+                orthogonal_direction = np.array([-direction_prev[1], direction_prev[0]])  # 90° Rotation
+                orthogonal_direction /= np.linalg.norm(orthogonal_direction)  # Normieren
+                
+                new_trajectory[i] += (
+                    direction_prev * a_along * self.scale_factor +
+                    orthogonal_direction * a_orthogonal * self.scale_factor
+                )
                 continue
 
-            # Mittlere Punkte: Bewegung in Richtung des vorherigen oder nächsten Punktes
-            if a > 0:
-                # Bewegung in Richtung des nächsten Punktes
-                direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_next * a * self.scale_factor
-            elif a < 0:
-                # Bewegung in Richtung des vorherigen Punktes
-                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
+            # Mittlere Punkte: Bewegung entlang benachbarter Punkte und orthogonal
+            direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
+            direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
+            movement_direction = (direction_next + direction_prev) / 2  # Mittelwert der Nachbarn
+            movement_direction /= np.linalg.norm(movement_direction)  # Normieren
+            orthogonal_direction = np.array([-movement_direction[1], movement_direction[0]])  # 90° Rotation
+            
+            new_trajectory[i] += (
+                movement_direction * a_along * self.scale_factor +
+                orthogonal_direction * a_orthogonal * self.scale_factor
+            )
+
+        self.current_trajectory = new_trajectory
 
         # Aktualisiere die Trajektorie
         self.current_trajectory = new_trajectory
@@ -116,7 +127,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Abweichung zur initialen Trajektorie berechnen
         spatial_deviation = self.calculate_path_deviation(self.current_trajectory, self.initial_trajectory)
-        print("spatial_deviation: ", spatial_deviation)
+        #print("spatial_deviation: ", spatial_deviation)
 
         distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
         distance_penalty = np.sum(distances[distances > 0.95 * self.max_distance])
@@ -124,6 +135,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         reward = velocity_rmse
         reward -= distance_penalty 
         reward -= 0.1 * spatial_deviation 
+
+        print(f"Step {self.step_counter}: Reward: {reward}, Distance penalty: {distance_penalty}, Spatial deviation: {spatial_deviation}, Velocity RMSE: {velocity_rmse}")
 
         # if np.any(distances > self.max_distance):
         #     terminated = True
@@ -146,10 +159,10 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.step_counter += 1
         self.rewards.append(reward)
 
-        obs = self.current_trajectory[:, 0].astype(np.float32)
-
-        # Rückgabe der Werte
-        #return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
+        obs = self.current_trajectory.astype(np.float32)  # Muss Form (964, 2) haben
+        assert obs.shape == self.observation_space.shape, (
+            f"Beobachtung hat falsche Form: {obs.shape}, erwartet: {self.observation_space.shape}"
+        )
         return obs, reward, terminated, truncated, {}
 
     def calculate_and_plot_profiles(self,trajectory, step_number):
