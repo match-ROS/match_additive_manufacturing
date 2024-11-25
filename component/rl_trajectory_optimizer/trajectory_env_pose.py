@@ -4,6 +4,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import matplotlib.pyplot as plt
+from scipy.spatial import cKDTree
 
 
 
@@ -12,7 +13,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.1
+        self.scale_factor = 0.01
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
@@ -59,12 +60,25 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         return velocities, accelerations
     
-    import matplotlib.pyplot as plt
+    def calculate_path_deviation(self,trajectory, reference_path):
+        """
+        Berechnet die Abweichung der Trajektorie vom ursprünglichen Pfad
+        mithilfe eines KD-Baums für effiziente Entfernungssuche.
+        """
+        tree = cKDTree(reference_path)
+        distances, _ = tree.query(trajectory)
+        total_deviation = np.sum(distances)
+        return total_deviation
+
+
 
  
     def step(self, action):
-        # Skaliere und reshaped die Aktion
-        #action = action.reshape((964, 2)) * 0.005
+
+        # Plot der Trajektorienänderung
+        if self.step_counter % 1000 == 0:
+            self.plot_trajectory_change(self.initial_trajectory, self.current_trajectory, self.step_counter)
+            self.calculate_and_plot_profiles(self.current_trajectory, step_number=self.step_counter)
 
         new_trajectory = self.current_trajectory.copy()
 
@@ -91,97 +105,41 @@ class TrajectoryOptimizationEnv(gym.Env):
                 direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
                 new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
 
-        # for i, a in enumerate(action):
-        #     if i > 0 and i < len(self.current_trajectory) - 1:
-                
-        #         if i == 0:
-        #             direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-        #             direction_next /= np.linalg.norm(direction_next) + 1e-8
-        #             if a > 0:  # Bewegung in Richtung des nächsten Punktes
-        #                 new_trajectory[i] += direction_next * a
-        #             continue
-
-        #         # Spezialfall: Letzter Punkt (keine Bewegung zum nächsten)
-        #         if i == len(self.current_trajectory) - 1:
-        #             direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-        #             direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-        #             if a < 0:  # Bewegung in Richtung des vorherigen Punktes
-        #                 new_trajectory[i] += direction_prev * abs(a)
-        #             continue
-
-        #         # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
-        #         direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-        #         direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-
-        #         # Normiere die Richtungen
-        #         direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-        #         direction_next /= np.linalg.norm(direction_next) + 1e-8
-
-        #         # if both points are the same, set direction to 0
-        #         if self.current_trajectory[i - 1][0] == self.current_trajectory[i + 1][0] and self.current_trajectory[i - 1][1] == self.current_trajectory[i + 1][1]:
-        #             direction_prev = 0
-        #             direction_next = 0
-
-        #         # Bewegung proportional zur Aktion
-        #         if a > 0:  # Bewegung in Richtung des nächsten Punktes
-        #             new_trajectory[i] += direction_next * a * self.scale_factor
-        #         elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
-        #             new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
-
         # Aktualisiere die Trajektorie
         self.current_trajectory = new_trajectory
 
-        # Plot der Trajektorienänderung
-        if self.step_counter % 10000 == 0:
-            self.plot_trajectory_change(self.initial_trajectory, self.current_trajectory, self.step_counter)
-            self.calculate_and_plot_profiles(self.current_trajectory, step_number=self.step_counter)
         # Abstand zur TCP berechnen
         distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
-
-        # Punkte, die zu weit entfernt sind, korrigieren
-        # exceeds = distances > self.max_distance
-        # self.current_trajectory[exceeds] = (
-        #     self.tcp_trajectory[exceeds]
-        #     + (self.current_trajectory[exceeds] - self.tcp_trajectory[exceeds])
-        #     * (self.max_distance / distances[exceeds])[:, np.newaxis]
-        # )
-
 
         velocities = np.linalg.norm(np.diff(self.current_trajectory, axis=0), axis=1) / self.time_step
         velocity_rmse = np.sqrt(np.mean((velocities) ** 2))
 
+        # Abweichung zur initialen Trajektorie berechnen
+        spatial_deviation = self.calculate_path_deviation(self.current_trajectory, self.initial_trajectory)
+        print("spatial_deviation: ", spatial_deviation)
 
-        # speed_changes = np.diff(self.current_trajectory, axis=0)
-        # smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
+        distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
+        distance_penalty = np.sum(distances[distances > 0.95 * self.max_distance])
 
+        reward = velocity_rmse
+        reward -= distance_penalty 
+        reward -= 0.1 * spatial_deviation 
 
-        # reward = -np.sum(deviation) - 0.1 * smoothness_penalty # Bestrafe Abweichungen von der Ausgangstrajektorie
+        # if np.any(distances > self.max_distance):
+        #     terminated = True
+        #     reward -= 10  # Optional: eine hohe Strafe für die Verletzung der Bedingung
+        # else:
+        #     terminated = False
 
-        # 1. Strafe für Abweichungen von der TCP-Trajektorie
-        distances = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
-        distance_penalty = np.sum(distances)
+        # # Setze dies auf True, wenn eine zeitliche Begrenzung erreicht wurde
+        # if self.step_counter >= 1000:
+        #     truncated = True
+        # else:
+        #     truncated = False
 
-        # 2. Bestrafe ungleichmäßige Geschwindigkeiten (scharfe Änderungen)
-        speed_changes = np.diff(self.current_trajectory, axis=0)
-        smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
+        terminated = False
+        truncated = False
 
-        # 3. Bestrafe hohe Beschleunigungen
-        accelerations = np.diff(speed_changes, axis=0)
-        acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1)**2)
-
-        print(f"Distance penalty: {distance_penalty}")
-        print(f"Smoothness penalty: {smoothness_penalty}")
-        print(f"Acceleration penalty: {acceleration_penalty}")
-        print(f"Velocity RMSE: {velocity_rmse}")
-
-        # Gesamt-Reward
-        reward = -0.01 * distance_penalty - 0.01 * smoothness_penalty - 0.05 * acceleration_penalty - 0.5 * velocity_rmse
-
-
-
-        # Status: Episode beendet?
-        terminated = False  # Setze deine Bedingung hier, z. B. ob das Ziel erreicht wurde
-        truncated = False   # Setze dies auf True, wenn eine zeitliche Begrenzung erreicht wurde
 
         # Plot Geschwindigkeits- und Beschleunigungsprofile
         #self.calculate_and_plot_profiles(self.current_trajectory, reward, step_number=self.step_counter)
@@ -193,13 +151,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Rückgabe der Werte
         #return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
         return obs, reward, terminated, truncated, {}
-
-
-    def render(self, mode="human"):
-        """
-        Visualisiert die aktuelle Trajektorie (optional).
-        """
-        print(f"Current trajectory: {self.current_trajectory}")
 
     def calculate_and_plot_profiles(self,trajectory, step_number):
         # Calculate velocities and accelerations

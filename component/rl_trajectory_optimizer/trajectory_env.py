@@ -4,6 +4,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 
 
 
@@ -101,14 +102,30 @@ class TrajectoryOptimizationEnv(gym.Env):
         velocities = np.linalg.norm(np.diff(self.base_trajectory, axis=0), axis=1) / np.diff(new_time_stamps)
         accelerations = np.diff(velocities) / np.diff(self.time_stamps[:-1])
 
+        # Interpolation vorbereiten (für x- und y-Koordinaten des TCP)
+        tcp_x_interp = interp1d(self.initial_time_stamps, self.tcp_trajectory[:, 0], kind='linear', fill_value="extrapolate")
+        tcp_y_interp = interp1d(self.initial_time_stamps, self.tcp_trajectory[:, 1], kind='linear', fill_value="extrapolate")
+
+        # Interpolierte TCP-Positionen für die neuen Zeitstempel
+        tcp_positions = np.vstack((tcp_x_interp(self.time_stamps), tcp_y_interp(self.time_stamps))).T
+
+
+        # Berechnung der Entfernungen zwischen Basis und TCP
+        #distances = np.linalg.norm(self.base_trajectory - self.tcp_trajectory, axis=1)
+        distances = np.linalg.norm(self.base_trajectory - tcp_positions, axis=1)
+
+        max_reach = 2.0  # Maximale Reichweite des Manipulators in Metern
+        out_of_range_penalty = np.sum(np.maximum(distances - max_reach, 0)**2)
+
         velocity_penalty = np.sum(np.maximum(velocities, 0) ** 2)
         acceleration_penalty = np.sum(np.maximum(accelerations, 0) ** 2)
-
-        # Belohnungsfunktion: Gleichmäßige Geschwindigkeit anstreben
-        target_velocity = 1.0  # Zielgeschwindigkeit
         velocity_rmse = np.sqrt(np.mean((velocities) ** 2))
 
-        reward = -velocity_rmse #-velocity_rmse - 0.001 * velocity_penalty - 0.001 * acceleration_penalty
+
+        print(f"Velocity RMSE: {velocity_rmse}")
+        print(f"Out of Range Penalty: {out_of_range_penalty}")
+
+        reward = -velocity_rmse - out_of_range_penalty * 10 #-velocity_rmse - 0.001 * velocity_penalty - 0.001 * acceleration_penalty
 
         # Aktualisiere die Zeitstempel
         self.time_stamps = new_time_stamps
