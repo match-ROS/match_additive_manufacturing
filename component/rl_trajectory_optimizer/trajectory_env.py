@@ -8,20 +8,25 @@ import matplotlib.pyplot as plt
 
 
 class TrajectoryOptimizationEnv(gym.Env):
-    def __init__(self, tcp_trajectory, base_trajectory, max_displacement=0.1):
+    def __init__(self, tcp_trajectory, base_trajectory, time_step=0.1):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.01
+        self.scale_factor = 0.1
         self.max_distance = 2.0
         self.step_counter = 0
         self.rewards = []  # Liste für Rewards
         self.initial_trajectory = self.base_trajectory.copy()
+        self.time_step = time_step
+        self.time_stamps = np.linspace(0, len(self.base_trajectory) - 1, len(self.base_trajectory))
+        self.initial_time_stamps = self.time_stamps.copy()
+        self.total_duration = self.initial_time_stamps[-1] - self.initial_time_stamps[0]
+
 
         self.action_space = spaces.Box(
-            low=-1,
-            high=1,
-            shape=(len(self.base_trajectory),),  # Eine Aktion pro Punkt
+            low=-1 * self.scale_factor,
+            high=1 * self.scale_factor,
+            shape=(len(self.time_stamps),),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
 
@@ -29,7 +34,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(len(self.base_trajectory),),  # Eine Observation pro Punkt
+            shape=(len(self.time_stamps),),  # Eine Observation pro Punkt
             dtype=np.float32
         )
 
@@ -62,135 +67,63 @@ class TrajectoryOptimizationEnv(gym.Env):
 
  
     def step(self, action):
-        # Skaliere und reshaped die Aktion
-        #action = action.reshape((964, 2)) * 0.005
-
-        new_trajectory = self.current_trajectory.copy()
-
-        for i, a in enumerate(action):
-            if i == 0:
-                # Erster Punkt: Nur Bewegung in Richtung des nächsten Punktes möglich
-                direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_next * a * self.scale_factor
-                continue
-
-            if i == len(self.current_trajectory) - 1:
-                # Letzter Punkt: Nur Bewegung in Richtung des vorherigen Punktes möglich
-                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
-                continue
-
-            # Mittlere Punkte: Bewegung in Richtung des vorherigen oder nächsten Punktes
-            if a > 0:
-                # Bewegung in Richtung des nächsten Punktes
-                direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_next * a * self.scale_factor
-            elif a < 0:
-                # Bewegung in Richtung des vorherigen Punktes
-                direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-                new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
-
-        # for i, a in enumerate(action):
-        #     if i > 0 and i < len(self.current_trajectory) - 1:
-                
-        #         if i == 0:
-        #             direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-        #             direction_next /= np.linalg.norm(direction_next) + 1e-8
-        #             if a > 0:  # Bewegung in Richtung des nächsten Punktes
-        #                 new_trajectory[i] += direction_next * a
-        #             continue
-
-        #         # Spezialfall: Letzter Punkt (keine Bewegung zum nächsten)
-        #         if i == len(self.current_trajectory) - 1:
-        #             direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-        #             direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-        #             if a < 0:  # Bewegung in Richtung des vorherigen Punktes
-        #                 new_trajectory[i] += direction_prev * abs(a)
-        #             continue
-
-        #         # Berechne Richtung zum vorherigen Punkt und zum nächsten Punkt
-        #         direction_prev = self.current_trajectory[i - 1] - self.current_trajectory[i]
-        #         direction_next = self.current_trajectory[i + 1] - self.current_trajectory[i]
-
-        #         # Normiere die Richtungen
-        #         direction_prev /= np.linalg.norm(direction_prev) + 1e-8
-        #         direction_next /= np.linalg.norm(direction_next) + 1e-8
-
-        #         # if both points are the same, set direction to 0
-        #         if self.current_trajectory[i - 1][0] == self.current_trajectory[i + 1][0] and self.current_trajectory[i - 1][1] == self.current_trajectory[i + 1][1]:
-        #             direction_prev = 0
-        #             direction_next = 0
-
-        #         # Bewegung proportional zur Aktion
-        #         if a > 0:  # Bewegung in Richtung des nächsten Punktes
-        #             new_trajectory[i] += direction_next * a * self.scale_factor
-        #         elif a < 0:  # Bewegung in Richtung des vorherigen Punktes
-        #             new_trajectory[i] += direction_prev * abs(a) * self.scale_factor
-
-        # Aktualisiere die Trajektorie
-        self.current_trajectory = new_trajectory
+        """
+        Passt die Zeitstempel basierend auf den Aktionen an.
+        """
 
         # Plot der Trajektorienänderung
-        if self.step_counter % 10000 == 0:
-            self.plot_trajectory_change(self.initial_trajectory, self.current_trajectory, self.step_counter)
-        # Abstand zur TCP berechnen
-        distances = np.linalg.norm(self.current_trajectory - self.tcp_trajectory, axis=1)
-
-        # Punkte, die zu weit entfernt sind, korrigieren
-        exceeds = distances > self.max_distance
-        self.current_trajectory[exceeds] = (
-            self.tcp_trajectory[exceeds]
-            + (self.current_trajectory[exceeds] - self.tcp_trajectory[exceeds])
-            * (self.max_distance / distances[exceeds])[:, np.newaxis]
-        )
+        if self.step_counter % 50000 == 0:
+            self.plot_timestamps(self.time_stamps, self.step_counter)
+            self.plot_timestamps_difference()
+            self.plot_velocity_and_acceleration(self.base_trajectory, self.time_stamps, self.step_counter)
 
 
-        velocities = np.linalg.norm(np.diff(self.current_trajectory, axis=0), axis=1) / self.time_step
+        # Wende die Aktion auf die Zeitstempel an
+        new_time_stamps = self.time_stamps.copy()
+        for i, a in enumerate(action):
+                if i == 0:
+                    # Erster Punkt: Nur Änderung der Zeit zum nächsten Punkt
+                    new_time_stamps[i] = max(0, new_time_stamps[i] + a)
+                elif i == len(self.time_stamps) - 1:
+                    # Letzter Punkt: Nur Änderung der Zeit zum vorherigen Punkt
+                    new_time_stamps[i] = max(new_time_stamps[i - 1] + 1e-3, new_time_stamps[i] + a)
+                else:
+                    # Mittlere Punkte: Zeitstempel anpassen
+                    new_time_stamps[i] = max(new_time_stamps[i - 1] + 1e-3, new_time_stamps[i] + a)
+
+
+        new_time_stamps = (
+            new_time_stamps - new_time_stamps[0]
+        ) * (self.total_duration / (new_time_stamps[-1] - new_time_stamps[0]))
+
+
+        # Geschwindigkeiten berechnen
+        velocities = np.linalg.norm(np.diff(self.base_trajectory, axis=0), axis=1) / np.diff(new_time_stamps)
+        accelerations = np.diff(velocities) / np.diff(self.time_stamps[:-1])
+
+        velocity_penalty = np.sum(np.maximum(velocities, 0) ** 2)
+        acceleration_penalty = np.sum(np.maximum(accelerations, 0) ** 2)
+
+        # Belohnungsfunktion: Gleichmäßige Geschwindigkeit anstreben
+        target_velocity = 1.0  # Zielgeschwindigkeit
         velocity_rmse = np.sqrt(np.mean((velocities) ** 2))
 
+        reward = -velocity_rmse #-velocity_rmse - 0.001 * velocity_penalty - 0.001 * acceleration_penalty
 
-        # speed_changes = np.diff(self.current_trajectory, axis=0)
-        # smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
+        # Aktualisiere die Zeitstempel
+        self.time_stamps = new_time_stamps
 
-
-        # reward = -np.sum(deviation) - 0.1 * smoothness_penalty # Bestrafe Abweichungen von der Ausgangstrajektorie
-
-        # 1. Strafe für Abweichungen von der TCP-Trajektorie
-        distances = np.linalg.norm(self.current_trajectory - self.base_trajectory, axis=1)
-        distance_penalty = np.sum(np.maximum(distances - self.max_distance, 0))
-
-        # 2. Bestrafe ungleichmäßige Geschwindigkeiten (scharfe Änderungen)
-        speed_changes = np.diff(self.current_trajectory, axis=0)
-        smoothness_penalty = np.sum(np.linalg.norm(speed_changes, axis=1)**2)
-
-        # 3. Bestrafe hohe Beschleunigungen
-        accelerations = np.diff(speed_changes, axis=0)
-        acceleration_penalty = np.sum(np.linalg.norm(accelerations, axis=1)**2)
-
-        print(f"Distance penalty: {distance_penalty}")
-        print(f"Smoothness penalty: {smoothness_penalty}")
-        print(f"Acceleration penalty: {acceleration_penalty}")
-        print(f"Velocity RMSE: {velocity_rmse}")
-
-        # Gesamt-Reward
-        reward = -1.0 * distance_penalty - 0.1 * smoothness_penalty - 0.05 * acceleration_penalty - 0.5 * velocity_rmse
-
-
-
-        # Status: Episode beendet?
-        terminated = False  # Setze deine Bedingung hier, z. B. ob das Ziel erreicht wurde
-        truncated = False   # Setze dies auf True, wenn eine zeitliche Begrenzung erreicht wurde
-
-        # Plot Geschwindigkeits- und Beschleunigungsprofile
-        #self.calculate_and_plot_profiles(self.current_trajectory, reward, step_number=self.step_counter)
+        # Schrittzähler erhöhen
         self.step_counter += 1
-        self.rewards.append(reward)
 
-        obs = self.current_trajectory[:, 0].astype(np.float32)
 
-        # Rückgabe der Werte
-        #return self.current_trajectory.flatten().astype(np.float32), reward, terminated, truncated, {}
+
+        # Rückgabe der neuen Beobachtung
+        obs = self.time_stamps.astype(np.float32)
+        terminated = False
+        truncated = False
         return obs, reward, terminated, truncated, {}
+
 
 
     def render(self, mode="human"):
@@ -199,7 +132,48 @@ class TrajectoryOptimizationEnv(gym.Env):
         """
         print(f"Current trajectory: {self.current_trajectory}")
 
-    def calculate_and_plot_profiles(self,trajectory, reward, step_number):
+    def plot_velocity_and_acceleration(self,base_trajectory, time_stamps, step_counter):
+        """
+        Visualisiert die Geschwindigkeit und Beschleunigung basierend auf den geänderten Zeitstempeln.
+        
+        Args:
+            base_trajectory (array): Die räumliche Trajektorie der Plattform.
+            time_stamps (array): Die aktuellen Zeitstempel.
+            step_counter (int): Der aktuelle Schrittzähler.
+        """
+        # Geschwindigkeiten berechnen
+        velocities = np.linalg.norm(np.diff(base_trajectory, axis=0), axis=1) / np.diff(time_stamps)
+        
+        # Beschleunigungen berechnen
+        accelerations = np.diff(velocities) / np.diff(time_stamps[:-1])
+        
+        # Geschwindigkeit plotten
+        plt.figure(figsize=(10, 5))
+        plt.subplot(2, 1, 1)
+        plt.plot(time_stamps[:-1], velocities, marker="o", label="Velocity (m/s)")
+        plt.title(f"Velocity Profile at Step {step_counter}")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Velocity (m/s)")
+        plt.grid()
+        plt.legend()
+        
+        # Beschleunigung plotten
+        plt.subplot(2, 1, 2)
+        plt.plot(time_stamps[:-2], accelerations, marker="o", label="Acceleration (m/s²)", color="orange")
+        plt.title(f"Acceleration Profile at Step {step_counter}")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Acceleration (m/s²)")
+        plt.grid()
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.show()
+
+
+
+
+
+    def calculate_and_plot_profiles(self,trajectory, step_number):
         # Calculate velocities and accelerations
         velocities = np.diff(trajectory, axis=0)
         accelerations = np.diff(velocities, axis=0)
@@ -229,9 +203,41 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.tight_layout()
         plt.show()
 
-        print(f"Schritt {step_number}: Reward = {reward}")
 
     import matplotlib.pyplot as plt
+
+    def plot_timestamps_difference(self):
+        time_differences = np.diff(self.time_stamps)
+        plt.figure()
+        plt.plot(time_differences, marker="o", label="Time Differences")
+        plt.axhline(np.mean(time_differences), color="red", linestyle="--", label="Mean Time Difference")
+        plt.title("Time Differences Between Points")
+        plt.xlabel("Point Index")
+        plt.ylabel("Time Difference (s)")
+        plt.legend()
+        plt.grid()
+        plt.show()
+
+
+
+
+
+    def plot_timestamps(self,timestamps, step_counter):
+        """
+        Visualisiert die Zeitstempel.
+        
+        Args:
+            timestamps (array): Die aktuellen Zeitstempel.
+            step_counter (int): Der aktuelle Schrittzähler.
+        """
+        plt.figure(figsize=(8, 6))
+        plt.plot(timestamps - self.initial_time_stamps, marker="o", linestyle="-")
+        plt.title(f"Timestamps Distribution at Step {step_counter}")
+        plt.xlabel("Trajectory Point Index")
+        plt.ylabel("Timestamp (s)")
+        plt.grid()
+        plt.show()
+
 
     def plot_trajectory_change(self,initial_trajectory, updated_trajectory, step_number):
         plt.figure(figsize=(10, 6))
@@ -252,6 +258,7 @@ class TrajectoryOptimizationEnv(gym.Env):
             color="red"
         )
         plt.scatter(updated_trajectory[:, 0], updated_trajectory[:, 1], color="red", s=10)  # Punkte der neuen Trajektorie
+        plt.scatter(initial_trajectory[:, 0], initial_trajectory[:, 1], color="blue", s=10)  # Punkte der neuen Trajektorie
         plt.title(f"Trajektorienänderung nach Schritt {step_number}")
         plt.xlabel("x")
         plt.ylabel("y")

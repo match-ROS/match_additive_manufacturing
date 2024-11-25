@@ -83,7 +83,7 @@ if __name__ == "__main__":
     new_logger = configure(log_dir, ["stdout", "tensorboard"])
 
 
-    env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
+    env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory,time_step=0.1)
     check_env(env, warn=True)
 
     # obs = env.reset()
@@ -94,16 +94,17 @@ if __name__ == "__main__":
     num_cpu = 16
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
-    env.max_steps_per_episode = 100 # Kürzere Episoden für schnelleres Training
+    env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
 
     # RL-Agenten initialisieren
     #model = PPO("MlpPolicy", vec_env, verbose=2)
     model = PPO(
         "MlpPolicy",
         env,
-        clip_range=0.01,
+        clip_range=0.1,
         ent_coef=0.2,
         verbose=1,
+        learning_rate = 0.00001,
         tensorboard_log="./ppo_tensorboard_logs/"
     )
 
@@ -113,8 +114,8 @@ if __name__ == "__main__":
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
 
     # Training starten mit Callback
-    reset_callback = ResetTrajectoryCallback(reset_freq=100)
-    model.learn(total_timesteps=40000, callback=reset_callback)
+    reset_callback = ResetTrajectoryCallback(reset_freq=100000)
+    model.learn(total_timesteps=5000000, callback=reset_callback)
 
 
 
