@@ -2,7 +2,7 @@
 import numpy as np
 from stable_baselines3 import PPO
 #from trajectory_env import TrajectoryOptimizationEnv
-from trajectory_env_pose import TrajectoryOptimizationEnv
+from trajectory_env_pose_interpolation import TrajectoryOptimizationEnv
 import os, sys
 from stable_baselines3.common.callbacks import BaseCallback
 import matplotlib.pyplot as plt
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # obs, reward, terminated, truncated, info = env.step(action)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 16
+    num_cpu = 1
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
