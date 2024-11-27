@@ -11,6 +11,7 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import Point, Pose
 from moveit_msgs.msg import DisplayTrajectory
 import math
+from tf import transformations as tr
 
 
 class MoveManipulatorToTarget:
@@ -67,6 +68,12 @@ class MoveManipulatorToTarget:
         
         # Compute the target position in the manipulator’s local frame
         relative_position = target_tcp_position - manipulator_base_position
+        
+        # rotate the relative position to the local frame of the manipulator
+        # get the rotation matrix from the quaternion
+        rot_matrix = tr.quaternion_matrix(tr.quaternion_inverse(rot))
+        # rotate the relative position
+        relative_position = np.dot(rot_matrix[:3, :3], relative_position)
 
         relative_pose = [0.0,0.0,0.0,0.0,0.0,0.0]
         relative_pose[0] = relative_position[0]

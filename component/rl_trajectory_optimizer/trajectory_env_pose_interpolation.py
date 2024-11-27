@@ -29,6 +29,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.cs_x = CubicSpline(t_original, self.base_trajectory[:, 0])
         self.cs_y = CubicSpline(t_original, self.base_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
+        self.current_trajectory = self.splined_trajectory.copy()
 
 
         # cs_x, cs_y = self.cubic_spline_interpolation(self.base_trajectory)
@@ -84,6 +85,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         if self.step_counter % 50000 == 0:
             self.plot_current_trajectory(self.step_counter)
+            self.calculate_and_plot_profiles(self.current_trajectory, self.step_counter)
 
         # Sampling-Punkte anpassen (0 bis 1 für die Länge des Pfades)
         t_original = np.linspace(0, 1, len(self.splined_trajectory))  # Originale Sampling-Punkte
@@ -141,5 +143,33 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.show()
 
 
+    def calculate_and_plot_profiles(self,trajectory, step_number):
+        # Calculate velocities and accelerations
+        velocities = np.diff(trajectory, axis=0)
+        accelerations = np.diff(velocities, axis=0)
 
+        # Norms for velocities and accelerations
+        velocity_magnitudes = np.linalg.norm(velocities, axis=1)
+        acceleration_magnitudes = np.linalg.norm(accelerations, axis=1)
+
+        # Plot profiles
+        plt.figure(figsize=(10, 6))
+        plt.subplot(2, 1, 1)
+        plt.plot(velocity_magnitudes, label="Geschwindigkeit")
+        plt.title(f"Schritt {step_number}: Geschwindigkeitsprofil")
+        plt.xlabel("Trajektorie Punkt")
+        plt.ylabel("Geschwindigkeit")
+        plt.grid(True)
+        plt.legend()
+
+        plt.subplot(2, 1, 2)
+        plt.plot(acceleration_magnitudes, label="Beschleunigung", color="orange")
+        plt.title(f"Schritt {step_number}: Beschleunigungsprofil")
+        plt.xlabel("Trajektorie Punkt")
+        plt.ylabel("Beschleunigung")
+        plt.grid(True)
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
     
