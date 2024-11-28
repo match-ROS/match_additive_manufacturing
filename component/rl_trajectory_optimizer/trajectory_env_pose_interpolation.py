@@ -17,7 +17,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.005
+        self.scale_factor = 0.029031316514772237 * 0.05
         self.max_distance = 2.0
         self.time_step = time_step
         self.step_counter = 0
@@ -33,6 +33,10 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.cs_y = CubicSpline(t_original, self.base_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
         self.current_trajectory = self.splined_trajectory.copy()
+
+        avg_distance = np.mean(np.linalg.norm(np.diff(base_trajectory, axis=0), axis=1))
+        print(f"Average distance between trajectory points: {avg_distance}")
+
 
 
         # cs_x, cs_y = self.cubic_spline_interpolation(self.base_trajectory)
@@ -86,66 +90,63 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     
     def step(self, action):
-        epsilon = max(0.1, 1.0 - self.step_counter / 1000)  # Lineare Abnahme von Exploration
-        if np.random.rand() < epsilon:
-            action = self.action_space.sample()  # Zufällige Aktion
-        # if self.total_step_counter % 50000 == 0:
-        #     self.plot_current_trajectory(self.step_counter)
-        #     self.calculate_and_plot_profiles(self.current_trajectory, self.step_counter)
+        # Aktion wird angewendet, um relative Änderungen an den Zeitpunkten vorzunehmen
+        self.t_new += action * self.scale_factor
 
-        # Sampling-Punkte anpassen (0 bis 1 für die Länge des Pfades)
-        t_original = np.linspace(0, 1, len(self.splined_trajectory))  # Originale Sampling-Punkte
-        self.t_new = self.t_new - action * self.scale_factor  # Agent-Aktion beeinflusst Sampling
-        
+        # Normalisieren und Sortieren der neuen Zeitpunkte
+        self.t_new -= np.min(self.t_new)  # Verschieben, sodass der kleinste Wert 0 ist
+        self.t_new /= np.max(self.t_new)  # Skalieren auf [0, 1]
+        self.t_new = np.sort(self.t_new)  # Sortieren, um Monotonie sicherzustellen
 
-        # skaliere die Sampling-Punkte auf den Bereich [0, 1]
-        self.t_new -= np.min(self.t_new)  # Verschiebe alle Werte so, dass der kleinste Wert 0 ist
-        self.t_new /= np.max(self.t_new)  # Skaliere alle Werte so, dass der größte Wert 1 ist
-        #print(t_original)
-        # sortiere die Sampling-Punkte, um sicherzustellen, dass sie monoton steigen
-        self.t_new = np.sort(self.t_new)
-
+        # Erstellen der neuen Trajektorie
         new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
 
-        # Berechnung von Abständen, Geschwindigkeiten usw.
+        # Berechnung von Geschwindigkeiten und Beschleunigungen
+        velocities = np.diff(new_trajectory, axis=0) / self.time_step
+        accelerations = np.diff(velocities, axis=0) / self.time_step
+
+        # RMSE-Berechnungen
+        velocity_rmse = np.sqrt(np.mean(np.linalg.norm(velocities, axis=1) ** 2))
+        acceleration_rmse = np.sqrt(np.mean(np.linalg.norm(accelerations, axis=1) ** 2))
+
+        # Abstand zur TCP-Trajektorie
         distances = np.linalg.norm(new_trajectory - self.tcp_trajectory, axis=1)
-        velocities = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1) / self.time_step
-        velocity_rmse = np.sqrt(np.mean(velocities ** 2))
+        distance_penalty = np.sum(np.maximum(0, distances - self.max_distance))
 
-        uniformity_reward, max_distance = self.calculate_uniformity_reward()
+        # Gleichmäßigkeit der Punktverteilung (Standardabweichung der Abstände)
+        spacing = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
+        uniformity_penalty = np.std(spacing)
 
-        # compute max velocity
-        velocity_max = np.max(velocities)
-        reward = 10.0 - velocity_rmse + uniformity_reward - max_distance * 10.0
-        
+        # Belohnungsfunktion
+        reward = (
+            10.0  # Basiswert
+            - velocity_rmse  # Minimierung der Geschwindigkeitsschwankungen
+            - acceleration_rmse * 5.0  # Minimierung der Beschleunigung
+            - distance_penalty * 10.0  # Strafe für TCP-Distanzverletzungen
+            - uniformity_penalty * 2.0  # Bestrafung ungleichmäßiger Punktabstände
+        )
 
-        # Prüfe, ob der Zustand schlecht ist
-        # if reward < 0.0:
-        #     print(f"Resetting environment due to poor reward at step {self.step_counter}")
-        #     obs = self.reset()  # Simulation zurücksetzen
-        #     return obs[0], reward, True, False, {}
-            
-        if self.step_counter > 1000:
-            print(f"Resetting environment due to poor reward at step {self.step_counter}")
-            obs = self.reset()  # Simulation zurücksetzen
-            return obs[0], reward, True, False, {}
+        # Prüfung auf Terminierung
+        terminated = False  # Optional: Bedingung hinzufügen, wenn nötig
+        truncated = self.step_counter >= 1000  # Episodenlänge begrenzen
 
-        # `terminated` und `truncated` als echte Booleans sicherstellen
-        terminated = False#bool(np.any(distances > self.max_distance))
-        truncated = False#bool(self.step_counter >= 1000)
-
-        # if reward < 0:
-        #     terminated = True
-        #     self.reset()
-
-        # Trajektorie aktualisieren
+        # Aktualisierung der Trajektorie
         self.current_trajectory = new_trajectory
         self.step_counter += 1
         self.total_step_counter += 1
 
+        # Visualisierung nach bestimmten Schritten (optional)
+        if self.total_step_counter % 10000 == 0:
+            print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
+            # self.plot_current_trajectory(self.step_counter)
+            # self.calculate_and_plot_profiles(self.current_trajectory, self.step_counter)
 
+        # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
         return obs, reward, terminated, truncated, {}
+
+    def get_current_trajectory(self):
+        return self.current_trajectory.copy()
     
     def calculate_path_deviation(self, trajectory):
         """

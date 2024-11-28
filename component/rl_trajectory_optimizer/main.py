@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.logger import configure
 import tensorflow as tf
-import os
+import optuna
 if not os.path.exists("./ppo_tensorboard_logs/"):
     os.makedirs("./ppo_tensorboard_logs/")
 
@@ -43,37 +43,44 @@ class ResetTrajectoryCallback(BaseCallback):
             self.training_env.env_method("reset")
         return True
     
+def linear_schedule(initial_value):
+    """
+    Returns a function that computes a linearly decreasing learning rate.
+    The learning rate starts at `initial_value` and decreases linearly with the progress.
+    """
+    def schedule(progress_remaining):
+        # Progress remaining: 1.0 -> 0.0
+        return progress_remaining * initial_value
+
+    return schedule
+    
 
 class TrajectoryPlotCallback(BaseCallback):
-    def __init__(self, env, tcp_trajectory, plot_freq=1, verbose=0):
+    def __init__(self, env, tcp_trajectory, plot_freq=1000, verbose=0):
         super(TrajectoryPlotCallback, self).__init__(verbose)
         self.env = env
         self.tcp_trajectory = tcp_trajectory
         self.plot_freq = plot_freq
 
     def _on_step(self) -> bool:
-        # Plotten nach jeder `plot_freq` Anzahl von Schritten
         if self.n_calls % self.plot_freq == 0:
-            obs = self.env.reset()
-            trajectory = []
-            done = False
-            while not done:
-                action, _ = self.model.predict(obs)
-                obs, reward, done, _ = self.env.step(action)
-                trajectory.append(obs)
+            # Rufe die aktuelle Trajektorie aus der ersten Umgebung ab
+            trajectories = self.env.env_method("get_current_trajectory")
+            trajectory = trajectories[0]  # Zugriff auf die erste Umgebung
 
-            # Trajektorie plotten
-            trajectory = np.array(trajectory)
+            # Plot
             plt.figure(figsize=(8, 6))
-            plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie")
-            plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], c='red', label="TCP Trajektorie")
+            plt.plot(trajectory[:, 0], trajectory[:, 1], label="Optimierte Trajektorie", linewidth=2)
+            plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], c='red', label="TCP Trajektorie", s=10)
             plt.legend()
             plt.title(f"Trajektorienvergleich nach {self.n_calls} Schritten")
             plt.xlabel("x")
             plt.ylabel("y")
+            plt.axis("equal")
+            plt.grid(True)
             plt.show()
-        return True
 
+        return True
 
 if __name__ == "__main__":
     # Lade die Trajektorien
@@ -93,28 +100,15 @@ if __name__ == "__main__":
     # obs, reward, terminated, truncated, info = env.step(action)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 8
+    num_cpu = 6
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
-    # env = DummyVecEnv([lambda: gym.make("CartPole-v1")])
-    # model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_tensorboard_logs/")
-    # model.learn(total_timesteps=1000)
-    #RL-Agenten initialisieren
-    # model = PPO("MlpPolicy", vec_env, verbose=2)
-    # model = PPO(
-    #     "MlpPolicy",
-    #     env,
-    #     clip_range=0.1,
-    #     ent_coef=0.2,
-    #     verbose=1,
-    #     learning_rate = 0.00001,
-    #     tensorboard_log="./ppo_tensorboard_logs/"
-    # )
+
     model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=1, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
-    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=1)
+    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=100000)
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
