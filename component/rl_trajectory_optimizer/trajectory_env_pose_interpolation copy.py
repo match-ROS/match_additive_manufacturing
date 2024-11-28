@@ -31,10 +31,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.t_new = t_original
         self.cs_x = CubicSpline(t_original, self.base_trajectory[:, 0])
         self.cs_y = CubicSpline(t_original, self.base_trajectory[:, 1])
-        self.tcp_cs_x = CubicSpline(t_original, self.tcp_trajectory[:, 0])
-        self.tcp_cs_y = CubicSpline(t_original, self.tcp_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
-        self.splined_tcp_trajectory = np.vstack((self.tcp_cs_x(t_original), self.tcp_cs_y(t_original))).T
         self.current_trajectory = self.splined_trajectory.copy()
 
         avg_distance = np.mean(np.linalg.norm(np.diff(base_trajectory, axis=0), axis=1))
@@ -59,9 +56,9 @@ class TrajectoryOptimizationEnv(gym.Env):
         # plt.show()
 
         self.action_space = spaces.Box(
-            low=0.01,
-            high=1.0,
-            shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
+            low=-1,
+            high=1,
+            shape=(len(self.base_trajectory),),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
@@ -77,8 +74,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         cs_y = CubicSpline(t, base_trajectory[:, 1])
         return cs_x, cs_y
 
-    def get_time_step(self):
-        return self.time_step
 
     def reset(self, seed=None, options=None):
         if seed is not None:
@@ -95,57 +90,40 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     
     def step(self, action):
-        
-        time_intervals = action * self.scale_factor  # Aktion gibt relative Zeitintervalle
-        self.t_new = np.concatenate(([0], np.cumsum(time_intervals)))
-        self.t_new -= np.min(self.t_new)
-        self.t_new /= np.max(self.t_new)
+        # Aktion wird angewendet, um relative Änderungen an den Zeitpunkten vorzunehmen
+        self.t_new += action * self.scale_factor
 
-        # Interpolieren mit der synchronisierten Punktanzahl
+        # Normalisieren und Sortieren der neuen Zeitpunkte
+        self.t_new -= np.min(self.t_new)  # Verschieben, sodass der kleinste Wert 0 ist
+        self.t_new /= np.max(self.t_new)  # Skalieren auf [0, 1]
+        self.t_new = np.sort(self.t_new)  # Sortieren, um Monotonie sicherzustellen
+
+        # Erstellen der neuen Trajektorie
         new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
 
-        # Berechnung der Distanzen zwischen Punkten
-        distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
+        # Berechnung von Geschwindigkeiten und Beschleunigungen
+        velocities = np.diff(new_trajectory, axis=0) / self.time_step
+        accelerations = np.diff(velocities, axis=0) / self.time_step
 
-        # Berechnung der Zeitintervalle aus Sampling-Times
-        time_intervals = np.diff(self.t_new)
+        # RMSE-Berechnungen
+        velocity_rmse = np.sqrt(np.mean(np.linalg.norm(velocities, axis=1) ** 2))
+        acceleration_rmse = np.sqrt(np.mean(np.linalg.norm(accelerations, axis=1) ** 2))
 
-        # Berechnung der Geschwindigkeiten zwischen Punkten
-        velocities = distances / time_intervals
+        # Abstand zur TCP-Trajektorie
+        distances = np.linalg.norm(new_trajectory - self.tcp_trajectory, axis=1)
+        distance_penalty = np.sum(np.maximum(0, distances - self.max_distance))
 
-        # Berechnung der Zeitintervalle für Beschleunigungen
-        accel_time_intervals = 0.5 * (time_intervals[:-1] + time_intervals[1:])
+        # Gleichmäßigkeit der Punktverteilung (Standardabweichung der Abstände)
+        spacing = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
+        uniformity_penalty = np.std(spacing)
 
-        # Berechnung der Differenzen der Geschwindigkeiten
-        velocity_differences = np.diff(velocities)
-
-        # Berechnung der Beschleunigungen
-        accelerations = velocity_differences / accel_time_intervals
-
-        # Berechnung der Geschwindigkeitsänderungen
-        velocity_penalty = np.std(velocities)
-
-        # Berechnung der Beschleunigungsänderungen
-        acceleration_penalty = np.std(accelerations)
-
-        # Interpolation der TCP-Trajektorie auf die gleichen Zeitstempel
-        tcp_interpolated = np.vstack((self.tcp_cs_x(self.t_new), self.tcp_cs_y(self.t_new))).T
-
-        # Berechnung der euklidischen Abstände zwischen den Trajektorien
-        tcp_distances = np.linalg.norm(new_trajectory - tcp_interpolated, axis=1)
-
-        # Bestrafung für Punkte, die weiter als die maximale Distanz entfernt sind
-        distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
-
-        uniformity_penalty = np.std(time_intervals)
-
-
+        # Belohnungsfunktion
         reward = (
-            10.0
-            - distance_penalty * 10.0
-            - uniformity_penalty * 2.0
-            - velocity_penalty * 1.1
-            - acceleration_penalty * 1.1
+            10.0  # Basiswert
+            - velocity_rmse  # Minimierung der Geschwindigkeitsschwankungen
+            - acceleration_rmse * 5.0  # Minimierung der Beschleunigung
+            - distance_penalty * 10.0  # Strafe für TCP-Distanzverletzungen
+            - uniformity_penalty * 2.0  # Bestrafung ungleichmäßiger Punktabstände
         )
 
         # Prüfung auf Terminierung
@@ -160,8 +138,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Visualisierung nach bestimmten Schritten (optional)
         if self.total_step_counter % 10000 == 0:
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
-            self.plot_current_trajectory(self.step_counter)
-            self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
+            # self.plot_current_trajectory(self.step_counter)
+            # self.calculate_and_plot_profiles(self.current_trajectory, self.step_counter)
 
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
@@ -198,8 +176,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.figure()
         plt.plot(self.splined_trajectory[:, 0], self.splined_trajectory[:, 1], 'b--', label='Splined Trajectory')
         plt.plot(self.current_trajectory[:, 0], self.current_trajectory[:, 1], 'r-', label='Modified Trajectory')
-        plt.scatter(self.splined_tcp_trajectory[:, 0], self.splined_tcp_trajectory[:, 1], color='blue', s=10, label='Splined TCP Trajectory')
-        plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], color='blue', s=10, label='TCP Trajectory')
         plt.scatter(self.current_trajectory[:, 0], self.current_trajectory[:, 1], color='red', s=10)
         plt.title('Trajectory Comparison at Step {}'.format(step_counter))
         plt.xlabel('X')
@@ -209,14 +185,19 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.show()
 
 
-    def calculate_and_plot_profiles(self,velocities,accelerations, step_number):
+    def calculate_and_plot_profiles(self,trajectory, step_number):
         # Calculate velocities and accelerations
+        velocities = np.diff(trajectory, axis=0)
+        accelerations = np.diff(velocities, axis=0)
 
+        # Norms for velocities and accelerations
+        velocity_magnitudes = np.linalg.norm(velocities, axis=1)
+        acceleration_magnitudes = np.linalg.norm(accelerations, axis=1)
 
         # Plot profiles
         plt.figure(figsize=(10, 6))
         plt.subplot(2, 1, 1)
-        plt.plot(velocities, label="Geschwindigkeit")
+        plt.plot(velocity_magnitudes, label="Geschwindigkeit")
         plt.title(f"Schritt {step_number}: Geschwindigkeitsprofil")
         plt.xlabel("Trajektorie Punkt")
         plt.ylabel("Geschwindigkeit")
@@ -224,7 +205,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.legend()
 
         plt.subplot(2, 1, 2)
-        plt.plot(accelerations, label="Beschleunigung", color="orange")
+        plt.plot(acceleration_magnitudes, label="Beschleunigung", color="orange")
         plt.title(f"Schritt {step_number}: Beschleunigungsprofil")
         plt.xlabel("Trajektorie Punkt")
         plt.ylabel("Beschleunigung")

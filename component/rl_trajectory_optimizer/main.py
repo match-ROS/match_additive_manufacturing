@@ -14,24 +14,78 @@ import tensorflow as tf
 import optuna
 if not os.path.exists("./ppo_tensorboard_logs/"):
     os.makedirs("./ppo_tensorboard_logs/")
-
-
 parent_dir = os.path.dirname(os.path.abspath(__file__))
-
-
 print(f"Parent directory: {parent_dir}")
 sys.path.append(parent_dir)
-
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 # Funktion zum Erstellen einer neuen Umgebung
 def make_env():
     return TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory)
-
-
 from print_path import xMIR, yMIR, xTCP, yTCP
 
+
+def calculate_velocity_and_acceleration(trajectory, time_step):
+    velocities = np.diff(trajectory, axis=0) / time_step
+    accelerations = np.diff(velocities, axis=0) / time_step
+    velocity_magnitudes = np.linalg.norm(velocities, axis=1)
+    acceleration_magnitudes = np.linalg.norm(accelerations, axis=1)
+    return velocity_magnitudes, acceleration_magnitudes
     
+def calculate_distances(base_trajectory, tcp_trajectory):
+    return np.linalg.norm(base_trajectory - tcp_trajectory, axis=1)
+
+class ProfilePlotCallback(BaseCallback):
+    def __init__(self, env, tcp_trajectory, plot_freq=1000, verbose=0):
+        super(ProfilePlotCallback, self).__init__(verbose)
+        self.env = env
+        self.tcp_trajectory = tcp_trajectory
+        self.plot_freq = plot_freq
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.plot_freq == 0:
+            # Hole die aktuelle optimierte Trajektorie
+            base_trajectory = self.env.env_method("get_current_trajectory")[0]
+            
+            # Berechne Profile
+            time_step = self.env.env_method("get_time_step")[0]
+            velocities, accelerations = calculate_velocity_and_acceleration(base_trajectory, time_step)
+            distances = calculate_distances(base_trajectory, self.tcp_trajectory)
+
+            # Plot Geschwindigkeits- und Beschleunigungsprofil
+            plt.figure(figsize=(10, 6))
+            plt.subplot(2, 1, 1)
+            plt.plot(velocities, label="Geschwindigkeit")
+            plt.title("Geschwindigkeitsprofil")
+            plt.xlabel("Trajektorie-Punkt")
+            plt.ylabel("Geschwindigkeit")
+            plt.legend()
+            plt.grid(True)
+
+            plt.subplot(2, 1, 2)
+            plt.plot(accelerations, label="Beschleunigung", color="orange")
+            plt.title("Beschleunigungsprofil")
+            plt.xlabel("Trajektorie-Punkt")
+            plt.ylabel("Beschleunigung")
+            plt.legend()
+            plt.grid(True)
+
+            plt.tight_layout()
+            plt.show()
+
+            # Plot Abstand
+            plt.figure(figsize=(8, 6))
+            plt.plot(distances, label="Abstand Basistrajektorie-TCP")
+            plt.title("Abstand zwischen optimierter Basistrajektorie und TCP-Trajektorie")
+            plt.xlabel("Trajektorie-Punkt")
+            plt.ylabel("Abstand")
+            plt.legend()
+            plt.grid(True)
+            plt.show()
+
+        return True
+
+
 class ResetTrajectoryCallback(BaseCallback):
     def __init__(self, reset_freq, verbose=0):
         super(ResetTrajectoryCallback, self).__init__(verbose)
@@ -100,19 +154,20 @@ if __name__ == "__main__":
     # obs, reward, terminated, truncated, info = env.step(action)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 6
+    num_cpu = 1
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
 
-    model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=1, tensorboard_log="./ppo_tensorboard_logs/")
+    model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
-    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=100000)
+    plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
+    profile_plot_callback = ProfilePlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
-    model.learn(total_timesteps=5000000, callback=plot_callback)
+    model.learn(total_timesteps=5000000, callback=profile_plot_callback)
 
     # Modell speichern
     model.save("ppo_trajectory_optimizer")
