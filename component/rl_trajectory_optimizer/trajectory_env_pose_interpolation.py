@@ -191,7 +191,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 2000  # Episodenlänge begrenzen
+        truncated = self.step_counter >= 500  # Episodenlänge begrenzen
         if terminated or truncated:
             info = {"episode": {"r": self.cumulative_reward}}
             self.cumulative_reward = 0.0  # Zurücksetzen für die nächste Episode

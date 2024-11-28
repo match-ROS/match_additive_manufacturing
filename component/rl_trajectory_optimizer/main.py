@@ -109,6 +109,30 @@ def linear_schedule(initial_value):
     return schedule
     
 
+class RewardLoggingCallback(BaseCallback):
+    def __init__(self, log_dir="./ppo_tensorboard_logs/"):
+        super(RewardLoggingCallback, self).__init__()
+        self.log_dir = log_dir
+        self.writer = None
+
+    def _on_training_start(self) -> None:
+        self.writer = tf.summary.create_file_writer(self.log_dir)
+
+    def _on_step(self) -> bool:
+        # Logge den Reward, wenn eine Episode endet
+        if "episode" in self.locals["infos"][0]:
+            episode_reward = self.locals["infos"][0]["episode"]["r"]
+            step = self.num_timesteps
+            with self.writer.as_default():
+                tf.summary.scalar("rollout/ep_rew_mean", episode_reward, step=step)
+        return True
+
+    def _on_training_end(self) -> None:
+        if self.writer:
+            self.writer.close()
+
+
+
 class TrajectoryPlotCallback(BaseCallback):
     def __init__(self, env, tcp_trajectory, plot_freq=1000, verbose=0):
         super(TrajectoryPlotCallback, self).__init__(verbose)
@@ -167,7 +191,8 @@ if __name__ == "__main__":
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
-    model.learn(total_timesteps=5000000, callback=profile_plot_callback)
+    reward_callback = RewardLoggingCallback(log_dir="./ppo_tensorboard_logs/")
+    model.learn(total_timesteps=5000000, callback=reward_callback)
 
     # Modell speichern
     model.save("ppo_trajectory_optimizer")
