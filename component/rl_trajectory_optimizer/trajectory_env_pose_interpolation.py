@@ -24,6 +24,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.previous_velocity_rmse = 0
         self.total_step_counter = 0
         self.reward_history = []
+        self.cumulative_reward = 0.0
+
 
         self.base_trajectory[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=1)
         self.base_trajectory[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=1)
@@ -91,6 +93,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Zähler zurücksetzen
         self.step_counter = 0
+        self.cumulative_reward = 0.0
         self.t_new = np.linspace(0, 1, len(self.base_trajectory))
         obs = self.current_trajectory.astype(np.float32)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
@@ -108,7 +111,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history.append(reward)
 
         # Beende die Episode, wenn die Verschlechterung mehrfach hintereinander auftritt
-        if self.worsening_count >= 6:  # Beispiel: nach 5 Verschlechterungen
+        if self.worsening_count >= 5:  # Beispiel: nach 5 Verschlechterungen
             terminated = True
             #print(f"Episode beendet: Wiederholte Verschlechterungen (Count: {self.worsening_count})")
         else:
@@ -183,12 +186,17 @@ class TrajectoryOptimizationEnv(gym.Env):
             - velocity_rmse_penalty * 0.1
         )
 
-        
+        # Kumulative Belohnung
+        self.cumulative_reward += reward
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-
         truncated = self.step_counter >= 2000  # Episodenlänge begrenzen
+        if terminated or truncated:
+            info = {"episode": {"r": self.cumulative_reward}}
+            self.cumulative_reward = 0.0  # Zurücksetzen für die nächste Episode
+        else:
+            info = {}
 
         # Aktualisierung der Trajektorie
         self.current_trajectory = new_trajectory
