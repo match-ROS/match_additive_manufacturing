@@ -154,7 +154,7 @@ if __name__ == "__main__":
     # obs, reward, terminated, truncated, info = env.step(action)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 1
+    num_cpu = 24
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training

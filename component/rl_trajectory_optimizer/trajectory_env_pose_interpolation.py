@@ -23,6 +23,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.step_counter = 0
         self.previous_velocity_rmse = 0
         self.total_step_counter = 0
+        self.reward_history = []
 
         self.base_trajectory[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=1)
         self.base_trajectory[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=1)
@@ -67,7 +68,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(len(self.base_trajectory), 2),  # 2D-Beobachtungen (x, y)
+            shape=(self.base_trajectory.size,),  # 2D-Beobachtungen (x, y)
             dtype=np.float32
         )
 
@@ -86,14 +87,35 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Setze die aktuelle Trajektorie auf die gesplinte Trajektorie
         self.current_trajectory = self.splined_trajectory.copy()
+        self.reward_history = []
 
         # Zähler zurücksetzen
         self.step_counter = 0
         self.t_new = np.linspace(0, 1, len(self.base_trajectory))
         obs = self.current_trajectory.astype(np.float32)
+        obs = obs.flatten()  # Flache 1D-Struktur erzeugen
         return obs, {}
 
-    
+    def monitor_reward(self, reward):
+        # Vergleiche mit dem vorherigen Reward
+        avg_reward = np.mean(self.reward_history[-10:])  # Durchschnitt der letzten 10 Rewards
+        if len(self.reward_history) > 9 and reward < avg_reward:
+            self.worsening_count += 1
+        else:
+            self.worsening_count = 0  # Zurücksetzen bei Verbesserung
+
+        # Speichere den aktuellen Reward
+        self.reward_history.append(reward)
+
+        # Beende die Episode, wenn die Verschlechterung mehrfach hintereinander auftritt
+        if self.worsening_count >= 6:  # Beispiel: nach 5 Verschlechterungen
+            terminated = True
+            #print(f"Episode beendet: Wiederholte Verschlechterungen (Count: {self.worsening_count})")
+        else:
+            terminated = False
+        return terminated
+
+
     def step(self, action):
         
         time_intervals = action * self.scale_factor  # Aktion gibt relative Zeitintervalle
@@ -107,26 +129,34 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
 
-        # Berechnung der Zeitintervalle aus Sampling-Times
-        time_intervals = np.diff(self.t_new)
-
         # Berechnung der Geschwindigkeiten zwischen Punkten
+        t_original = np.linspace(0, 1, len(self.base_trajectory))
+        time_intervals = np.diff(t_original)
         velocities = distances / time_intervals
-
-        # Berechnung der Zeitintervalle für Beschleunigungen
-        accel_time_intervals = 0.5 * (time_intervals[:-1] + time_intervals[1:])
 
         # Berechnung der Differenzen der Geschwindigkeiten
         velocity_differences = np.diff(velocities)
 
         # Berechnung der Beschleunigungen
-        accelerations = velocity_differences / accel_time_intervals
+        accelerations = velocity_differences / time_intervals[1:]
 
         # Berechnung der Geschwindigkeitsänderungen
         velocity_penalty = np.std(velocities)
 
+        # Berechne maximale Geschwindigkeit
+        max_velocity_penalty = np.max(velocities)
+
         # Berechnung der Beschleunigungsänderungen
         acceleration_penalty = np.std(accelerations)
+
+        # Berechne maximale Beschleunigung
+        max_acceleration_penalty = np.max(accelerations)
+
+        # Berechne Acc RMSE 
+        acc_rmse_penalty = np.sqrt(np.mean(accelerations ** 2))
+
+        # Berechne Velocity RMSE
+        velocity_rmse_penalty = np.sqrt(np.mean(velocities ** 2))
 
         # Interpolation der TCP-Trajektorie auf die gleichen Zeitstempel
         tcp_interpolated = np.vstack((self.tcp_cs_x(self.t_new), self.tcp_cs_y(self.t_new))).T
@@ -140,17 +170,25 @@ class TrajectoryOptimizationEnv(gym.Env):
         uniformity_penalty = np.std(time_intervals)
 
 
+
         reward = (
             10.0
             - distance_penalty * 10.0
             - uniformity_penalty * 2.0
             - velocity_penalty * 1.1
-            - acceleration_penalty * 1.1
+            - acceleration_penalty * 0.0
+            - max_velocity_penalty * 0.1
+            - max_acceleration_penalty * 0.001
+            - acc_rmse_penalty * 0.001
+            - velocity_rmse_penalty * 0.1
         )
 
+        
+
         # Prüfung auf Terminierung
-        terminated = False  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 1000  # Episodenlänge begrenzen
+        terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
+
+        truncated = self.step_counter >= 2000  # Episodenlänge begrenzen
 
         # Aktualisierung der Trajektorie
         self.current_trajectory = new_trajectory
@@ -158,13 +196,22 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.total_step_counter += 1
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 10000 == 0:
+        if self.total_step_counter % 20000 == 0:
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
-            self.plot_current_trajectory(self.step_counter)
+            print(f"Distance Penalty: {distance_penalty:.2f}")
+            print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
+            print(f"Velocity Penalty: {velocity_penalty:.2f}")
+            print(f"Acceleration Penalty: {acceleration_penalty:.2f}")
+            print(f"Max Velocity Penalty: {max_velocity_penalty:.2f}")
+            print(f"Max Acceleration Penalty: {max_acceleration_penalty:.2f}")
+            print(f"Acc RMSE Penalty: {acc_rmse_penalty:.2f}")
+            print(f"Velocity RMSE Penalty: {velocity_rmse_penalty:.2f}")
+            #self.plot_current_trajectory(self.step_counter)
             self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
 
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
+        obs = obs.flatten()  # Flache 1D-Struktur erzeugen
         return obs, reward, terminated, truncated, {}
 
     def get_current_trajectory(self):
