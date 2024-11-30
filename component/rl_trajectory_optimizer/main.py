@@ -12,6 +12,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.logger import configure
 import tensorflow as tf
 import optuna
+from torch.optim import Adam
 if not os.path.exists("./ppo_tensorboard_logs/"):
     os.makedirs("./ppo_tensorboard_logs/")
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -131,6 +132,139 @@ class RewardLoggingCallback(BaseCallback):
         if self.writer:
             self.writer.close()
 
+class RewardBasedLRScheduler:
+    def __init__(self, initial_lr=3e-4, patience=10, factor=0.5, min_lr=1e-6, verbose=0):
+        """
+        Dynamischer Scheduler für die Lernrate basierend auf der Reward-Entwicklung.
+        Args:
+        - initial_lr: Anfangswert der Lernrate
+        - patience: Anzahl der Schritte ohne Verbesserung, bevor die Lernrate angepasst wird
+        - factor: Multiplikationsfaktor, um die Lernrate zu verringern (z. B. 0.5 halbiert die Lernrate)
+        - min_lr: Minimale Lernrate
+        - verbose: Ausgabe von Debugging-Informationen
+        """
+        self.lr = initial_lr
+        self.patience = patience
+        self.factor = factor
+        self.min_lr = min_lr
+        self.best_reward = -np.inf
+        self.counter = 0
+        self.verbose = verbose
+
+    def step(self, current_reward):
+        """
+        Prüft, ob die Lernrate angepasst werden muss.
+        Args:
+        - current_reward: Der aktuelle Reward des Agenten
+        Returns:
+        - Neue Lernrate
+        """
+        if current_reward > self.best_reward:
+            self.best_reward = current_reward
+            self.counter = 0
+        else:
+            self.counter += 1
+
+        if self.counter >= self.patience:
+            new_lr = max(self.min_lr, self.lr * self.factor)
+            if self.verbose and new_lr != self.lr:
+                print(f"[LRScheduler] Reducing learning rate from {self.lr:.6f} to {new_lr:.6f}")
+            self.lr = new_lr
+            self.counter = 0
+
+        return self.lr
+
+class RewardBasedLRCallback(BaseCallback):
+    def __init__(self, scheduler, verbose=0):
+        super(RewardBasedLRCallback, self).__init__(verbose)
+        self.scheduler = scheduler
+        self.last_reward = -np.inf
+
+    def _on_step(self) -> bool:
+        # Hole den letzten episodischen Reward (falls verfügbar)
+        reward_logs = self.locals.get("infos", [{}])
+        current_reward = reward_logs[-1].get("episode", {}).get("r", None)
+
+        if current_reward is not None:
+            # Update der Lernrate basierend auf dem aktuellen Reward
+            new_lr = self.scheduler.step(current_reward)
+            self.model.lr_schedule = lambda _: new_lr
+            if self.verbose:
+                print(f"[RewardBasedLRCallback] Updated learning rate to {new_lr:.6f}")
+
+        return True
+    
+class AdaptiveLRScheduler:
+    def __init__(self, initial_lr=3e-4, patience=5, factor_increase=1.5, factor_decrease=0.5, min_lr=1e-6, max_lr=1e-2, verbose=0):
+        """
+        Adaptiver Scheduler für die Lernrate, der sowohl erhöhen als auch verringern kann.
+        Args:
+        - initial_lr: Anfangslernrate
+        - patience: Anzahl der Schritte ohne Verbesserung, bevor die Lernrate angepasst wird
+        - factor_increase: Multiplikator zur Erhöhung der Lernrate (z. B. 1.5)
+        - factor_decrease: Multiplikator zur Verringerung der Lernrate (z. B. 0.5)
+        - min_lr: Minimale Lernrate
+        - max_lr: Maximale Lernrate
+        - verbose: Ausgabe von Debugging-Informationen
+        """
+        self.lr = initial_lr
+        self.patience = patience
+        self.factor_increase = factor_increase
+        self.factor_decrease = factor_decrease
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+        self.best_reward = -np.inf
+        self.counter = 0
+        self.verbose = verbose
+
+    def step(self, current_reward):
+        """
+        Passt die Lernrate dynamisch an.
+        Args:
+        - current_reward: Der aktuelle Reward des Agenten
+        Returns:
+        - Neue Lernrate
+        """
+        if current_reward > self.best_reward:
+            # Verbesserung: Aktualisiere besten Reward und setze Zähler zurück
+            self.best_reward = current_reward
+            self.counter = 0
+        else:
+            # Keine Verbesserung: Erhöhe den Zähler
+            self.counter += 1
+
+        # Anpassung der Lernrate bei zu vielen nicht-verbesserten Schritten
+        if self.counter >= self.patience:
+            if current_reward < self.best_reward * 0.9:  # Große Verschlechterung: Lernrate verringern
+                new_lr = max(self.min_lr, self.lr * self.factor_decrease)
+            else:  # Stagnation: Lernrate erhöhen
+                new_lr = min(self.max_lr, self.lr * self.factor_increase)
+
+            if self.verbose:
+                print(f"[AdaptiveLRScheduler] Adjusting learning rate from {self.lr:.6f} to {new_lr:.6f}")
+            self.lr = new_lr
+            self.counter = 0
+
+        return self.lr
+
+class AdaptiveLRCallback(BaseCallback):
+    def __init__(self, scheduler, verbose=0):
+        super(AdaptiveLRCallback, self).__init__(verbose)
+        self.scheduler = scheduler
+
+    def _on_step(self) -> bool:
+        # Hole den letzten episodischen Reward (falls verfügbar)
+        reward_logs = self.locals.get("infos", [{}])
+        current_reward = reward_logs[-1].get("episode", {}).get("r", None)
+
+        if current_reward is not None:
+            # Update der Lernrate basierend auf dem aktuellen Reward
+            new_lr = self.scheduler.step(current_reward)
+            self.model.lr_schedule = lambda _: new_lr
+            if self.verbose:
+                print(f"[AdaptiveLRCallback] Updated learning rate to {new_lr:.6f}")
+
+        return True
 
 
 class TrajectoryPlotCallback(BaseCallback):
@@ -170,30 +304,51 @@ if __name__ == "__main__":
 
 
 
-    env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory,time_step=0.1)
-    check_env(env, warn=True)
-
-    # obs = env.reset()
-    # action = env.action_space.sample()
-    # obs, reward, terminated, truncated, info = env.step(action)
+    # env = TrajectoryOptimizationEnv(tcp_trajectory, base_trajectory,time_step=0.1)
+    # check_env(env, warn=True)
 
     # Anzahl der parallelen Umgebungen
     num_cpu = 24
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
-    env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
+    vec_env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
 
-    model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
+    def lr_schedule(progress_remaining):
+        return 3e-4 * progress_remaining 
+    
+     
+    # scheduler = RewardBasedLRScheduler(
+    #     initial_lr=3e-4,
+    #     patience=50,  # 5 Episoden ohne Verbesserung, bevor die Lernrate reduziert wird
+    #     factor=0.5,  # Lernrate wird halbiert
+    #     min_lr=1e-6,  # Mindestwert für die Lernrate
+    #     verbose=1
+    # )
+
+    scheduler = AdaptiveLRScheduler(
+            initial_lr=3e-4,
+            patience=5,
+            factor_increase=1.5,
+            factor_decrease=0.5,
+            min_lr=1e-6,
+            max_lr=1e-2,
+            verbose=1
+        )
+
+    model = SAC("MlpPolicy", vec_env, learning_rate=lr_schedule, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
+    # Callbacks initialisieren
+    # lr_callback = RewardBasedLRCallback(scheduler, verbose=1)
+    lr_callback = AdaptiveLRCallback(scheduler, verbose=1)
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
     profile_plot_callback = ProfilePlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
     reward_callback = RewardLoggingCallback(log_dir="./ppo_tensorboard_logs/")
-    model.learn(total_timesteps=5000000, callback=reward_callback)
+    model.learn(total_timesteps=5000000, callback=lr_callback)
 
     # Modell speichern
-    model.save("ppo_trajectory_optimizer")
+    model.save("sac_adaptive_lr_optimizer")
     print("Modell gespeichert.")

@@ -17,7 +17,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.029031316514772237 * 0.05
+        self.scale_factor = 0.029031316514772237 * 0.4
         self.max_distance = 2.0
         self.time_step = time_step
         self.step_counter = 0
@@ -25,6 +25,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.total_step_counter = 0
         self.reward_history = []
         self.cumulative_reward = 0.0
+        self.episode_length = 0
 
 
         self.base_trajectory[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=1)
@@ -93,7 +94,8 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Zähler zurücksetzen
         self.step_counter = 0
-        self.cumulative_reward = 0.0
+        # self.cumulative_reward = 0.0
+        # self.episode_length = 0
         self.t_new = np.linspace(0, 1, len(self.base_trajectory))
         obs = self.current_trajectory.astype(np.float32)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
@@ -131,6 +133,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
+        distances_base = np.linalg.norm(np.diff(self.base_trajectory, axis=0), axis=1)
 
         # Berechnung der Geschwindigkeiten zwischen Punkten
         t_original = np.linspace(0, 1, len(self.base_trajectory))
@@ -144,19 +147,19 @@ class TrajectoryOptimizationEnv(gym.Env):
         accelerations = velocity_differences / time_intervals[1:]
 
         # Berechnung der Geschwindigkeitsänderungen
-        velocity_penalty = np.std(velocities)
+        velocity_penalty = np.std(velocities) * 1.1
 
         # Berechne maximale Geschwindigkeit
-        max_velocity_penalty = np.max(velocities)
+        max_velocity_penalty = np.max(velocities) * 0.2
 
         # Berechnung der Beschleunigungsänderungen
-        acceleration_penalty = np.std(accelerations)
+        acceleration_penalty = np.std(accelerations) * 0.002 
 
         # Berechne maximale Beschleunigung
-        max_acceleration_penalty = np.max(accelerations)
+        max_acceleration_penalty = np.max(accelerations) * 0.0002
 
-        # Berechne Acc RMSE 
-        acc_rmse_penalty = np.sqrt(np.mean(accelerations ** 2))
+        # Berechne Acc RMSE  
+        acc_rmse_penalty = np.sqrt(np.mean(accelerations ** 2)) * 0.001
 
         # Berechne Velocity RMSE
         velocity_rmse_penalty = np.sqrt(np.mean(velocities ** 2))
@@ -168,59 +171,73 @@ class TrajectoryOptimizationEnv(gym.Env):
         tcp_distances = np.linalg.norm(new_trajectory - tcp_interpolated, axis=1)
 
         # Bestrafung für Punkte, die weiter als die maximale Distanz entfernt sind
-        distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
+        tcp_distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
 
-        uniformity_penalty = np.std(time_intervals)
+        # Bestrafung für 
+        uniformity_penalty = np.std(distances) * 1000.0
 
+        # Maximale Abweichung der Abstände
+        max_distance_penalty = np.max(distances) * 200.0
 
 
         reward = (
             10.0
-            - distance_penalty * 10.0
-            - uniformity_penalty * 2.0
-            - velocity_penalty * 1.1
-            - acceleration_penalty * 0.0
+            - uniformity_penalty 
+            - max_distance_penalty 
+            - tcp_distance_penalty * 10.0
+            - velocity_penalty 
+            - acceleration_penalty 
             - max_velocity_penalty * 0.1
-            - max_acceleration_penalty * 0.001
-            - acc_rmse_penalty * 0.001
-            - velocity_rmse_penalty * 0.1
+            - max_acceleration_penalty 
+            - acc_rmse_penalty 
+            - velocity_rmse_penalty 
         )
 
         # Kumulative Belohnung
         self.cumulative_reward += reward
 
-        # Prüfung auf Terminierung
-        terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 500  # Episodenlänge begrenzen
-        if terminated or truncated:
-            info = {"episode": {"r": self.cumulative_reward}}
-            self.cumulative_reward = 0.0  # Zurücksetzen für die nächste Episode
-        else:
-            info = {}
-
         # Aktualisierung der Trajektorie
         self.current_trajectory = new_trajectory
         self.step_counter += 1
         self.total_step_counter += 1
+        self.episode_length += 1
+
+        # Prüfung auf Terminierung
+        terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
+        truncated = self.step_counter >= 1000  # Episodenlänge begrenzen
+        if terminated or truncated:
+            info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
+            self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
+            self.episode_length = 0  # Zurücksetzen für nächste Episode
+        else:
+            info = {}
+
+
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 20000 == 0:
+        if self.total_step_counter % 100 == 0:
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
-            print(f"Distance Penalty: {distance_penalty:.2f}")
+            print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
+            print(f"Max Distance Penalty: {max_distance_penalty:.2f}")
             print(f"Velocity Penalty: {velocity_penalty:.2f}")
             print(f"Acceleration Penalty: {acceleration_penalty:.2f}")
             print(f"Max Velocity Penalty: {max_velocity_penalty:.2f}")
             print(f"Max Acceleration Penalty: {max_acceleration_penalty:.2f}")
             print(f"Acc RMSE Penalty: {acc_rmse_penalty:.2f}")
             print(f"Velocity RMSE Penalty: {velocity_rmse_penalty:.2f}")
-            #self.plot_current_trajectory(self.step_counter)
-            self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
+            # self.plot_current_trajectory(self.step_counter)
+            # self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
+            # self.plot_distance_profile(distances)
+            # self.plot_distance_profile(distances_base)
+            plt.pause(0.001) # Pause for interval seconds.
+            input("hit[enter] to end.")
+            plt.close('all') # all open plots are correctly closed after each run
 
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
-        return obs, reward, terminated, truncated, {}
+        return obs, reward, terminated, truncated, info
 
     def get_current_trajectory(self):
         return self.current_trajectory.copy()
@@ -246,6 +263,15 @@ class TrajectoryOptimizationEnv(gym.Env):
         return -std_deviation,  max_distance  # Negativer Wert, da größere Abweichungen schlechter sind
 
 
+    def plot_distance_profile(self, distances):
+        plt.figure(figsize=(8, 6))
+        plt.plot(distances, label="Abstand Basistrajektorie-TCP")
+        plt.title("Abstand zwischen Punkten der optimierten Trajektorie")
+        plt.xlabel("Trajektorie-Punkt")
+        plt.ylabel("Abstand")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
     def plot_current_trajectory(self, step_counter):
         import matplotlib.pyplot as plt
