@@ -261,8 +261,9 @@ class AdaptiveLRCallback(BaseCallback):
             # Update der Lernrate basierend auf dem aktuellen Reward
             new_lr = self.scheduler.step(current_reward)
             self.model.lr_schedule = lambda _: new_lr
-            if self.verbose:
-                print(f"[AdaptiveLRCallback] Updated learning rate to {new_lr:.6f}")
+            # if self.verbose:
+            #     #print(f"[AdaptiveLRCallback] Updated learning rate to {new_lr:.6f}")
+            #     
 
         return True
 
@@ -332,10 +333,10 @@ if __name__ == "__main__":
             factor_decrease=0.5,
             min_lr=1e-6,
             max_lr=1e-2,
-            verbose=1
+            verbose=0
         )
 
-    model = SAC("MlpPolicy", vec_env, learning_rate=lr_schedule, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
+    model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
     # Callbacks initialisieren

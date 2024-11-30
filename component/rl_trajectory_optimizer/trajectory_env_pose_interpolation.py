@@ -17,7 +17,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.029031316514772237 * 0.4
+        self.scale_factor = 1.0 # 0.029031316514772237 * 0.01
         self.max_distance = 2.0
         self.time_step = time_step
         self.step_counter = 0
@@ -32,6 +32,10 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.base_trajectory[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=1)
 
         t_original = np.linspace(0, 1, len(self.base_trajectory))
+        # t_start_bad = np.linspace(0, 0.0, len(self.base_trajectory)-1)
+        # t_start_bad = np.concatenate(((t_start_bad), [1]))
+        self.time_intervals = [0.0] * (len(self.base_trajectory)-1)
+        self.initial_time_intervals = self.time_intervals.copy()
         self.t_new = t_original
         self.cs_x = CubicSpline(t_original, self.base_trajectory[:, 0])
         self.cs_y = CubicSpline(t_original, self.base_trajectory[:, 1])
@@ -63,7 +67,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         # plt.show()
 
         self.action_space = spaces.Box(
-            low=0.01,
+            low=0.0001,
             high=1.0,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
@@ -123,13 +127,21 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     def step(self, action):
         
-        time_intervals = action * self.scale_factor  # Aktion gibt relative Zeitintervalle
+
+        time_adjustment = action * self.scale_factor  # Aktion gibt relative Zeitintervalle
+        self.time_intervals += time_adjustment
+        time_intervals = self.time_intervals
         self.t_new = np.concatenate(([0], np.cumsum(time_intervals)))
         self.t_new -= np.min(self.t_new)
         self.t_new /= np.max(self.t_new)
 
+        # test
+        # t_test = np.linspace(0, 0.1, len(self.base_trajectory)-1)
+        # t_test = np.concatenate(((t_test), [1]))
+
         # Interpolieren mit der synchronisierten Punktanzahl
         new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
+        #new_trajectory = np.vstack((self.cs_x(t_test), self.cs_y(t_test))).T
 
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
@@ -205,6 +217,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
         truncated = self.step_counter >= 1000  # Episodenlänge begrenzen
+        #truncated = True  # Episodenlänge nicht begrenzen
         if terminated or truncated:
             info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
             self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
@@ -215,7 +228,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 100 == 0:
+        if self.total_step_counter % 50000 == 0:
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
@@ -226,13 +239,10 @@ class TrajectoryOptimizationEnv(gym.Env):
             print(f"Max Acceleration Penalty: {max_acceleration_penalty:.2f}")
             print(f"Acc RMSE Penalty: {acc_rmse_penalty:.2f}")
             print(f"Velocity RMSE Penalty: {velocity_rmse_penalty:.2f}")
-            # self.plot_current_trajectory(self.step_counter)
-            # self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
-            # self.plot_distance_profile(distances)
-            # self.plot_distance_profile(distances_base)
-            plt.pause(0.001) # Pause for interval seconds.
-            input("hit[enter] to end.")
-            plt.close('all') # all open plots are correctly closed after each run
+            self.plot_current_trajectory(self.step_counter)
+            self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
+            self.plot_distance_profile(distances)
+            self.plot_distance_profile(distances_base)
 
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
