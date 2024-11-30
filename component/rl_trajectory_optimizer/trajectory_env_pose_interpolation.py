@@ -117,7 +117,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history.append(reward)
 
         # Beende die Episode, wenn die Verschlechterung mehrfach hintereinander auftritt
-        if self.worsening_count >= 5:  # Beispiel: nach 5 Verschlechterungen
+        if self.worsening_count >= 20:  # Beispiel: nach 5 Verschlechterungen
             terminated = True
             #print(f"Episode beendet: Wiederholte Verschlechterungen (Count: {self.worsening_count})")
         else:
