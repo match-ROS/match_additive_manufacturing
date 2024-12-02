@@ -327,12 +327,12 @@ if __name__ == "__main__":
     # )
 
     scheduler = AdaptiveLRScheduler(
-            initial_lr=3e-4,
+            initial_lr=3e-2,
             patience=5,
             factor_increase=1.5,
             factor_decrease=0.5,
-            min_lr=1e-6,
-            max_lr=1e-2,
+            min_lr=1e-3,
+            max_lr=1e-1,
             verbose=0
         )
 

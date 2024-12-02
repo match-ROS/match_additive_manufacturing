@@ -26,19 +26,37 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history = []
         self.cumulative_reward = 0.0
         self.episode_length = 0
+        smoothed_x = np.zeros_like(self.base_trajectory)
+        smoothed_y = np.zeros_like(self.base_trajectory)
 
+        smoothed_x[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=2)
+        smoothed_y[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=2)
 
-        self.base_trajectory[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=1)
-        self.base_trajectory[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=1)
+        # entferne doppelte Punkte
+        for i in range(1, len(smoothed_x)):
+            if np.all(smoothed_x[i] == smoothed_x[i - 1]):
+                smoothed_x[i] = np.nan
+                smoothed_y[i] = np.nan
+
+        # doppelte Punkte entfernen
+        for i in range(1, len(smoothed_x)):
+            if np.all(smoothed_x[i] == smoothed_x[i - 1]) or np.all(smoothed_y[i] == smoothed_y[i - 1]):
+                # remove the point
+                smoothed_x[i] = np.nan
+                smoothed_y[i] = np.nan
+
+        smoothed_x = smoothed_x[~np.isnan(smoothed_x).any(axis=1)]
+        smoothed_y = smoothed_y[~np.isnan(smoothed_y).any(axis=1)]
 
         t_original = np.linspace(0, 1, len(self.base_trajectory))
+        t_smoothed = np.linspace(0, 1, len(smoothed_x))
         # t_start_bad = np.linspace(0, 0.0, len(self.base_trajectory)-1)
         # t_start_bad = np.concatenate(((t_start_bad), [1]))
         self.time_intervals = [0.0] * (len(self.base_trajectory)-1)
         self.initial_time_intervals = self.time_intervals.copy()
         self.t_new = t_original
-        self.cs_x = CubicSpline(t_original, self.base_trajectory[:, 0])
-        self.cs_y = CubicSpline(t_original, self.base_trajectory[:, 1])
+        self.cs_x = CubicSpline(t_smoothed, smoothed_x[:, 0])
+        self.cs_y = CubicSpline(t_smoothed, smoothed_y[:, 1])
         self.tcp_cs_x = CubicSpline(t_original, self.tcp_trajectory[:, 0])
         self.tcp_cs_y = CubicSpline(t_original, self.tcp_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
@@ -68,7 +86,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         self.action_space = spaces.Box(
             low=0.0001,
-            high=1.0,
+            high=10.0,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
@@ -128,19 +146,29 @@ class TrajectoryOptimizationEnv(gym.Env):
     def step(self, action):
         
 
-        time_adjustment = action * self.scale_factor  # Aktion gibt relative Zeitintervalle
+        time_adjustment = action #* self.scale_factor  # Aktion gibt relative Zeitintervalle
+
         self.time_intervals += time_adjustment
+
         time_intervals = self.time_intervals
+
         self.t_new = np.concatenate(([0], np.cumsum(time_intervals)))
+
         self.t_new -= np.min(self.t_new)
+
         self.t_new /= np.max(self.t_new)
 
+        #print(f"Time intervals: {time_intervals}")
+        #print(f"New time: {self.t_new}")
+        
         # test
         # t_test = np.linspace(0, 0.1, len(self.base_trajectory)-1)
         # t_test = np.concatenate(((t_test), [1]))
 
         # Interpolieren mit der synchronisierten Punktanzahl
         new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
+        coeffs = self.cs_x.c  # Koeffizienten des Splines
+
         #new_trajectory = np.vstack((self.cs_x(t_test), self.cs_y(t_test))).T
 
         # Berechnung der Distanzen zwischen Punkten
@@ -186,7 +214,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         tcp_distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
 
         # Bestrafung für 
-        uniformity_penalty = np.std(distances) * 1000.0
+        uniformity_penalty = np.std(distances) * 1000.0 * 10.0
 
         # Maximale Abweichung der Abstände
         max_distance_penalty = np.max(distances) * 200.0
@@ -228,7 +256,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 50000 == 0:
+        if self.total_step_counter % 10000 == 0:
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
@@ -289,7 +317,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.figure()
         plt.plot(self.splined_trajectory[:, 0], self.splined_trajectory[:, 1], 'b--', label='Splined Trajectory')
         plt.plot(self.current_trajectory[:, 0], self.current_trajectory[:, 1], 'r-', label='Modified Trajectory')
-        plt.scatter(self.splined_tcp_trajectory[:, 0], self.splined_tcp_trajectory[:, 1], color='blue', s=10, label='Splined TCP Trajectory')
+        plt.scatter(self.base_trajectory[:, 0], self.base_trajectory[:, 1], color='blue', s=10, label='Splined TCP Trajectory')
         plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], color='blue', s=10, label='TCP Trajectory')
         plt.scatter(self.current_trajectory[:, 0], self.current_trajectory[:, 1], color='red', s=10)
         plt.title('Trajectory Comparison at Step {}'.format(step_counter))
