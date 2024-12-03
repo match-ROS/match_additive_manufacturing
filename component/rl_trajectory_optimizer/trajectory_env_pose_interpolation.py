@@ -42,10 +42,6 @@ class TrajectoryOptimizationEnv(gym.Env):
                 smoothed_x[i] = np.nan
                 smoothed_y[i] = np.nan
 
-        # Reduziere die Punktanzahl basierend auf der Dichte
-        reduced_points = self.density_based_resampling(smoothed_x, target_distance=0.1)
-        print(f"Reduced points: {(reduced_points)}")
-
         smoothed_x = smoothed_x[~np.isnan(smoothed_x).any(axis=1)]
         smoothed_y = smoothed_y[~np.isnan(smoothed_y).any(axis=1)]
 
@@ -60,9 +56,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         smoothing_factor = 0.01  # Anpassbar: größerer Wert = glatter
         self.cs_x = UnivariateSpline(t_smoothed, smoothed_x[:, 0], s=smoothing_factor)
         self.cs_y = UnivariateSpline(t_smoothed, smoothed_y[:, 1], s=smoothing_factor)
-
-        # self.cs_x = CubicSpline(t_smoothed, smoothed_x[:, 0])
-        # self.cs_y = CubicSpline(t_smoothed, smoothed_y[:, 1])
         self.tcp_cs_x = CubicSpline(t_original, self.tcp_trajectory[:, 0])
         self.tcp_cs_y = CubicSpline(t_original, self.tcp_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
@@ -126,39 +119,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         else:
             terminated = False
         return terminated
-
-    def density_based_resampling(self,points, target_distance):
-        """
-        Resampelt eine Punktliste basierend auf einem Mindestabstand zwischen den Punkten.
-        Args:
-            points (np.ndarray): Ein Array der Form (n, 2) mit den Koordinaten der Punkte.
-            target_distance (float): Der Mindestabstand zwischen den Punkten.
-        Returns:
-            np.ndarray: Die resampelte Liste von Punkten.
-        """
-        tree = KDTree(points)  # KD-Tree für effiziente Distanzberechnungen
-        result = [points[0]]  # Startpunkt hinzufügen
-        current_point = points[0]
-
-        while True:
-            # Suche den nächsten Punkt, der mindestens `target_distance` entfernt ist
-            distances, indices = tree.query(current_point, k=len(points))
-            next_point_idx = np.where(distances >= target_distance)[0]  # Indizes aller zulässigen Punkte
-
-            if len(next_point_idx) == 0:
-                break  # Keine weiteren Punkte verfügbar
-
-            next_point = points[indices[next_point_idx[0]]]  # Nächsten gültigen Punkt auswählen
-            result.append(next_point)
-            current_point = next_point
-
-            # Entferne den aktuellen Punkt aus den Kandidaten, um Wiederholungen zu vermeiden
-            points = points[indices[next_point_idx[0]:]]  # Restliche Punkte
-
-            if len(points) == 0:
-                break
-
-        return np.array(result)
 
     def save_trajectory_log_txt(self,trajectory, step_count, log_dir="./logs/"):
         """
