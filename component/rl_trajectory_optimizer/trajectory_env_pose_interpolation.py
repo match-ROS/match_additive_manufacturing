@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 from scipy.interpolate import splprep, splev
 from scipy.ndimage import gaussian_filter1d
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import CubicSpline, UnivariateSpline
+import os
+from scipy.spatial import KDTree
 
 
 
@@ -26,24 +28,23 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history = []
         self.cumulative_reward = 0.0
         self.episode_length = 0
+
+
         smoothed_x = np.zeros_like(self.base_trajectory)
         smoothed_y = np.zeros_like(self.base_trajectory)
-
         smoothed_x[:, 0] = gaussian_filter1d(self.base_trajectory[:, 0], sigma=2)
         smoothed_y[:, 1] = gaussian_filter1d(self.base_trajectory[:, 1], sigma=2)
 
-        # entferne doppelte Punkte
-        for i in range(1, len(smoothed_x)):
-            if np.all(smoothed_x[i] == smoothed_x[i - 1]):
-                smoothed_x[i] = np.nan
-                smoothed_y[i] = np.nan
-
-        # doppelte Punkte entfernen
+         # doppelte Punkte entfernen
         for i in range(1, len(smoothed_x)):
             if np.all(smoothed_x[i] == smoothed_x[i - 1]) or np.all(smoothed_y[i] == smoothed_y[i - 1]):
                 # remove the point
                 smoothed_x[i] = np.nan
                 smoothed_y[i] = np.nan
+
+        # Reduziere die Punktanzahl basierend auf der Dichte
+        reduced_points = self.density_based_resampling(smoothed_x, target_distance=0.1)
+        print(f"Reduced points: {(reduced_points)}")
 
         smoothed_x = smoothed_x[~np.isnan(smoothed_x).any(axis=1)]
         smoothed_y = smoothed_y[~np.isnan(smoothed_y).any(axis=1)]
@@ -55,38 +56,22 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.time_intervals = [0.0] * (len(self.base_trajectory)-1)
         self.initial_time_intervals = self.time_intervals.copy()
         self.t_new = t_original
-        self.cs_x = CubicSpline(t_smoothed, smoothed_x[:, 0])
-        self.cs_y = CubicSpline(t_smoothed, smoothed_y[:, 1])
+        # Glättungsspline definieren
+        smoothing_factor = 0.01  # Anpassbar: größerer Wert = glatter
+        self.cs_x = UnivariateSpline(t_smoothed, smoothed_x[:, 0], s=smoothing_factor)
+        self.cs_y = UnivariateSpline(t_smoothed, smoothed_y[:, 1], s=smoothing_factor)
+
+        # self.cs_x = CubicSpline(t_smoothed, smoothed_x[:, 0])
+        # self.cs_y = CubicSpline(t_smoothed, smoothed_y[:, 1])
         self.tcp_cs_x = CubicSpline(t_original, self.tcp_trajectory[:, 0])
         self.tcp_cs_y = CubicSpline(t_original, self.tcp_trajectory[:, 1])
         self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
         self.splined_tcp_trajectory = np.vstack((self.tcp_cs_x(t_original), self.tcp_cs_y(t_original))).T
         self.current_trajectory = self.splined_trajectory.copy()
 
-        avg_distance = np.mean(np.linalg.norm(np.diff(base_trajectory, axis=0), axis=1))
-        print(f"Average distance between trajectory points: {avg_distance}")
-
-
-
-        # cs_x, cs_y = self.cubic_spline_interpolation(self.base_trajectory)
-        # self.t_new = np.linspace(0, 1, len(self.base_trajectory))
-        # self.splined_trajectory = np.vstack((cs_x(self.t_new), cs_y(self.t_new))).T
-
-        # plot the new trajectory
-        # plt.plot(new_trajectory[:, 0], new_trajectory[:, 1], 'r-', label='Modified Path')
-        # plt.scatter(new_trajectory[:, 0], new_trajectory[:, 1], color='red')
-        # plt.plot(self.base_trajectory[:, 0], self.base_trajectory[:, 1], 'b--', label='Initial Path')
-        # plt.scatter(self.base_trajectory[:, 0], self.base_trajectory[:, 1], color='blue')
-        # plt.legend()
-        # plt.title('Trajektorienvergleich')
-        # plt.xlabel('X')
-        # plt.ylabel('Y')
-        # plt.grid()
-        # plt.show()
-
         self.action_space = spaces.Box(
-            low=0.0001,
-            high=10.0,
+            low=0.00001,
+            high=0.001,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
@@ -142,11 +127,68 @@ class TrajectoryOptimizationEnv(gym.Env):
             terminated = False
         return terminated
 
+    def density_based_resampling(self,points, target_distance):
+        """
+        Resampelt eine Punktliste basierend auf einem Mindestabstand zwischen den Punkten.
+        Args:
+            points (np.ndarray): Ein Array der Form (n, 2) mit den Koordinaten der Punkte.
+            target_distance (float): Der Mindestabstand zwischen den Punkten.
+        Returns:
+            np.ndarray: Die resampelte Liste von Punkten.
+        """
+        tree = KDTree(points)  # KD-Tree für effiziente Distanzberechnungen
+        result = [points[0]]  # Startpunkt hinzufügen
+        current_point = points[0]
+
+        while True:
+            # Suche den nächsten Punkt, der mindestens `target_distance` entfernt ist
+            distances, indices = tree.query(current_point, k=len(points))
+            next_point_idx = np.where(distances >= target_distance)[0]  # Indizes aller zulässigen Punkte
+
+            if len(next_point_idx) == 0:
+                break  # Keine weiteren Punkte verfügbar
+
+            next_point = points[indices[next_point_idx[0]]]  # Nächsten gültigen Punkt auswählen
+            result.append(next_point)
+            current_point = next_point
+
+            # Entferne den aktuellen Punkt aus den Kandidaten, um Wiederholungen zu vermeiden
+            points = points[indices[next_point_idx[0]:]]  # Restliche Punkte
+
+            if len(points) == 0:
+                break
+
+        return np.array(result)
+
+    def save_trajectory_log_txt(self,trajectory, step_count, log_dir="./logs/"):
+        """
+        Speichert die x- und y-Werte der Trajektorie in separate .txt-Dateien.
+        Args:
+            trajectory (np.ndarray): Die aktuelle Trajektorie, ein 2D-Array mit Spalten [x, y].
+            step_count (int): Der aktuelle Schritt des Trainings.
+            log_dir (str): Das Verzeichnis, in dem die Logs gespeichert werden sollen.
+        """
+        # Erstelle das Verzeichnis, falls es nicht existiert
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Extrahiere x- und y-Werte
+        x_values = trajectory[:, 0]
+        y_values = trajectory[:, 1]
+
+        # Definiere die Dateinamen
+        x_file = os.path.join(log_dir, f"trajectory_x_step_{step_count}.txt")
+        y_file = os.path.join(log_dir, f"trajectory_y_step_{step_count}.txt")
+
+        # Speichere die Werte als separate Dateien
+        np.savetxt(x_file, [x_values], header="x", comments="", fmt="%.6f", delimiter=",")
+        np.savetxt(y_file, [y_values], header="y", comments="", fmt="%.6f", delimiter=",")
+
 
     def step(self, action):
         
-
-        time_adjustment = action #* self.scale_factor  # Aktion gibt relative Zeitintervalle
+        # Aktion elementweise quadrieren
+        action = np.square(action)
+        time_adjustment = action  #* self.scale_factor  # Aktion gibt relative Zeitintervalle
 
         self.time_intervals += time_adjustment
 
@@ -154,9 +196,10 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         self.t_new = np.concatenate(([0], np.cumsum(time_intervals)))
 
-        self.t_new -= np.min(self.t_new)
-
-        self.t_new /= np.max(self.t_new)
+        if self.t_new[-1] < 1:
+            self.t_new[-1] = 1
+        else:
+            self.t_new /= self.t_new[-1]
 
         #print(f"Time intervals: {time_intervals}")
         #print(f"New time: {self.t_new}")
@@ -167,7 +210,6 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Interpolieren mit der synchronisierten Punktanzahl
         new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
-        coeffs = self.cs_x.c  # Koeffizienten des Splines
 
         #new_trajectory = np.vstack((self.cs_x(t_test), self.cs_y(t_test))).T
 
@@ -256,7 +298,8 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 10000 == 0:
+        if self.total_step_counter % 1000 == 0:
+            self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
