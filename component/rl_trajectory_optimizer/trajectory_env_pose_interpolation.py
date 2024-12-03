@@ -54,35 +54,22 @@ class TrajectoryOptimizationEnv(gym.Env):
         # 2. Berechnung der Bogenlänge
         distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
         cumulative_lengths = np.concatenate(([0], np.cumsum(distances)))
+        self.trajectory_length = cumulative_lengths[-1]
 
         smoothing_factor = 0.01  # Anpassbar: größerer Wert = glatter
-        cs_x = UnivariateSpline(cumulative_lengths, x, s=smoothing_factor)
-        cs_y = UnivariateSpline(cumulative_lengths, y, s=smoothing_factor)
-        # cs_x = CubicSpline(cumulative_lengths, x)
-        # cs_y = CubicSpline(cumulative_lengths, y)
+        self.cs_x = UnivariateSpline(cumulative_lengths, x, s=smoothing_factor)
+        self.cs_y = UnivariateSpline(cumulative_lengths, y, s=smoothing_factor)
+        
+        self.tcp_cs_x = UnivariateSpline(cumulative_lengths, self.tcp_trajectory[:, 0], s=smoothing_factor)
+        self.tcp_cs_y = UnivariateSpline(cumulative_lengths, self.tcp_trajectory[:, 1], s=smoothing_factor)
 
         uniform_lengths = np.linspace(0, cumulative_lengths[-1], len(base_trajectory))
         # Evaluiere den Spline für gleichmäßige Bogenlängen
-        x_smooth = cs_x(uniform_lengths)
-        y_smooth = cs_y(uniform_lengths)
-
-        plt.figure(figsize=(8, 6))
-        plt.plot(base_trajectory[:, 0], base_trajectory[:, 1], 'b--', label="Base Trajectory")
-        plt.scatter(base_trajectory[:, 0], base_trajectory[:, 1], color='blue', s=10, label="Smoothed Trajectory (Original Sampling)")
-        plt.plot(x_smooth, y_smooth, 'r-', label="Smoothed Trajectory (Uniform Sampling)")
-        plt.scatter(x_smooth, y_smooth, color='red', s=10)
-        plt.legend()
-        plt.xlabel("X")
-        plt.ylabel("Y")
-        plt.title("Trajectory Resampling Along Arc Length")
-        plt.grid()
-        plt.show()
-
-        
-
-        input("Press Enter to continue...")
-
-
+        x_smooth = self.cs_x(uniform_lengths)
+        y_smooth = self.cs_y(uniform_lengths)
+        self.splined_trajectory = np.vstack((x_smooth, y_smooth)).T
+        # initialisierte initial_lengths als nur nullen
+        self.current_lengths = np.zeros_like(uniform_lengths)
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
@@ -169,21 +156,18 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     def step(self, action):
         
+        length_steps = action
+        self.current_lengths += np.concatenate(([0], np.cumsum(length_steps)))
+
+        # normiere current_length auf die Bahnlänge self.trajectory_length
+        self.current_lengths = self.current_lengths / self.current_lengths[-1] * self.trajectory_length
+        
         # Aktion elementweise quadrieren
-        action = np.square(action)
-        time_adjustment = action  #* self.scale_factor  # Aktion gibt relative Zeitintervalle
-
-        self.time_intervals += time_adjustment
-
-        time_intervals = self.time_intervals
-
-        self.t_new = np.concatenate(([0], np.cumsum(time_intervals)))
-
-        if self.t_new[-1] < 1:
-            self.t_new[-1] = 1
-        else:
-            self.t_new /= self.t_new[-1]
-
+        #action = np.square(action)
+        # Evaluiere den Spline für gleichmäßige Bogenlängen
+        x_smooth = self.cs_x(self.current_lengths)
+        y_smooth = self.cs_y(self.current_lengths)
+        new_trajectory = np.vstack((x_smooth, y_smooth)).T
         #print(f"Time intervals: {time_intervals}")
         #print(f"New time: {self.t_new}")
         
@@ -192,7 +176,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         # t_test = np.concatenate(((t_test), [1]))
 
         # Interpolieren mit der synchronisierten Punktanzahl
-        new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
+        # new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
 
         #new_trajectory = np.vstack((self.cs_x(t_test), self.cs_y(t_test))).T
 
@@ -281,7 +265,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 1000 == 0:
+        if self.total_step_counter % 1 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
