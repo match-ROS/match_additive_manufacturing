@@ -10,6 +10,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import CubicSpline, UnivariateSpline
 import os
 from scipy.spatial import KDTree
+from scipy.interpolate import Rbf
 
 
 
@@ -45,21 +46,43 @@ class TrajectoryOptimizationEnv(gym.Env):
         smoothed_x = smoothed_x[~np.isnan(smoothed_x).any(axis=1)]
         smoothed_y = smoothed_y[~np.isnan(smoothed_y).any(axis=1)]
 
-        t_original = np.linspace(0, 1, len(self.base_trajectory))
-        t_smoothed = np.linspace(0, 1, len(smoothed_x))
-        # t_start_bad = np.linspace(0, 0.0, len(self.base_trajectory)-1)
-        # t_start_bad = np.concatenate(((t_start_bad), [1]))
-        self.time_intervals = [0.0] * (len(self.base_trajectory)-1)
-        self.initial_time_intervals = self.time_intervals.copy()
-        self.t_new = t_original
-        # Glättungsspline definieren
+        x = smoothed_x[:, 0]
+        y = smoothed_y[:, 1]
+
+        x, y = x[::5], y[::5] # Jeden 5. Punkt verwenden
+
+        # 2. Berechnung der Bogenlänge
+        distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
+        cumulative_lengths = np.concatenate(([0], np.cumsum(distances)))
+
         smoothing_factor = 0.01  # Anpassbar: größerer Wert = glatter
-        self.cs_x = UnivariateSpline(t_smoothed, smoothed_x[:, 0], s=smoothing_factor)
-        self.cs_y = UnivariateSpline(t_smoothed, smoothed_y[:, 1], s=smoothing_factor)
-        self.tcp_cs_x = CubicSpline(t_original, self.tcp_trajectory[:, 0])
-        self.tcp_cs_y = CubicSpline(t_original, self.tcp_trajectory[:, 1])
-        self.splined_trajectory = np.vstack((self.cs_x(t_original), self.cs_y(t_original))).T
-        self.splined_tcp_trajectory = np.vstack((self.tcp_cs_x(t_original), self.tcp_cs_y(t_original))).T
+        cs_x = UnivariateSpline(cumulative_lengths, x, s=smoothing_factor)
+        cs_y = UnivariateSpline(cumulative_lengths, y, s=smoothing_factor)
+        # cs_x = CubicSpline(cumulative_lengths, x)
+        # cs_y = CubicSpline(cumulative_lengths, y)
+
+        uniform_lengths = np.linspace(0, cumulative_lengths[-1], len(base_trajectory))
+        # Evaluiere den Spline für gleichmäßige Bogenlängen
+        x_smooth = cs_x(uniform_lengths)
+        y_smooth = cs_y(uniform_lengths)
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(base_trajectory[:, 0], base_trajectory[:, 1], 'b--', label="Base Trajectory")
+        plt.scatter(base_trajectory[:, 0], base_trajectory[:, 1], color='blue', s=10, label="Smoothed Trajectory (Original Sampling)")
+        plt.plot(x_smooth, y_smooth, 'r-', label="Smoothed Trajectory (Uniform Sampling)")
+        plt.scatter(x_smooth, y_smooth, color='red', s=10)
+        plt.legend()
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.title("Trajectory Resampling Along Arc Length")
+        plt.grid()
+        plt.show()
+
+        
+
+        input("Press Enter to continue...")
+
+
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
