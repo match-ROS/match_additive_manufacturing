@@ -20,8 +20,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.0 # 0.029031316514772237 * 0.01
-        self.max_distance = 2.0
+        self.scale_factor = 0.5 # 0.029031316514772237 * 0.01
+        self.max_distance = 1.2
         self.time_step = time_step
         self.step_counter = 0
         self.previous_velocity_rmse = 0
@@ -60,13 +60,13 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.cs_x = UnivariateSpline(self.cumulative_lengths, x, s=smoothing_factor)
         self.cs_y = UnivariateSpline(self.cumulative_lengths, y, s=smoothing_factor)
 
-        uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(base_trajectory))
+        self.uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(base_trajectory))
         # Evaluiere den Spline für gleichmäßige Bogenlängen
-        x_smooth = self.cs_x(uniform_lengths)
-        y_smooth = self.cs_y(uniform_lengths)
+        x_smooth = self.cs_x(self.uniform_lengths)
+        y_smooth = self.cs_y(self.uniform_lengths)
         self.splined_trajectory = np.vstack((x_smooth, y_smooth)).T
         # initialisierte initial_lengths als nur nullen
-        self.current_lengths = np.zeros_like(uniform_lengths)
+        self.current_lengths = np.zeros_like(self.uniform_lengths)
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
@@ -103,7 +103,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.step_counter = 0
         # self.cumulative_reward = 0.0
         # self.episode_length = 0
-        self.t_new = np.linspace(0, 1, len(self.base_trajectory))
+        self.current_lengths = np.zeros_like(self.uniform_lengths)
         obs = self.current_trajectory.astype(np.float32)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
         return obs, {}
@@ -157,10 +157,14 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.current_lengths += np.concatenate(([0], np.cumsum(length_steps)))
 
         # normiere current_length auf die Bahnlänge self.trajectory_length
-        self.current_lengths = self.current_lengths / self.current_lengths[-1] * self.trajectory_length
+        if self.current_lengths[-1] > self.trajectory_length:
+            self.current_lengths = self.current_lengths / self.current_lengths[-1] * self.trajectory_length
+        else:
+            self.current_lengths = np.concatenate((self.current_lengths[0:-1], [self.trajectory_length]))
+            
         
-        uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(self.base_trajectory))
-        self.current_lengths = uniform_lengths
+        # self.uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(self.base_trajectory))
+        # self.current_lengths = self.uniform_lengths
         # Aktion elementweise quadrieren
         #action = np.square(action)
         # Evaluiere den Spline für gleichmäßige Bogenlängen
@@ -176,9 +180,21 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Berechnung der Abstände zwischen Manipulatorbasis und TCP-Trajektorie
         tcp_distances = np.linalg.norm(self.manipulator_positions - self.tcp_trajectory, axis=1)
 
-        print(f"TCP Distances: {tcp_distances}")
-        self.plot_trajectories_over_time()
+        # Überschreitung der maximalen Distanz berechnen
+        exceedances = tcp_distances - self.max_distance
 
+        # Nur positive Überschreitungen berücksichtigen
+        positive_exceedances = np.maximum(0, exceedances)
+
+        # Proportionale Bestrafung
+        penalty_weight = 10.0  # Gewichtung der Bestrafung
+        tcp_distance_penalty = np.sum(positive_exceedances * penalty_weight)
+
+        # Bestrafe zu kurze Trajektorien
+        length_penalty = (self.trajectory_length - self.current_lengths[-2]) * 1000.0
+ 
+        new_trajectory[-1] = new_trajectory[-2]  # TODO: irgendwas stimmt mit dem letzten Punkt nicht 
+        #        
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
         distances_base = np.linalg.norm(np.diff(self.base_trajectory, axis=0), axis=1)
@@ -210,30 +226,25 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Berechne Velocity RMSE
         velocity_rmse_penalty = np.sqrt(np.mean(velocities ** 2))
 
-        # Berechnung der euklidischen Abstände zwischen den Trajektorien
-        #tcp_distances = np.linalg.norm(new_trajectory - tcp_interpolated, axis=1)
-
-        # Bestrafung für Punkte, die weiter als die maximale Distanz entfernt sind
-        #tcp_distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
-
         # Bestrafung für 
         uniformity_penalty = np.std(distances) * 1000.0
 
         # Maximale Abweichung der Abstände
-        max_distance_penalty = np.max(distances) * 200.0
+        max_distance_penalty = np.max(distances) * 2000.0
 
 
         reward = (
             10.0
             - uniformity_penalty 
             - max_distance_penalty 
-            #- tcp_distance_penalty * 10.0
+            - tcp_distance_penalty 
             - velocity_penalty 
             - acceleration_penalty 
             - max_velocity_penalty * 0.1
             - max_acceleration_penalty 
             - acc_rmse_penalty 
             - velocity_rmse_penalty 
+            - length_penalty
         )
 
         # Kumulative Belohnung
@@ -253,16 +264,17 @@ class TrajectoryOptimizationEnv(gym.Env):
             info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
             self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
             self.episode_length = 0  # Zurücksetzen für nächste Episode
+            self.reset()
         else:
             info = {}
 
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 1 == 0:
+        if self.total_step_counter % 100000 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
-            #print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
+            print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
             print(f"Max Distance Penalty: {max_distance_penalty:.2f}")
             print(f"Velocity Penalty: {velocity_penalty:.2f}")
@@ -271,10 +283,11 @@ class TrajectoryOptimizationEnv(gym.Env):
             print(f"Max Acceleration Penalty: {max_acceleration_penalty:.2f}")
             print(f"Acc RMSE Penalty: {acc_rmse_penalty:.2f}")
             print(f"Velocity RMSE Penalty: {velocity_rmse_penalty:.2f}")
+            print(f"Length Penalty: {length_penalty:.2f}")
             self.plot_current_trajectory(self.step_counter)
             self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
             self.plot_distance_profile(distances)
-            self.plot_distance_profile(distances_base)
+            #self.plot_distance_profile(distances_base)
 
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
@@ -326,17 +339,6 @@ class TrajectoryOptimizationEnv(gym.Env):
         total_deviation = np.sum(deviations)
         return total_deviation
     
-    def calculate_spacing_penalty(self):
-        distances_between_points = np.linalg.norm(np.diff(self.current_trajectory, axis=0), axis=1)
-        penalty = np.sqrt(np.mean(distances_between_points ** 2))
-        return penalty
-
-    def calculate_uniformity_reward(self):
-        distances_between_points = np.linalg.norm(np.diff(self.current_trajectory, axis=0), axis=1)
-        # Standardabweichung der Abstände
-        std_deviation = np.std(distances_between_points)
-        max_distance = np.max(distances_between_points)
-        return -std_deviation,  max_distance  # Negativer Wert, da größere Abweichungen schlechter sind
 
     def plot_trajectories_over_time(self):
         plt.figure(figsize=(8, 6))
