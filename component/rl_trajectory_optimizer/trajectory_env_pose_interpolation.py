@@ -20,7 +20,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 1.0 # 0.029031316514772237 * 0.01
+        self.scale_factor = 0.0 # 0.029031316514772237 * 0.01
         self.max_distance = 2.0
         self.time_step = time_step
         self.step_counter = 0
@@ -53,17 +53,14 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # 2. Berechnung der Bogenlänge
         distances = np.sqrt(np.diff(x)**2 + np.diff(y)**2)
-        cumulative_lengths = np.concatenate(([0], np.cumsum(distances)))
-        self.trajectory_length = cumulative_lengths[-1]
+        self.cumulative_lengths = np.concatenate(([0], np.cumsum(distances)))
+        self.trajectory_length = self.cumulative_lengths[-1]
 
         smoothing_factor = 0.01  # Anpassbar: größerer Wert = glatter
-        self.cs_x = UnivariateSpline(cumulative_lengths, x, s=smoothing_factor)
-        self.cs_y = UnivariateSpline(cumulative_lengths, y, s=smoothing_factor)
-        
-        self.tcp_cs_x = UnivariateSpline(cumulative_lengths, self.tcp_trajectory[:, 0], s=smoothing_factor)
-        self.tcp_cs_y = UnivariateSpline(cumulative_lengths, self.tcp_trajectory[:, 1], s=smoothing_factor)
+        self.cs_x = UnivariateSpline(self.cumulative_lengths, x, s=smoothing_factor)
+        self.cs_y = UnivariateSpline(self.cumulative_lengths, y, s=smoothing_factor)
 
-        uniform_lengths = np.linspace(0, cumulative_lengths[-1], len(base_trajectory))
+        uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(base_trajectory))
         # Evaluiere den Spline für gleichmäßige Bogenlängen
         x_smooth = self.cs_x(uniform_lengths)
         y_smooth = self.cs_y(uniform_lengths)
@@ -156,12 +153,14 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     def step(self, action):
         
-        length_steps = action
+        length_steps = action * self.scale_factor
         self.current_lengths += np.concatenate(([0], np.cumsum(length_steps)))
 
         # normiere current_length auf die Bahnlänge self.trajectory_length
         self.current_lengths = self.current_lengths / self.current_lengths[-1] * self.trajectory_length
         
+        uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(self.base_trajectory))
+        self.current_lengths = uniform_lengths
         # Aktion elementweise quadrieren
         #action = np.square(action)
         # Evaluiere den Spline für gleichmäßige Bogenlängen
@@ -171,29 +170,27 @@ class TrajectoryOptimizationEnv(gym.Env):
         #print(f"Time intervals: {time_intervals}")
         #print(f"New time: {self.t_new}")
         
-        # test
-        # t_test = np.linspace(0, 0.1, len(self.base_trajectory)-1)
-        # t_test = np.concatenate(((t_test), [1]))
+        # Berechne trajektorie der manipulatorbasis
+        self.manipulator_positions = self.calculate_manipulator_base_positions(new_trajectory)
 
-        # Interpolieren mit der synchronisierten Punktanzahl
-        # new_trajectory = np.vstack((self.cs_x(self.t_new), self.cs_y(self.t_new))).T
+        # Berechnung der Abstände zwischen Manipulatorbasis und TCP-Trajektorie
+        tcp_distances = np.linalg.norm(self.manipulator_positions - self.tcp_trajectory, axis=1)
 
-        #new_trajectory = np.vstack((self.cs_x(t_test), self.cs_y(t_test))).T
+        print(f"TCP Distances: {tcp_distances}")
+        self.plot_trajectories_over_time()
 
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
         distances_base = np.linalg.norm(np.diff(self.base_trajectory, axis=0), axis=1)
 
         # Berechnung der Geschwindigkeiten zwischen Punkten
-        t_original = np.linspace(0, 1, len(self.base_trajectory))
-        time_intervals = np.diff(t_original)
-        velocities = distances / time_intervals
+        velocities = distances / self.time_step
 
         # Berechnung der Differenzen der Geschwindigkeiten
         velocity_differences = np.diff(velocities)
 
         # Berechnung der Beschleunigungen
-        accelerations = velocity_differences / time_intervals[1:]
+        accelerations = velocity_differences / self.time_step
 
         # Berechnung der Geschwindigkeitsänderungen
         velocity_penalty = np.std(velocities) * 1.1
@@ -213,17 +210,14 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Berechne Velocity RMSE
         velocity_rmse_penalty = np.sqrt(np.mean(velocities ** 2))
 
-        # Interpolation der TCP-Trajektorie auf die gleichen Zeitstempel
-        tcp_interpolated = np.vstack((self.tcp_cs_x(self.t_new), self.tcp_cs_y(self.t_new))).T
-
         # Berechnung der euklidischen Abstände zwischen den Trajektorien
-        tcp_distances = np.linalg.norm(new_trajectory - tcp_interpolated, axis=1)
+        #tcp_distances = np.linalg.norm(new_trajectory - tcp_interpolated, axis=1)
 
         # Bestrafung für Punkte, die weiter als die maximale Distanz entfernt sind
-        tcp_distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
+        #tcp_distance_penalty = np.sum(np.maximum(0, tcp_distances - self.max_distance))
 
         # Bestrafung für 
-        uniformity_penalty = np.std(distances) * 1000.0 * 10.0
+        uniformity_penalty = np.std(distances) * 1000.0
 
         # Maximale Abweichung der Abstände
         max_distance_penalty = np.max(distances) * 200.0
@@ -233,7 +227,7 @@ class TrajectoryOptimizationEnv(gym.Env):
             10.0
             - uniformity_penalty 
             - max_distance_penalty 
-            - tcp_distance_penalty * 10.0
+            #- tcp_distance_penalty * 10.0
             - velocity_penalty 
             - acceleration_penalty 
             - max_velocity_penalty * 0.1
@@ -268,7 +262,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         if self.total_step_counter % 1 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
-            print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
+            #print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
             print(f"Uniformity Penalty: {uniformity_penalty:.2f}")
             print(f"Max Distance Penalty: {max_distance_penalty:.2f}")
             print(f"Velocity Penalty: {velocity_penalty:.2f}")
@@ -290,6 +284,40 @@ class TrajectoryOptimizationEnv(gym.Env):
     def get_current_trajectory(self):
         return self.current_trajectory.copy()
     
+    def calculate_manipulator_base_positions(self,new_trajectory, delta_x=0.55, delta_y=-0.32):
+        """
+        Berechnet die wahren Positionen der Manipulatorbasis entlang der Plattformtrajektorie.
+
+        Args:
+        - new_trajectory: Die optimierte Basistrajektorie (N x 2).
+        - delta_x: Verschiebung des Manipulators in x-Richtung relativ zur Plattform.
+        - delta_y: Verschiebung des Manipulators in y-Richtung relativ zur Plattform.
+
+        Returns:
+        - manipulator_positions: Array mit den wahren Positionen der Manipulatorbasis (N x 2).
+        """
+        # Berechne die Richtungsvektoren
+        directions = np.diff(new_trajectory, axis=0)
+        
+        # Berechne die Orientierung (Theta) entlang der Trajektorie
+        thetas = np.arctan2(directions[:, 1], directions[:, 0])
+
+        # Füge den letzten Winkel als Kopie hinzu (damit die Länge passt)
+        thetas = np.append(thetas, thetas[-1])
+
+        # Rotationsmatrix anwenden (vektorisiert)
+        cos_thetas = np.cos(thetas)
+        sin_thetas = np.sin(thetas)
+        rotated_offsets_x = cos_thetas * delta_x - sin_thetas * delta_y
+        rotated_offsets_y = sin_thetas * delta_x + cos_thetas * delta_y
+        rotated_offsets = np.vstack((rotated_offsets_x, rotated_offsets_y)).T
+
+        # Addiere die rotierte Verschiebung zur Plattformposition
+        manipulator_positions = new_trajectory + rotated_offsets
+
+        return manipulator_positions
+
+    
     def calculate_path_deviation(self, trajectory):
         """
         Berechnet die Abweichung der aktuellen Trajektorie von der gesplinten Trajektorie.
@@ -310,6 +338,16 @@ class TrajectoryOptimizationEnv(gym.Env):
         max_distance = np.max(distances_between_points)
         return -std_deviation,  max_distance  # Negativer Wert, da größere Abweichungen schlechter sind
 
+    def plot_trajectories_over_time(self):
+        plt.figure(figsize=(8, 6))
+        plt.plot(self.base_trajectory[:, 0], 'b--', label='Base Trajectory')
+        plt.plot(self.tcp_trajectory[:, 0], 'r-', label='Modified Trajectory')
+        plt.title('Trajectory Comparison')
+        plt.xlabel('Time Step')
+        plt.ylabel('X')
+        plt.grid()
+        plt.legend()
+        plt.show()
 
     def plot_distance_profile(self, distances):
         plt.figure(figsize=(8, 6))
@@ -325,6 +363,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         import matplotlib.pyplot as plt
 
         plt.figure()
+        plt.plot(self.manipulator_positions[:, 0], self.manipulator_positions[:, 1], 'g-', label='Manipulator Basis')
         plt.plot(self.splined_trajectory[:, 0], self.splined_trajectory[:, 1], 'b--', label='Splined Trajectory')
         plt.plot(self.current_trajectory[:, 0], self.current_trajectory[:, 1], 'r-', label='Modified Trajectory')
         plt.scatter(self.base_trajectory[:, 0], self.base_trajectory[:, 1], color='blue', s=10, label='Splined TCP Trajectory')
