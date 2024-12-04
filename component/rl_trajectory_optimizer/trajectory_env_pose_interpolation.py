@@ -20,7 +20,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 0.5 # 0.029031316514772237 * 0.01
+        self.scale_factor = 100.0 # 0.029031316514772237 * 0.01
         self.max_distance = 1.2
         self.time_step = time_step
         self.step_counter = 0
@@ -191,7 +191,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         tcp_distance_penalty = np.sum(positive_exceedances * penalty_weight)
 
         # Bestrafe zu kurze Trajektorien
-        length_penalty = (self.trajectory_length - self.current_lengths[-2]) * 1000.0
+        length_penalty = (self.trajectory_length - self.current_lengths[-2]) * 100.0
  
         new_trajectory[-1] = new_trajectory[-2]  # TODO: irgendwas stimmt mit dem letzten Punkt nicht 
         #        
@@ -258,12 +258,13 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 1000  # Episodenlänge begrenzen
+        truncated = self.step_counter >= 500  # Episodenlänge begrenzen
         #truncated = True  # Episodenlänge nicht begrenzen
         if terminated or truncated:
             info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
             self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
             self.episode_length = 0  # Zurücksetzen für nächste Episode
+            self.step_counter = 0
             self.reset()
         else:
             info = {}
