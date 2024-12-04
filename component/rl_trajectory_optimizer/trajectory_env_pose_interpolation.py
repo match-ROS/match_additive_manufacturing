@@ -29,6 +29,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history = []
         self.cumulative_reward = 0.0
         self.episode_length = 0
+        self.last_step_reward = 0.0
 
 
         smoothed_x = np.zeros_like(self.base_trajectory)
@@ -70,8 +71,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
-            low=0.00001,
-            high=0.001,
+            low=0.000001,
+            high=0.1,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
@@ -120,7 +121,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.reward_history.append(reward)
 
         # Beende die Episode, wenn die Verschlechterung mehrfach hintereinander auftritt
-        if self.worsening_count >= 20:  # Beispiel: nach 5 Verschlechterungen
+        if self.worsening_count >= 10:  # Beispiel: nach 5 Verschlechterungen
             terminated = True
             #print(f"Episode beendet: Wiederholte Verschlechterungen (Count: {self.worsening_count})")
         else:
@@ -255,24 +256,28 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.step_counter += 1
         self.total_step_counter += 1
         self.episode_length += 1
+        self.last_step_reward = reward  # Speichere den aktuellen Reward
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 500  # Episodenlänge begrenzen
+        truncated = self.step_counter >= 200  # Episodenlänge begrenzen
         #truncated = True  # Episodenlänge nicht begrenzen
         if terminated or truncated:
-            info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
+            #info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
+            info = {"last_reward": self.last_step_reward}
             self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
             self.episode_length = 0  # Zurücksetzen für nächste Episode
             self.step_counter = 0
-            self.reset()
+            self.reset()#
+            reward_output = reward
         else:
             info = {}
+            reward_output = 0.0
 
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 100000 == 0:
+        if self.total_step_counter % 10000 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
@@ -293,7 +298,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Beobachtung zurückgeben
         obs = self.current_trajectory.astype(np.float32)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
-        return obs, reward, terminated, truncated, info
+        return obs, reward_output, terminated, truncated, info
 
     def get_current_trajectory(self):
         return self.current_trajectory.copy()
