@@ -6,7 +6,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 #from trajectory_env import TrajectoryOptimizationEnv
 from trajectory_env_pose_interpolation import TrajectoryOptimizationEnv
 import os, sys
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 import matplotlib.pyplot as plt
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.logger import configure
@@ -309,10 +309,10 @@ if __name__ == "__main__":
     # check_env(env, warn=True)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 24
+    num_cpu = 8
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
-    vec_env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
+    #vec_env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
 
     def lr_schedule(progress_remaining):
         return 3e-4 * progress_remaining 
@@ -336,7 +336,7 @@ if __name__ == "__main__":
             verbose=0
         )
 
-    model = SAC("MlpPolicy", vec_env, learning_rate=3e-4, verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
+    model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
     # Callbacks initialisieren
@@ -348,8 +348,8 @@ if __name__ == "__main__":
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
     reward_callback = RewardLoggingCallback(log_dir="./ppo_tensorboard_logs/")
-    model.learn(total_timesteps=5000000, callback=lr_callback)
-
+    model.learn(total_timesteps=5000000 ) # callback=lr_callback)
+    
     # Modell speichern
     model.save("sac_adaptive_lr_optimizer")
     print("Modell gespeichert.")

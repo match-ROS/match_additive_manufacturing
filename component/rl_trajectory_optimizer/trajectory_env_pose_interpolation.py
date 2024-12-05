@@ -20,7 +20,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         super(TrajectoryOptimizationEnv, self).__init__()
         self.tcp_trajectory = np.array(tcp_trajectory)
         self.base_trajectory = np.array(base_trajectory)
-        self.scale_factor = 100.0 # 0.029031316514772237 * 0.01
+        self.scale_factor = 1.0 # 0.029031316514772237 * 0.01
         self.max_distance = 1.2
         self.time_step = time_step
         self.step_counter = 0
@@ -71,7 +71,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
-            low=0.000001,
+            low=0.001,
             high=0.1,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
@@ -85,8 +85,8 @@ class TrajectoryOptimizationEnv(gym.Env):
 
     def cubic_spline_interpolation(self,base_trajectory):
         t = np.linspace(0, 1, len(base_trajectory))
-        cs_x = CubicSpline(t, base_trajectory[:, 0])
-        cs_y = CubicSpline(t, base_trajectory[:, 1])
+        cs_x = UnivariateSpline(t, base_trajectory[:, 0], s=0.01)
+        cs_y = UnivariateSpline(t, base_trajectory[:, 1], s=0.01)
         return cs_x, cs_y
 
     def get_time_step(self):
@@ -153,7 +153,8 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
     def step(self, action):
-        
+        # action gleich aufsteigende Schritte
+    
         length_steps = action * self.scale_factor
         self.current_lengths += np.concatenate(([0], np.cumsum(length_steps)))
 
@@ -166,14 +167,13 @@ class TrajectoryOptimizationEnv(gym.Env):
         
         # self.uniform_lengths = np.linspace(0, self.cumulative_lengths[-1], len(self.base_trajectory))
         # self.current_lengths = self.uniform_lengths
-        # Aktion elementweise quadrieren
-        #action = np.square(action)
+
         # Evaluiere den Spline für gleichmäßige Bogenlängen
-        x_smooth = self.cs_x(self.current_lengths)
-        y_smooth = self.cs_y(self.current_lengths)
+        x = self.cs_x(self.current_lengths)
+        y = self.cs_y(self.current_lengths)
+        x_smooth = gaussian_filter1d(x, sigma=2)
+        y_smooth = gaussian_filter1d(y, sigma=2)
         new_trajectory = np.vstack((x_smooth, y_smooth)).T
-        #print(f"Time intervals: {time_intervals}")
-        #print(f"New time: {self.t_new}")
         
         # Berechne trajektorie der manipulatorbasis
         self.manipulator_positions = self.calculate_manipulator_base_positions(new_trajectory)
@@ -194,7 +194,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         # Bestrafe zu kurze Trajektorien
         length_penalty = (self.trajectory_length - self.current_lengths[-2]) * 100.0
  
-        new_trajectory[-1] = new_trajectory[-2]  # TODO: irgendwas stimmt mit dem letzten Punkt nicht 
+        #new_trajectory[-1] = new_trajectory[-2]  # TODO: irgendwas stimmt mit dem letzten Punkt nicht 
         #        
         # Berechnung der Distanzen zwischen Punkten
         distances = np.linalg.norm(np.diff(new_trajectory, axis=0), axis=1)
@@ -216,7 +216,7 @@ class TrajectoryOptimizationEnv(gym.Env):
         max_velocity_penalty = np.max(velocities) * 0.2
 
         # Berechnung der Beschleunigungsänderungen
-        acceleration_penalty = np.std(accelerations) * 0.002 
+        acceleration_penalty = np.sum(abs(accelerations)) * 0.1
 
         # Berechne maximale Beschleunigung
         max_acceleration_penalty = np.max(accelerations) * 0.0002
@@ -235,21 +235,20 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         reward = (
-            10.0
+            1000.0
             - uniformity_penalty 
             - max_distance_penalty 
             - tcp_distance_penalty 
             - velocity_penalty 
             - acceleration_penalty 
-            - max_velocity_penalty * 0.1
+            - max_velocity_penalty
             - max_acceleration_penalty 
             - acc_rmse_penalty 
             - velocity_rmse_penalty 
             - length_penalty
         )
 
-        # Kumulative Belohnung
-        self.cumulative_reward += reward
+        
 
         # Aktualisierung der Trajektorie
         self.current_trajectory = new_trajectory
@@ -260,12 +259,11 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 200  # Episodenlänge begrenzen
+        truncated = self.step_counter >= 10  # Episodenlänge begrenzen
         #truncated = True  # Episodenlänge nicht begrenzen
         if terminated or truncated:
             #info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
-            info = {"last_reward": self.last_step_reward}
-            self.cumulative_reward = 0.0  # Zurücksetzen für nächste Episode
+            info = {"episode": {"r": reward, "l": self.episode_length}}
             self.episode_length = 0  # Zurücksetzen für nächste Episode
             self.step_counter = 0
             self.reset()#
@@ -296,9 +294,12 @@ class TrajectoryOptimizationEnv(gym.Env):
             #self.plot_distance_profile(distances_base)
 
         # Beobachtung zurückgeben
-        obs = self.current_trajectory.astype(np.float32)
+        obs = self.normalize_observations(self.current_trajectory)
         obs = obs.flatten()  # Flache 1D-Struktur erzeugen
         return obs, reward_output, terminated, truncated, info
+
+
+
 
     def get_current_trajectory(self):
         return self.current_trajectory.copy()
@@ -317,9 +318,42 @@ class TrajectoryOptimizationEnv(gym.Env):
         """
         # Berechne die Richtungsvektoren
         directions = np.diff(new_trajectory, axis=0)
+        directions = []
+        for i in range(1, len(new_trajectory)):
+            directions.append(new_trajectory[i] - new_trajectory[i - 1])
+        directions = np.array(directions)
         
         # Berechne die Orientierung (Theta) entlang der Trajektorie
         thetas = np.arctan2(directions[:, 1], directions[:, 0])
+
+        # plot new_trajectory xy
+        # plt.figure()
+        # plt.plot(new_trajectory[:, 0], label="x")
+        # plt.plot(new_trajectory[:, 1], label="y")
+        # plt.title("Trajectory")
+        # plt.xlabel("Trajectory Point")
+        # plt.ylabel("Position")
+        # plt.legend()
+        # plt.grid()
+        # plt.show()
+
+        # # plot new_trajectory
+        # plt.figure()
+        # plt.plot(new_trajectory[:, 0], new_trajectory[:, 1])
+        # plt.title("Trajectory values")
+        # plt.xlabel("Trajectory Point")
+        # plt.ylabel("Position")
+        # plt.grid()
+        # plt.show()
+
+        # # plot thetas
+        # plt.figure()
+        # plt.plot(thetas)
+        # plt.title("Theta values")
+        # plt.xlabel("Trajectory Point")
+        # plt.ylabel("Theta")
+        # plt.grid()
+        # plt.show()
 
         # Füge den letzten Winkel als Kopie hinzu (damit die Länge passt)
         thetas = np.append(thetas, thetas[-1])
@@ -372,9 +406,8 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         plt.figure()
         plt.plot(self.manipulator_positions[:, 0], self.manipulator_positions[:, 1], 'g-', label='Manipulator Basis')
-        plt.plot(self.splined_trajectory[:, 0], self.splined_trajectory[:, 1], 'b--', label='Splined Trajectory')
-        plt.plot(self.current_trajectory[:, 0], self.current_trajectory[:, 1], 'r-', label='Modified Trajectory')
-        plt.scatter(self.base_trajectory[:, 0], self.base_trajectory[:, 1], color='blue', s=10, label='Splined TCP Trajectory')
+        plt.plot(self.current_trajectory[:, 0], self.current_trajectory[:, 1], 'r-', label='current Trajectory')
+        plt.scatter(self.base_trajectory[:, 0], self.base_trajectory[:, 1], color='blue', s=10, label='base Trajectory')
         plt.scatter(self.tcp_trajectory[:, 0], self.tcp_trajectory[:, 1], color='blue', s=10, label='TCP Trajectory')
         plt.scatter(self.current_trajectory[:, 0], self.current_trajectory[:, 1], color='red', s=10)
         plt.title('Trajectory Comparison at Step {}'.format(step_counter))
@@ -410,3 +443,12 @@ class TrajectoryOptimizationEnv(gym.Env):
         plt.tight_layout()
         plt.show()
     
+
+    def normalize_observations(self, trajectory):
+        x_min = np.min(trajectory[:, 0])
+        x_max = np.max(trajectory[:, 0])
+        y_min = np.min(trajectory[:, 1])
+        y_max = np.max(trajectory[:, 1])
+        x_norm = (trajectory[:, 0] - x_min) / (x_max - x_min) * 2 - 1
+        y_norm = (trajectory[:, 1] - y_min) / (y_max - y_min) * 2 - 1
+        return np.vstack((x_norm, y_norm)).T
