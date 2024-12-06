@@ -327,28 +327,34 @@ if __name__ == "__main__":
     # )
 
     scheduler = AdaptiveLRScheduler(
-            initial_lr=3e-2,
+            initial_lr=3e-4,
             patience=5,
             factor_increase=1.5,
             factor_decrease=0.5,
-            min_lr=1e-3,
-            max_lr=1e-1,
+            min_lr=1e-6,
+            max_lr=1e-3,
             verbose=0
         )
 
-    model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=2, tensorboard_log="./ppo_tensorboard_logs/")
+    model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
     # Callbacks initialisieren
     # lr_callback = RewardBasedLRCallback(scheduler, verbose=1)
-    lr_callback = AdaptiveLRCallback(scheduler, verbose=1)
+    lr_callback = AdaptiveLRCallback(scheduler, verbose=0)
     plot_callback = TrajectoryPlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
     profile_plot_callback = ProfilePlotCallback(vec_env, tcp_trajectory, plot_freq=10000)
 
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
     reward_callback = RewardLoggingCallback(log_dir="./ppo_tensorboard_logs/")
-    model.learn(total_timesteps=5000000 ) # callback=lr_callback)
+    model.learn(total_timesteps=1000000 , callback=lr_callback)
+
+    # Ergebnisse evaluieren
+    obs = vec_env.reset()
+    action, _ = model.predict(obs)
+    obs, reward, terminated, _ = vec_env.step(action)
+    print(f"Final Reward: {reward}")
     
     # Modell speichern
     model.save("sac_adaptive_lr_optimizer")

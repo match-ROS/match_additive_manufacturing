@@ -71,8 +71,8 @@ class TrajectoryOptimizationEnv(gym.Env):
         self.current_trajectory = self.splined_trajectory.copy()
 
         self.action_space = spaces.Box(
-            low=0.001,
-            high=0.1,
+            low=0.0001,
+            high=1.0,
             shape=(len(self.base_trajectory)-1,),  # Eine Aktion pro Punkt
             dtype=np.float32
         )
@@ -259,7 +259,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
         # Prüfung auf Terminierung
         terminated = self.monitor_reward(reward)  # Optional: Bedingung hinzufügen, wenn nötig
-        truncated = self.step_counter >= 10  # Episodenlänge begrenzen
+        truncated = self.step_counter >= 0  # Episodenlänge begrenzen
         #truncated = True  # Episodenlänge nicht begrenzen
         if terminated or truncated:
             #info = {"episode": {"r": self.cumulative_reward, "l": self.episode_length}}
@@ -275,7 +275,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 10000 == 0:
+        if self.total_step_counter % 25000 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
