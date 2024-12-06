@@ -275,7 +275,7 @@ class TrajectoryOptimizationEnv(gym.Env):
 
 
         # Visualisierung nach bestimmten Schritten (optional)
-        if self.total_step_counter % 25000 == 0:
+        if self.total_step_counter % 10000 == 0:
             self.save_trajectory_log_txt(self.current_trajectory, self.total_step_counter, log_dir="./logs/")
             print(f"Step {self.total_step_counter}: Reward={reward:.2f}")
             print(f"tcp_distance_penalty Penalty: {tcp_distance_penalty:.2f}")
@@ -288,9 +288,9 @@ class TrajectoryOptimizationEnv(gym.Env):
             print(f"Acc RMSE Penalty: {acc_rmse_penalty:.2f}")
             print(f"Velocity RMSE Penalty: {velocity_rmse_penalty:.2f}")
             print(f"Length Penalty: {length_penalty:.2f}")
-            self.plot_current_trajectory(self.step_counter)
-            self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
-            self.plot_distance_profile(distances)
+            # self.plot_current_trajectory(self.step_counter)
+            # self.calculate_and_plot_profiles(velocities, accelerations, self.step_counter)
+            # self.plot_distance_profile(distances)
             #self.plot_distance_profile(distances_base)
 
         # Beobachtung zurückgeben

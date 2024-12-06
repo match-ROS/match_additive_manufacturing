@@ -309,7 +309,7 @@ if __name__ == "__main__":
     # check_env(env, warn=True)
 
     # Anzahl der parallelen Umgebungen
-    num_cpu = 8
+    num_cpu = 32
     vec_env = SubprocVecEnv([make_env for _ in range(num_cpu)])
 
     #vec_env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
@@ -337,6 +337,7 @@ if __name__ == "__main__":
         )
 
     model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
+    model = PPO("MlpPolicy", vec_env, learning_rate=lr_schedule,   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
     # Callbacks initialisieren
