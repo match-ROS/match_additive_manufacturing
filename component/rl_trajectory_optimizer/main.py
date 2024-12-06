@@ -315,7 +315,7 @@ if __name__ == "__main__":
     #vec_env.max_steps_per_episode = 1000 # Kürzere Episoden für schnelleres Training
 
     def lr_schedule(progress_remaining):
-        return 3e-4 * progress_remaining 
+        return 3e-2 * progress_remaining 
     
      
     # scheduler = RewardBasedLRScheduler(
@@ -336,7 +336,7 @@ if __name__ == "__main__":
             verbose=0
         )
 
-    model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
+    #model = SAC("MlpPolicy", vec_env, ent_coef='auto',   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
     model = PPO("MlpPolicy", vec_env, learning_rate=lr_schedule,   verbose=0, tensorboard_log="./ppo_tensorboard_logs/")
     model.set_logger(new_logger)
 
@@ -349,7 +349,7 @@ if __name__ == "__main__":
     # Training starten mit Callback
     reset_callback = ResetTrajectoryCallback(reset_freq=100000)
     reward_callback = RewardLoggingCallback(log_dir="./ppo_tensorboard_logs/")
-    model.learn(total_timesteps=1000000 , callback=lr_callback)
+    model.learn(total_timesteps=1000000) # , callback=lr_callback)
 
     # Ergebnisse evaluieren
     obs = vec_env.reset()
