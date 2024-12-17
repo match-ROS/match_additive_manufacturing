@@ -49,5 +49,5 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 
 
 ## Contact
-
-For any questions or inquiries, please contact [yourname@domain.com](mailto:yourname@domain.com).
+ 
+For any questions or inquiries, please contact matchbox@match.uni-hannover.de
