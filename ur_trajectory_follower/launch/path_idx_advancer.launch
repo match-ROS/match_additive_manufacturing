@@ -1,0 +1,17 @@
+<launch>
+    <node name="path_index_advancer" pkg="ur_trajectory_follower" type="path_idx_advancer.py" output="screen">
+        <!-- Parameters -->
+        <param name="radius_threshold" value="0.5"/>
+        <param name="collinear_threshold" value="0.2"/>
+        <param name="virtual_line_threshold" value="0.2"/>
+        <param name="prev_idx_dist" value="1"/>
+        <param name="next_idx_dist" value="1"/>
+        <param name="metric" value="virtual line"/>
+        
+        <!-- Topic remapping -->
+        <remap from="/ur_path_transformed" to="/your_path_topic"/>
+        <remap from="/current_pose" to="/your_pose_topic"/>
+        <remap from="/path_index" to="/your_path_index_topic"/>
+        <remap from="/next_goal" to="/your_next_goal_topic"/>
+    </node>
+</launch>
