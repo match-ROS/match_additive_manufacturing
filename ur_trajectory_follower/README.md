@@ -43,7 +43,12 @@ To be updated with launch file and Python script usage.
     - `radius`: Determines the index of the next waypoint based on the distance to the goal pose.
     - `collinear`: Determines the index of the next waypoint based on the distance to the goal pose collinear to the path between the last and the next waypoint.
     - `virtual line`: Determines the index of the next waypoint based on the distance to a virtual line between the last and the next waypoint. The orientation of the line is determined by the angle bisector of the inccoming and outgoing segment of the next waypoint.
+- 
 
 ## Future Work
+- publish ur_pose in world
+- calculate error in world
+- control velocity from error and target velocity in world
+- transform control velocity to base_link
 - Add launch files for easy startup
 - Implement Python scripts for trajectory generation and control
