@@ -1,0 +1,10 @@
+<launch>
+    <arg name="fromFrame" default="map"/>
+    <arg name="toFrame" default="mur620/UR10_l/base"/>
+    <node name="rotated_twist_command" pkg="ur_controllers_match" type="rotated_twist_command.py" output="screen">
+        <param name="frame_from" value="$(arg fromFrame)" />
+        <param name="frame_to" value="$(arg toFrame)" />
+        <remap from="rotated_twist" to="/ur_twist_world_in_mir" />
+        <remap from="twist_cmd_ideal" to="/ur_twist_world" />
+    </node>
+</launch>

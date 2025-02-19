@@ -9,9 +9,11 @@
         <param name="metric" value="virtual line"/>
         
         <!-- Topic remapping -->
-        <remap from="/ur_path_transformed" to="/your_path_topic"/>
-        <remap from="/current_pose" to="/your_pose_topic"/>
-        <remap from="/path_index" to="/your_path_index_topic"/>
-        <remap from="/next_goal" to="/your_next_goal_topic"/>
+        <!-- Subscribers: -->
+        <remap from="/ur_path_transformed" to="/ur_path_transformed"/>
+        <remap from="/current_pose" to="/current_pose"/>
+        <!-- Publishers: -->
+        <remap from="/path_index" to="/path_index"/>
+        <remap from="/next_goal" to="/next_goal"/>
     </node>
 </launch>

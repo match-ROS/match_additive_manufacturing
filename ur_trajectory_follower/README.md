@@ -43,7 +43,8 @@ To be updated with launch file and Python script usage.
     - `radius`: Determines the index of the next waypoint based on the distance to the goal pose.
     - `collinear`: Determines the index of the next waypoint based on the distance to the goal pose collinear to the path between the last and the next waypoint.
     - `virtual line`: Determines the index of the next waypoint based on the distance to a virtual line between the last and the next waypoint. The orientation of the line is determined by the angle bisector of the inccoming and outgoing segment of the next waypoint.
-- 
+- `get_total_Pose.py`: Calculates the total pose of the UR robot ee in world coordinates from the base_link pose and the pose of the mobile platform.
+- `ur_path_direction_controller.py`: Calculates the direction to the next waypoint and multiplies it with the feed rate to get the velocity command for the UR robot. The z-component of the velocity is controlled by PID.
 
 ## Future Work
 - publish ur_pose in world

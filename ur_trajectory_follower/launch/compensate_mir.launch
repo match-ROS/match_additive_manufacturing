@@ -8,6 +8,6 @@
         <remap from="~ur_pose" to="/mur620/UR10_l/tcp_pose" />
         <remap from="~mir_cmd_vel" to="/mur620/mobile_base_controller/cmd_vel" />
 
-        <remap from="~ur_cmd_vel_local" to="~ur_cmd_vel_local" />
+        <remap from="~ur_cmd_vel_local" to="/ur_twist_mir_compensation" />
     </node>
 </launch>
