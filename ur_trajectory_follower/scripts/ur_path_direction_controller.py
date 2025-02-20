@@ -7,6 +7,8 @@ import numpy as np
 class DirectionController:
     def __init__(self):
         # height controller: fixed dt assumed
+        self.nozzle_height_default = rospy.get_param("~nozzle_height_default", 0.1)
+        self.nozzle_height_override = 0.0
         self.kp_z = rospy.get_param("~kp_z", 1.0)
         self.ki_z = rospy.get_param("~ki_z", 0.0)
         self.kd_z = rospy.get_param("~kd_z", 0.0)
@@ -19,14 +21,16 @@ class DirectionController:
         self.velocity_override=1.0 # in percent
         self.current_pose = None
         
-        # Get the path from the topic /ur_path_transformed
-        self.path = rospy.wait_for_message("/ur_path_transformed", Path)
+        self.path = rospy.wait_for_message("path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
         rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback) # TODO: wait for first pose message!
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
+        rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)
 
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", TwistStamped, queue_size=10)
 
+    def nozzle_height_callback(self, height_msg: Float32):
+        self.nozzle_height_override = height_msg.data
 
     def index_callback(self, index_msg: Int32):
         self.current_index = index_msg.data
@@ -87,6 +91,7 @@ class DirectionController:
         v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
+        error_z -= self.nozzle_height_default - self.nozzle_height_override
         v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
         self.integral_z+=error_z
         self.prev_error_z=error_z
@@ -102,6 +107,6 @@ class DirectionController:
         self.pub_ur_velocity_world.publish(control_command)
 
 if __name__ == "__main__":
-    rospy.init_node("direction_controller")
+    rospy.init_node("ur_direction_controller")
     direction_controller = DirectionController()
     rospy.spin()

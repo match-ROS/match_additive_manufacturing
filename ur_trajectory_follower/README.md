@@ -18,20 +18,23 @@ To be updated with launch file and Python script usage.
 ## Topics
 
 ### Input Topics
-- `/ur_trajectory_follower/goal_path` (type: `nav_msgs/Path`): The path that the UR robot should follow.
-- `/ur_trajectory_follower/feed_rate` (type: `std_msgs/Float64`): The current feed rate setting of the UR robot in world coordinates in m/s. (Or as factor of the path velocity)
-- `/ur_trajectory_follower/lateral_nozzle_pose_override` (type: `double`): Setting to control the nozzle height while printing.
+- `/ur_trajectory_follower/ur_path_transformed` (type: `nav_msgs/Path`): The path that the UR robot should follow.
+- `/ur_trajectory_follower/velocity_override` (type: `std_msgs/Float64`): The current feed rate setting of the UR robot as factor of the path velocity [%]
+- `/ur_trajectory_follower/nozzle_height_override` (type: `double`): Setting to control the nozzle height while printing [m]
+- `/current_nozzle_pose` (type: `geometry_msgs/PoseStamped`): The current pose of the UR robot.
 
 ### Output Topics
-- `/ur_trajectory_follower/k_idx` (type: `std_msgs/Int32`): The index of the current waypoint in the path.
+- `/ur_trajectory_follower/path_index` (type: `std_msgs/Int32`): The index of the current waypoint in the path.
 
 ## Services
 - `/ur_trajectory_follower/start` (type: `std_srvs/Trigger`): Service to start following the path.
 - `/ur_trajectory_follower/stop` (type: `std_srvs/Trigger`): Service to stop following the path.
 
 ## Parameters
-- `~feed_rate` (type: `double`, default: `0.1`): Target velocity of the UR robot in world coordinates in m/s. (Or dt)
-- `~lateral_nozzle_pose` (type: `double`, default: `0.1`): Pose of nozzle to ur path.
+- `~nozzle_height_default` (type: `double`, default: `0.1`): Default height of nozzle to ur path.
+- `~kp_z` (type: `double`, default: `1.0`): Proportional gain for PID controller for z-component of velocity.
+- `~ki_z` (type: `double`, default: `0.0`): Integral gain for PID controller for z-component of velocity.
+- `~kd_z` (type: `double`, default: `0.0`): Derivative gain for PID controller for z-component of velocity.
 
 
 ## Scripts

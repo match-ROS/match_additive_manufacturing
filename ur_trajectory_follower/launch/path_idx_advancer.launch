@@ -1,19 +1,33 @@
 <launch>
+    <arg name="radius_threshold" default="0.5"/>
+    <arg name="collinear_threshold" default="0.2"/>
+    <arg name="virtual_line_threshold" default="0.2"/>
+    <arg name="prev_idx_dist" default="1"/>
+    <arg name="next_idx_dist" default="1"/>
+    <arg name="metric" default="virtual line"/>
+
+    <!-- Subscribers -->
+    <arg name="path_topic" default="/ur_path_transformed"/>
+    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <!-- Publishers -->
+    <arg name="path_index_topic" default="/path_index"/>
+    <arg name="next_goal_topic" default="/next_goal"/>
+
     <node name="path_index_advancer" pkg="ur_trajectory_follower" type="path_idx_advancer.py" output="screen">
         <!-- Parameters -->
-        <param name="radius_threshold" value="0.5"/>
-        <param name="collinear_threshold" value="0.2"/>
-        <param name="virtual_line_threshold" value="0.2"/>
-        <param name="prev_idx_dist" value="1"/>
-        <param name="next_idx_dist" value="1"/>
-        <param name="metric" value="virtual line"/>
+        <param name="radius_threshold" value="$(arg radius_threshold)"/>
+        <param name="collinear_threshold" value="$(arg collinear_threshold)"/>
+        <param name="virtual_line_threshold" value="$(arg virtual_line_threshold)"/>
+        <param name="prev_idx_dist" value="$(arg prev_idx_dist)"/>
+        <param name="next_idx_dist" value="$(arg next_idx_dist)"/>
+        <param name="metric" value="$(arg metric)"/>
         
         <!-- Topic remapping -->
         <!-- Subscribers: -->
-        <remap from="/ur_path_transformed" to="/ur_path_transformed"/>
-        <remap from="/current_pose" to="/current_pose"/>
+        <remap from="/ur_path_transformed" to="$(arg path_topic)"/>
+        <remap from="/current_pose" to="$(arg current_pose_topic)"/>
         <!-- Publishers: -->
-        <remap from="/path_index" to="/path_index"/>
-        <remap from="/next_goal" to="/next_goal"/>
+        <remap from="/path_index" to="$(arg path_index_topic)"/>
+        <remap from="/next_goal" to="$(arg next_goal_topic)"/>
     </node>
 </launch>

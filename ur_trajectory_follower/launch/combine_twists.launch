@@ -1,8 +1,9 @@
 <launch>
     <arg name="twist_topics" default="['/ur_twist_mir_compensation', '/ur_twist_world_in_mir']"/>
+    <arg name="combined_twist_topic" default="/ur_cmd"/>
 
     <node name="twist_combiner" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
         <rosparam param="twist_topics" subst_value="true">$(arg twist_topics)</rosparam>
-        <remap from="combined_twist" to="/ur_cmd"/>
+        <remap from="combined_twist" to="$(arg combined_twist_topic)"/>
     </node>
 </launch>

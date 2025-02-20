@@ -1,4 +1,7 @@
 <launch>
+    <arg name="current_endeffector_pose_topic" default="/current_endeffector_pose"/>
+    <arg name="goal_endeffector_pose_topic" default="/goal_endeffector_pose"/>
+    <arg name="normal_vector_topic" default="/normal_vector"/>
     <node
         pkg="ur_trajectory_follower"
         type="orthogonal_error_correction.py"
@@ -6,8 +9,8 @@
         output="screen">
         
         <!-- Remap topics -->
-        <remap from="~current_endeffector_pose" to="/current_endeffector_pose"/>
-        <remap from="~goal_endeffector_pose" to="/goal_endeffector_pose"/>
-        <remap from="~normal_vector" to="/normal_vector"/>
+        <remap from="~current_endeffector_pose" to="$(arg current_endeffector_pose_topic)"/>
+        <remap from="~goal_endeffector_pose" to="$(arg goal_endeffector_pose_topic)"/>
+        <remap from="~normal_vector" to="$(arg normal_vector_topic)"/>
     </node>
 </launch>
