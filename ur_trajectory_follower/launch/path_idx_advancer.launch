@@ -1,7 +1,7 @@
 <launch>
-    <arg name="radius_threshold" default="0.5"/>
-    <arg name="collinear_threshold" default="0.2"/>
-    <arg name="virtual_line_threshold" default="0.2"/>
+    <arg name="radius_threshold" default="0.1"/>
+    <arg name="collinear_threshold" default="0.02"/>
+    <arg name="virtual_line_threshold" default="0.1"/>
     <arg name="prev_idx_dist" default="1"/>
     <arg name="next_idx_dist" default="1"/>
     <arg name="metric" default="virtual line"/>

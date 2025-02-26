@@ -48,6 +48,7 @@ To be updated with launch file and Python script usage.
     - `virtual line`: Determines the index of the next waypoint based on the distance to a virtual line between the last and the next waypoint. The orientation of the line is determined by the angle bisector of the inccoming and outgoing segment of the next waypoint.
 - `get_total_Pose.py`: Calculates the total pose of the UR robot ee in world coordinates from the base_link pose and the pose of the mobile platform.
 - `ur_path_direction_controller.py`: Calculates the direction to the next waypoint and multiplies it with the feed rate to get the velocity command for the UR robot. The z-component of the velocity is controlled by PID.
+- `rotate_twist_by_pose.py`: Rotates a twist by a given pose. This is used to transform the velocity command from world to base_link coordinates.
 
 ## Future Work
 - publish ur_pose in world
@@ -56,3 +57,24 @@ To be updated with launch file and Python script usage.
 - transform control velocity to base_link
 - Add launch files for easy startup
 - Implement Python scripts for trajectory generation and control
+
+
+# Test
+```sh
+roslaunch match_gazebo scale.launch
+roslaunch mur_launch_sim mur_620.launch enable_dual_collison_avoidance:=false robot_x:=51.61532 robot_y:=39.752500
+roslaunch ur_trajectory_follower twist_sim.launch
+
+roslaunch ur_trajectory_follower complete_ur_trajectory_follower.launch
+
+rosrun topic_tools relay /ur_cmd /mur620/UR10_l/twist_fb_command 
+```
+
+
+## Before
+```sh
+#roslaunch parse_mir_path parse_mir_path.launch
+roslaunch parse_ur_path parse_ur_path.launch
+#roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch
+roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch
+```

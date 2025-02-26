@@ -1,12 +1,10 @@
 <launch>
-    <arg name="fromFrame" default="map"/>
-    <arg name="toFrame" default="mur620/UR10_l/base"/>
+    <arg name="world_T_base_topic" default="/mur620/mir_pose_stamped_simple"/>
     <arg name="twist_out" default="/ur_twist_world_in_mir"/>
     <arg name="twist_in" default="/ur_twist_world"/>
-    <node name="rotated_twist_command" pkg="ur_controllers_match" type="rotated_twist_command.py" output="screen">
-        <param name="frame_from" value="$(arg fromFrame)" />
-        <param name="frame_to" value="$(arg toFrame)" />
-        <remap from="rotated_twist" to="$(arg twist_out)" />
-        <remap from="twist_cmd_ideal" to="$(arg twist_in)" />
+    <node name="world_twist_in_mir" pkg="ur_trajectory_follower" type="rotate_twist_by_pose.py" output="screen">
+        <remap from="twist_in" to="$(arg twist_in)"/>
+        <remap from="base_twist" to="$(arg twist_out)"/>
+        <remap from="world_T_base" to="$(arg world_T_base_topic)"/>
     </node>
 </launch>

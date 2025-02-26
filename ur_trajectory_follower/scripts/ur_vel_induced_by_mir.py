@@ -25,16 +25,33 @@ class UrMobileRobotCompensation():
                 self.mir_ur_transform = Transform()
                 self.get_mir_ur_transform()
 
+                #Publisher
+                self.ur_cmd_vel_local_pub = rospy.Publisher("~ur_cmd_vel_local", Twist, queue_size=10)
+
                 #Subscriber
                 rospy.Subscriber("~ur_pose", PoseStamped, self.ur_pose_callback)
                 rospy.Subscriber("~mir_cmd_vel", Twist, self.mir_cmd_vel_callback)
 
-                #Publisher
-                self.ur_cmd_vel_local_pub = rospy.Publisher("~ur_cmd_vel_local", Twist, queue_size=10)
+                self.last_mir_cmd = rospy.Time.now()
+                self.last_ur_pose = rospy.Time.now()
+                self.safe_pub_time_thread = rospy.Timer(rospy.Duration(0.1), self.safe_pub_cmd_time)
+                # self.safe_pub_time_thread.start()
 
+
+        def safe_pub_cmd_time(self, event):
+            """If no command is received for a certain time, publish 0
+            """
+            if ((rospy.Time.now() - self.last_mir_cmd > rospy.Duration(0.1)) 
+                or (rospy.Time.now() - self.last_ur_pose > rospy.Duration(0.1))):
+                ur_cmd_vel_local = Twist()
+                self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local)
+            
         
         def ur_pose_callback(self, data = PoseStamped()):
-            data = self.listener.transformPose(self.ur_base_link_frame_id, data)
+            t=data.header.stamp
+            data.header.stamp = rospy.Time(0) #use latest transform available
+            data = self.listener.transformPose(self.base_mir_frame_id, data)
+            data.header.stamp = t #restore original timestamp
             self.ur_pose = data.pose
         
         def mir_cmd_vel_callback(self, msg = Twist()):

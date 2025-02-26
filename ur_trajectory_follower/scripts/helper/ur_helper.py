@@ -19,7 +19,7 @@ def rotateVector(vec=(0.0, 0.0, 0.0, 1.0), rot=(0.0, 0.0, 0.0, 1.0), transpose=F
 def negateTwist(twist: Twist):
     return Twist(linear=-twist.linear, angular=-twist.angular)
 
-def pose_to_matrix(pose):
+def pose_to_matrix(pose:Pose):
     """Convert Pose to transformation matrix"""
     trans = [pose.position.x, pose.position.y, pose.position.z]
     rot = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
@@ -49,6 +49,46 @@ def transform_pose_by_pose(world_T_base: Pose, world_T_ee: Pose, inverse=(True, 
     pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = rotation
 
     return pose
+def rotate_twist_by_pose(world_T_base: Pose, twist: Twist, inverse=True) -> Twist:
+    base_matrix = pose_to_matrix(world_T_base)
+    if inverse:
+        # Compute inverse of base_matrix
+        base_matrix = transformations.inverse_matrix(base_matrix)
+    R = base_matrix[0:3, 0:3]
+    v = np.array([twist.linear.x, twist.linear.y, twist.linear.z])
+    omega = np.array([twist.angular.x, twist.angular.y, twist.angular.z])
+
+    # Transform the angular component: ω' = R * ω.
+    omega_new = R.dot(omega)
+    # Only rotate the twist for the linear component: v' = R * v. The translation is not rotated.
+    v_new = R.dot(v)
+
+    return Twist(linear=Vector3(x=v_new[0], y=v_new[1], z=v_new[2]), angular=Vector3(x=omega_new[0], y=omega_new[1], z=omega_new[2]))
+
+
+def transform_twist_by_pose(world_T_base: Pose, twist: Twist, inverse=True) -> Twist:
+    base_matrix = pose_to_matrix(world_T_base)
+    if inverse:
+        # Compute inverse of base_matrix
+        base_matrix = transformations.inverse_matrix(base_matrix)
+    
+    # Extract rotation R and translation p from the transformation matrix.
+    R = base_matrix[0:3, 0:3]
+    p = base_matrix[0:3, 3]
+    v = np.array([twist.linear.x, twist.linear.y, twist.linear.z])
+    omega = np.array([twist.angular.x, twist.angular.y, twist.angular.z])
+
+    # Transform the angular component: ω' = R * ω.
+    omega_new = R.dot(omega)
+    # Transform the linear component: v' = R * v + (p x (R * ω)).
+    v_new = R.dot(v) + np.cross(p, R.dot(omega))
+
+    # Create a new Twist message with the transformed components.
+    new_twist = Twist()
+    new_twist.linear = Vector3(x=v_new[0], y=v_new[1], z=v_new[2])
+    new_twist.angular = Vector3(x=omega_new[0], y=omega_new[1], z=omega_new[2])
+    
+    return new_twist
 
 if __name__ == "__main__":
         twist = Twist()

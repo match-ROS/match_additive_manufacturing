@@ -17,21 +17,16 @@ class PathIndexAdvancer:
 
         # Thresholds (meters) for each metric
         # Adjust them as needed
-        self.radius_threshold = rospy.get_param("~radius_threshold", 0.5)
-        self.collinear_threshold = rospy.get_param("~collinear_threshold", 0.2)
-        self.virtual_line_threshold = rospy.get_param("~virtual_line_threshold", 0.2)
+        self.radius_threshold = rospy.get_param("~radius_threshold", 0.1)
+        self.collinear_threshold = rospy.get_param("~collinear_threshold", 0.02)
+        self.virtual_line_threshold = rospy.get_param("~virtual_line_threshold", 0.02)
         self.prev_idx_dist = rospy.get_param("~prev_idx_dist", 1) # distance to previous waypoint for virtual line
         self.next_idx_dist = rospy.get_param("~next_idx_dist", 1) # distance to next waypoint for virtual line
         
-        # Get the path from the topic /ur_path_transformed
-        self.path = rospy.wait_for_message("/ur_path_transformed", Path)       
-
-        # Create subscriber to your robot's current pose
-        self.pose_sub = rospy.Subscriber("/current_pose", PoseStamped, self.pose_callback)
 
         # Publishers: next waypoint index and next waypoint pose
-        self.index_pub = rospy.Publisher("/path_index", Int32, queue_size=10)
-        self.goal_pose_pub = rospy.Publisher("/next_goal", PoseStamped, queue_size=10)
+        self.index_pub = rospy.Publisher("/path_index", Int32, queue_size=10, latch=True)
+        self.goal_pose_pub = rospy.Publisher("/next_goal", PoseStamped, queue_size=10, latch=True)
         
         # Choose the metric to use
         metric = rospy.get_param("~metric", "radius")
@@ -49,6 +44,12 @@ class PathIndexAdvancer:
             rospy.loginfo("Using 'virtual line' metric.")
             self.check_condition = self.check_virtual_line_condition
 
+        # Get the path from the topic /ur_path_transformed
+        self.path = rospy.wait_for_message("/ur_path_transformed", Path)
+        self.path_length = len(self.path.poses)       
+
+        # Create subscriber to your robot's current pose
+        self.pose_sub = rospy.Subscriber("/current_pose", PoseStamped, self.pose_callback)
         
     
     def pose_callback(self, pose_msg):
@@ -60,7 +61,7 @@ class PathIndexAdvancer:
         robot_y = pose_msg.pose.position.y
 
         # If we are already at the final waypoint, do nothing further
-        if self.current_index >= len(self.path.poses) - 1:
+        if self.current_index >= self.path_length - 1:
             self.publish_current_goal()
             return
 
@@ -78,7 +79,7 @@ class PathIndexAdvancer:
         """
         Advances current_index safely, so we don't exceed the last waypoint.
         """
-        self.current_index = min(self.current_index + 1, len(self.path) - 1)
+        self.current_index = min(self.current_index + 1, self.path_length - 1)
 
     def publish_current_goal(self):
         """
@@ -134,14 +135,16 @@ class PathIndexAdvancer:
         """
 
         # We need a valid previous and next waypoint for the geometry
-        if self.current_index == 0 or self.current_index >= len(self.path) - 1:
+        if self.current_index == 0 or self.current_index >= self.path_length - 1:
             rospy.logwarn("Can't define the geometry at the extremes.")
             return False  # can't define the geometry at the extremes
 
         # Gather points
-        px_prev = self.path.poses[self.current_index - self.prev_idx_dist].pose.position
+        prev_idx = max(0, self.current_index - self.prev_idx_dist)
+        next_idx = min(self.path_length - 1, self.current_index + self.next_idx_dist)
+        px_prev = self.path.poses[prev_idx].pose.position
         px_curr = self.path.poses[self.current_index].pose.position
-        px_next = self.path.poses[self.current_index + self.next_idx_dist].pose.position
+        px_next = self.path.poses[next_idx].pose.position
 
         # Convert them to vectors
         p_prev = (px_prev.x, px_prev.y)
@@ -184,6 +187,10 @@ class PathIndexAdvancer:
         # 3) Evaluate sign for the robot position
         robot_vec = (x - L[0], y - L[1])
         s = robot_vec[0]*b[0] + robot_vec[1]*b[1]
+
+        # rospy.loginfo(f"Virtual line condition: s={s}")
+        # rospy.loginfo(f"Virtual line condition: L={L}, b={b}, robot={robot_vec}")
+        # rospy.loginfo(f"global nozzle: x={x}, y={y}")
 
         # We'll consider "crossed" if s >= 0
         crossed = (s >= 0)

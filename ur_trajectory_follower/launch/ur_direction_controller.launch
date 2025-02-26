@@ -1,7 +1,7 @@
 <launch>
     <!-- Parameters: -->
     <arg name="nozzle_height_default" default="0.1"/>
-    <arg name="kp_z" default="1.0"/>
+    <arg name="kp_z" default="0.0"/>
     <arg name="ki_z" default="0.0"/>
     <arg name="kd_z" default="0.0"/>
 

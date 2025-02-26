@@ -13,7 +13,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 # Import mir_path to retrieve mirX and mirY
-from path import ur_path
+# from path import ur_path
+from path import ur_path_test as ur_path
 
 class PathTransfomer:
     def __init__(self):
@@ -28,6 +29,11 @@ class PathTransfomer:
         self.x_coords = ur_path.toolX()
         self.y_coords = ur_path.toolY()
         self.z_coords = ur_path.toolZ()
+
+        try:
+            self.timestamps = [rospy.Time.from_sec(t) for t in ur_path.timestamps()]
+        except AttributeError:
+            self.timestamps = None
         
         # Get transformation parameters from ROS params
         self.tx = rospy.get_param('~tx', 0.0)
@@ -63,7 +69,9 @@ class PathTransfomer:
         self.normals.vectors = [Vector3(x=n[0], y=n[1], z=0) for n in normals]
         return normals
 
-    def apply_transformation(self, x_coords, y_coords, z_coords, tx, ty, tz, rx, ry, rz):
+    def apply_transformation(self, x_coords, y_coords, z_coords, tx, ty, tz, rx, ry, rz, timestamps=None):
+        if timestamps is None:
+            timestamps = [rospy.Time.from_sec(i*0.1) for i in range(len(x_coords))]
         transformed_poses = []
 
         # Convert rotation from Euler angles to a quaternion
@@ -87,7 +95,7 @@ class PathTransfomer:
             pose_stamped.pose.orientation.w = q[3]
             
             # Set the current timestamp
-            pose_stamped.header.stamp = rospy.Time.now()
+            pose_stamped.header.stamp = timestamps[i]
             pose_stamped.header.frame_id = "map"  # Use an appropriate frame
 
             transformed_poses.append(pose_stamped)
@@ -108,7 +116,7 @@ class PathTransfomer:
             self.original_path.poses.append(pose_stamped)
         
         # Transform and fill transformed Path message
-        self.transformed_path.poses = self.apply_transformation(self.x_coords, self.y_coords, self.z_coords, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz)
+        self.transformed_path.poses = self.apply_transformation(self.x_coords, self.y_coords, self.z_coords, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz, self.timestamps)
         
     def publish(self):  
     

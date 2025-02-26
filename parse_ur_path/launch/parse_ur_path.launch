@@ -2,8 +2,10 @@
     <!-- Node that runs the path transformer script -->
     <node name="retrieve_and_publish_ur_path" pkg="parse_ur_path" type="retrieve_and_publish_path.py" output="screen">
         <!-- Transformation parameters -->
-        <param name="tx" value="-51.615323" />
-        <param name="ty" value="-39.752500" />
+        <!-- <param name="tx" value="-51.615323" />
+        <param name="ty" value="-39.752500" /> -->
+        <param name="tx" value="0.0" />
+        <param name="ty" value="0.0" />
         <param name="tz" value="0.0" />
         <param name="rx" value="0.0" />
         <param name="ry" value="0.0" />

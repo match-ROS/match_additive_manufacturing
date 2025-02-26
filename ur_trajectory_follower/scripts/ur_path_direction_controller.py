@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 import rospy
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
 from std_msgs.msg import Int32, Float32
 import numpy as np
@@ -27,7 +28,7 @@ class DirectionController:
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)
 
-        self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", TwistStamped, queue_size=10)
+        self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data
@@ -96,13 +97,11 @@ class DirectionController:
         self.integral_z+=error_z
         self.prev_error_z=error_z
 
-        # Create a TwistStamped message to publish the control command (world_frame)
-        control_command = TwistStamped()
-        control_command.header.frame_id = self.current_pose.header.frame_id
-        control_command.header.stamp = rospy.Time.now()
-        control_command.twist.linear.x = v_xy[0]
-        control_command.twist.linear.y = v_xy[1]
-        control_command.twist.linear.z = v_z
+        # Create a Twist message to publish the control command (world_frame)
+        control_command = Twist()
+        control_command.linear.x = v_xy[0]
+        control_command.linear.y = v_xy[1]
+        control_command.linear.z = v_z
 
         self.pub_ur_velocity_world.publish(control_command)
 

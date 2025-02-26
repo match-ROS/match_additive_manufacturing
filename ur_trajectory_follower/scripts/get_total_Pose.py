@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rospy
 import rostopic
 
@@ -10,8 +11,8 @@ from helper.ur_helper import transform_pose_by_pose
 class TotalPose:
     def __init__(self):
         # msg_class_base,_,_=rostopic.get_topic_class("world_T_base", blocking=True)
-        self.world_T_base = PoseStamped()
-        self.base_T_ee = PoseStamped()
+        self.world_T_base = Pose()
+        self.base_T_ee = Pose()
         self.world_T_ee = PoseStamped()
         self.world_T_ee.header.frame_id = rospy.get_param("~world_frame", "map")
 
@@ -25,7 +26,7 @@ class TotalPose:
         self.update_world_T_ee()
 
     def base_T_ee_callback(self, msg: PoseStamped):
-        self.base_T_ee = msg
+        self.base_T_ee = msg.pose
         self.world_T_ee.header.stamp = msg.header.stamp
         self.update_world_T_ee()
 

@@ -26,6 +26,8 @@ class TwistCombiner:
     def create_callback(self, topic):
         def callback(msg):
             self.twists[topic] = msg
+            # rospy.loginfo('Received Twist message from %s', topic)
+            # rospy.loginfo(f"all twist: {self.twists}")
             self.publish_combined_twist()
         return callback
 
