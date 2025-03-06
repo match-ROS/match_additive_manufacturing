@@ -1,7 +1,8 @@
 <launch>
-    <arg name="current_endeffector_pose_topic" default="/current_endeffector_pose"/>
-    <arg name="goal_endeffector_pose_topic" default="/goal_endeffector_pose"/>
+    <arg name="current_endeffector_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="goal_endeffector_pose_topic" default="/next_goal"/>
     <arg name="normal_vector_topic" default="/normal_vector"/>
+    <arg name="orthogonal_error_correction_topic" default="/orthogonal_twist"/>
     <node
         pkg="ur_trajectory_follower"
         type="orthogonal_error_correction.py"
@@ -12,5 +13,6 @@
         <remap from="~current_endeffector_pose" to="$(arg current_endeffector_pose_topic)"/>
         <remap from="~goal_endeffector_pose" to="$(arg goal_endeffector_pose_topic)"/>
         <remap from="~normal_vector" to="$(arg normal_vector_topic)"/>
+        <remap from="~orthogonal_twist" to="$(arg orthogonal_error_correction_topic)"/>
     </node>
 </launch>

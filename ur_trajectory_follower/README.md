@@ -13,7 +13,15 @@ catkin_make
 ```
 
 ## Usage
-To be updated with launch file and Python script usage.
+To start the UR trajectory follower with feed_rate only in print direction and orthogonal error correction, run the following command:
+```sh
+roslaunch ur_trajectory_follower complete_ur_trajectory_follower_ff_only.launch
+```
+
+To start the UR trajectory follower with feed_rate in all directions and _no_ orthogonal error correction, run the following command:
+```sh
+roslaunch ur_trajectory_follower complete_ur_trajectory_follower.launch
+```
 
 ## Topics
 
@@ -46,18 +54,12 @@ To be updated with launch file and Python script usage.
     - `radius`: Determines the index of the next waypoint based on the distance to the goal pose.
     - `collinear`: Determines the index of the next waypoint based on the distance to the goal pose collinear to the path between the last and the next waypoint.
     - `virtual line`: Determines the index of the next waypoint based on the distance to a virtual line between the last and the next waypoint. The orientation of the line is determined by the angle bisector of the inccoming and outgoing segment of the next waypoint.
-- `get_total_Pose.py`: Calculates the total pose of the UR robot ee in world coordinates from the base_link pose and the pose of the mobile platform.
-- `ur_path_direction_controller.py`: Calculates the direction to the next waypoint and multiplies it with the feed rate to get the velocity command for the UR robot. The z-component of the velocity is controlled by PID.
+- `ur_path_direction_controller.py`: Calculates the direction to the next waypoint and multiplies it with the feed rate to get the velocity command for the UR robot. If _ff\_only_ is set, the direction is only calculated based on the path. Otherwise, the direction is from the current pose to the next waypoint. If _ff\_only_ is set, consider using orthogonal_error_correction.py to correct the direction. The z-component of the velocity is controlled by PID.
 - `rotate_twist_by_pose.py`: Rotates a twist by a given pose. This is used to transform the velocity command from world to base_link coordinates.
 
 ## Future Work
-- publish ur_pose in world
-- calculate error in world
-- control velocity from error and target velocity in world
-- transform control velocity to base_link
-- Add launch files for easy startup
-- Implement Python scripts for trajectory generation and control
-
+- orthogonal_error_correction.py: Implement a PID controller for the orthogonal error correction.
+    - Or maybe new node for PID from twist error to twist command
 
 # Test
 ```sh

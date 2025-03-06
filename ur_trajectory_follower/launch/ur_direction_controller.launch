@@ -12,6 +12,7 @@
     <arg name="velocity_override_topic" default="/velocity_override"/>
     <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
     <arg name="twist_topic" default="/ur_twist_world"/>
+    <arg name="ff_only" default="false"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
         <!-- Parameters -->
@@ -19,6 +20,7 @@
         <param name="kp_z" value="$(arg kp_z)"/>
         <param name="ki_z" value="$(arg ki_z)"/>
         <param name="kd_z" value="$(arg kd_z)"/>
+        <param name="ff_only" value="$(arg ff_only)"/>
         
         <!-- Topic Remapping -->
         <remap from="/path" to="$(arg path_topic)"/>

@@ -21,10 +21,12 @@ class DirectionController:
         self.trajectory_velocity=0
         self.velocity_override=1.0 # in percent
         self.current_pose = None
+        self.ff_only = rospy.get_param("ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         
         self.path = rospy.wait_for_message("path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
-        rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback) # TODO: wait for first pose message!
+        if not self.ff_only:
+            rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)
 
@@ -71,9 +73,13 @@ class DirectionController:
         """
         # Get direction from current pose and goal pose
         goal_pose = self.path.poses[self.current_index]
-        direction = np.array([goal_pose.pose.position.x - self.current_pose.pose.position.x,
-                              goal_pose.pose.position.y - self.current_pose.pose.position.y,
-                              goal_pose.pose.position.z - self.current_pose.pose.position.z])
+        if self.ff_only:
+            from_pose = self.path.poses[self.current_index-1]
+        else:
+            from_pose = self.current_pose
+        direction = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
+                              goal_pose.pose.position.y - from_pose.pose.position.y,
+                              goal_pose.pose.position.z - from_pose.pose.position.z])
         direction_xy = direction[:2]
         norm_xy = np.linalg.norm(direction_xy)
         if norm_xy < 1e-6:
@@ -84,7 +90,7 @@ class DirectionController:
 
     def calculate_twist(self):
         """Control the direction of the robot to follow the path."""
-        if self.current_pose is None:
+        if not self.ff_only and self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return
         
