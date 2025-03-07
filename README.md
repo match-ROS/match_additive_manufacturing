@@ -41,6 +41,10 @@ Contributions are welcome! Please fork the repository and submit a pull request.
 
 See the [LICENSE](LICENSE.md) file for license rights and limitations (MIT).
 
+## DOI
+
+https://doi.org/10.5281/zenodo.14507474
+
 ## Contact
  
 For any questions or inquiries, please contact matchbox@match.uni-hannover.de
