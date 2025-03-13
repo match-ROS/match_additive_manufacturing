@@ -138,7 +138,7 @@ class PurePursuitNode:
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.last_index].pose.position)
 
         velocity = Twist()
-        velocity.linear.x = self.Kv * self.velocities[self.last_index] * (1/self.dT) + 0.1 * distance_error# * (1.0 + 0.1*index_error) 
+        velocity.linear.x = self.Kv * self.velocities[self.last_index] * (1/self.dT) + 0.1 * distance_error * (1.0 + 0.1*index_error) 
         velocity.angular.z = velocity.linear.x * curvature
         self.cmd_vel_pub.publish(velocity)
 

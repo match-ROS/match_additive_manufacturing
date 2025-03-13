@@ -1,20 +1,28 @@
 <launch>
-<!-- TODO: switch controllers -->
-<group ns="mur620">
+<arg name="robot_name" default="mur620a" />
+<arg name="prefix_ur" default="UR10_r/" />
+<arg name="group_name" default="UR_arm_r" />
 
-    <node name="controller_stop" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_l/arm_controller" />
-    <node name="controller_start" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_l/unsafe" />
+<!-- TODO: switch controllers -->
+<group ns="$(arg robot_name)">
+
+    <node name="controller_stop_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_l/arm_controller" />
+    <node name="controller_start_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_l/unsafe" />
+
+    <node name="controller_stop_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_r/arm_controller" />
+    <node name="controller_start_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_r/unsafe" />
 
 
     <!-- Launch the twist_sim node -->
     <node name="twist_sim" pkg="ur_controllers_match" type="twist_controller_fb" output="screen">
         <!-- Custom parameters -->
-        <param name="prefix_ur" value="UR10_l/" />
-        <param name="group_name" value="UR_arm_l" />
+        <param name="prefix_ur" value="$(arg prefix_ur)" />
+        <param name="group_name" value="$(arg group_name)" />
         
         <!-- Topic remapping -->
-        <remap from="UR10_l/joint_group_vel_controller/command" to="/mur620/joint_group_vel_controller_l/unsafe/command" />
-        <remap from="twist_command" to="UR10_l/twist_fb_command" />
+        <remap from="UR10_l/joint_group_vel_controller/command" to="/$(arg robot_name)/joint_group_vel_controller_l/unsafe/command" />
+        <remap from="UR10_r/joint_group_vel_controller/command" to="/$(arg robot_name)/joint_group_vel_controller_r/unsafe/command" />
+        <remap from="twist_command" to="$(arg prefix_ur)twist_fb_command" />
 
     </node>
 </group>

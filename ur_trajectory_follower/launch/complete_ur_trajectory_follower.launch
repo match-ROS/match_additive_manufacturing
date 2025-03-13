@@ -1,10 +1,19 @@
 <launch>
-    <remap from="/global_nozzle_pose" to="/mur620/UR10_l/global_tcp_pose" />
-    <remap from="/ur_cmd" to="/mur620/UR10_l/twist_fb_command" />
+    <arg name="robot_name" default="mur620a" />
+    <arg name="prefix_ur" default="UR10_r/" />
+
+    <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+    <remap from="/ur_cmd" to="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" />
     <!-- <node name="pose_relay" pkg="topic_tools" type="relay" args="/mur620/UR10_l/global_tcp_pose /global_nozzle_pose" /> -->
+    
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch" />
-    <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" />
+    <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" >
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="prefix_ur" value="$(arg prefix_ur)" />
+    </include>
     <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" />
-    <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" />
+    <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
+        <arg name="robot_name" value="$(arg robot_name)" />
+    </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch" />
 </launch>
