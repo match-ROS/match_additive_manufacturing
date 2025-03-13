@@ -21,15 +21,19 @@ class MoveManipulatorToTarget:
 
         # Initialize parameters
         self.path_topic = rospy.get_param('~path_topic', '/ur_path')
+        self.robot_name = rospy.get_param('~robot_name', 'mur620a')
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'mur620a/UR10_r/base_link')
+        self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
+        self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
+
         self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.4)
         self.spray_distance = rospy.get_param('~spray_distance', 0.3)
         
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
-        self.move_group = MoveGroupCommander("UR_arm_r", ns="/mur620a", robot_description="mur620a/robot_description")
-        self.move_group.set_pose_reference_frame("UR10_r/base_link")
-        rospy.loginfo("MoveIt MoveGroup for UR_arm_r initialized.")
+        self.move_group = MoveGroupCommander(self.planning_group, ns=self.robot_name, robot_description=self.robot_name+"/robot_description")
+        self.move_group.set_pose_reference_frame(self.manipulator_base_link)
+        rospy.loginfo(f"MoveIt MoveGroup for {self.planning_group} initialized.")
 
         # Initialize the subscriber for the path
         self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
@@ -53,7 +57,7 @@ class MoveManipulatorToTarget:
         
         # Get the current pose of the manipulator base in the map frame
         try:
-            now = rospy.Time.now()
+            now = rospy.Time(0)
             self.tf_listener.waitForTransform("map", self.manipulator_base_link, now, rospy.Duration(2.0))
             (trans, rot) = self.tf_listener.lookupTransform("map", self.manipulator_base_link, now)
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
@@ -84,10 +88,9 @@ class MoveManipulatorToTarget:
         relative_pose[5] = math.pi
         
         # Set the target pose for MoveIt
-        #self.move_group.set_position_target(relative_position, end_effector_link="UR10_r/tool0" )
-        self.move_group.set_pose_target(relative_pose, end_effector_link="UR10_r/tool0")
+        self.move_group.set_pose_target(relative_pose, end_effector_link=self.manipulator_tcp_link)
         local_target_pose = PoseStamped()
-        local_target_pose.header.frame_id = "UR10_r/base_link"
+        local_target_pose.header.frame_id = self.manipulator_base_link
         local_target_pose.header.stamp = rospy.Time.now()
         local_target_pose.pose.position.x = relative_position[0]
         local_target_pose.pose.position.y = relative_position[1]
@@ -115,7 +118,7 @@ class MoveManipulatorToTarget:
                 rospy.loginfo("Motion executed successfully.")
                 rospy.signal_shutdown("Motion executed successfully.")
             else:
-                rospy.logwarn("Motion planning failed.")
+                rospy.logwarn(f"Motion planning failed.")
         else:
             rospy.logwarn("Unexpected plan structure received.")
 

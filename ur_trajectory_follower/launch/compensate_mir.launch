@@ -1,13 +1,19 @@
 <launch>
+    <arg name="ur_pose_topic" default="/mur620/UR10_l/tcp_pose"/>
+    <arg name="mir_cmd_vel_topic" default="/mur620/mobile_base_controller/cmd_vel"/>
+    <arg name="ur_cmd_vel_local_topic" default="/ur_twist_mir_compensation"/>
+    <arg name="base_mir_frame_id" default="/mur620/base_link"/>
+    <arg name="base_ur_frame_id" default="/mur620/UR10_l/base_link"/>
+
     <node name="ur_vel_induced_by_mir" pkg="ur_trajectory_follower" type="ur_vel_induced_by_mir.py" output="screen">
         <!-- Custom parameters -->
-        <param name="base_mir_frame_id" value="/mur620/base_link" />
-        <param name="base_ur_frame_id" value="/mur620/UR10_l/base_link" />
+        <param name="base_mir_frame_id" value="$(arg base_mir_frame_id)" />
+        <param name="base_ur_frame_id" value="$(arg base_ur_frame_id)" />
         
         <!-- Topic remapping -->
-        <remap from="~ur_pose" to="/mur620/UR10_l/tcp_pose" />
-        <remap from="~mir_cmd_vel" to="/mur620/mobile_base_controller/cmd_vel" />
-
-        <remap from="~ur_cmd_vel_local" to="~ur_cmd_vel_local" />
+        <remap from="~ur_pose" to="$(arg ur_pose_topic)" />
+        <remap from="~mir_cmd_vel" to="$(arg mir_cmd_vel_topic)" />
+        
+        <remap from="~ur_cmd_vel_local" to="$(arg ur_cmd_vel_local_topic)" />
     </node>
 </launch>

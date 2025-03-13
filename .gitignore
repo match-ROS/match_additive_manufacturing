@@ -1,2 +1,3 @@
+*.pyc
 venv
 component/rl_trajectory_optimizer/ppo_tensorboard_logs/*

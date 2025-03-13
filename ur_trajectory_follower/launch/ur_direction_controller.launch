@@ -1,0 +1,33 @@
+<launch>
+    <!-- Parameters: -->
+    <arg name="nozzle_height_default" default="0.1"/>
+    <arg name="kp_z" default="0.0"/>
+    <arg name="ki_z" default="0.0"/>
+    <arg name="kd_z" default="0.0"/>
+
+    <!-- Topics: -->
+    <arg name="path_topic" default="/ur_path_transformed"/>
+    <arg name="path_index_topic" default="/path_index"/>
+    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="velocity_override_topic" default="/velocity_override"/>
+    <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
+    <arg name="twist_topic" default="/ur_twist_world"/>
+    <arg name="ff_only" default="false"/>
+
+    <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
+        <!-- Parameters -->
+        <param name="nozzle_height_default" value="$(arg nozzle_height_default)"/>
+        <param name="kp_z" value="$(arg kp_z)"/>
+        <param name="ki_z" value="$(arg ki_z)"/>
+        <param name="kd_z" value="$(arg kd_z)"/>
+        <param name="ff_only" value="$(arg ff_only)"/>
+        
+        <!-- Topic Remapping -->
+        <remap from="/path" to="$(arg path_topic)"/>
+        <remap from="/path_index" to="$(arg path_index_topic)"/>
+        <remap from="/current_pose" to="$(arg current_pose_topic)"/>
+        <remap from="/velocity_override" to="$(arg velocity_override_topic)"/>
+        <remap from="/nozzle_height_override" to="$(arg nozzle_height_override_topic)"/>
+        <remap from="/ur_twist_world" to="$(arg twist_topic)"/>
+    </node>
+</launch>

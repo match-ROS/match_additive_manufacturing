@@ -1,14 +1,19 @@
 <launch>
 <!-- TODO: switch controllers -->
 <group ns="mur620">
-<!-- Launch the twist_sim node -->
+
+    <node name="controller_stop" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_l/arm_controller" />
+    <node name="controller_start" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_l/unsafe" />
+
+
+    <!-- Launch the twist_sim node -->
     <node name="twist_sim" pkg="ur_controllers_match" type="twist_controller_fb" output="screen">
         <!-- Custom parameters -->
         <param name="prefix_ur" value="UR10_l/" />
         <param name="group_name" value="UR_arm_l" />
         
         <!-- Topic remapping -->
-        <remap from="UR10_l/joint_group_vel_controller/command" to="/mur620/joint_group_vel_controller_l/safe/command" />
+        <remap from="UR10_l/joint_group_vel_controller/command" to="/mur620/joint_group_vel_controller_l/unsafe/command" />
         <remap from="twist_command" to="UR10_l/twist_fb_command" />
 
     </node>
