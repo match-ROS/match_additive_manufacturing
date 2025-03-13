@@ -33,7 +33,7 @@ class PathTransfomer:
         self.y_coords = yTCP.yTCP()
         self.z_coords = zTCP.zTCP()
         #try:
-        self.timestamps = [rospy.Time.from_sec(t) for t in t()]
+        self.timestamps = [rospy.Time.from_sec(t) for t in t.t()]
         #except AttributeError:
         #    self.timestamps = None
 

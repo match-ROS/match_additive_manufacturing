@@ -22,7 +22,7 @@ class MoveManipulatorToTarget:
         # Initialize parameters
         self.path_topic = rospy.get_param('~path_topic', '/ur_path')
         self.robot_name = rospy.get_param('~robot_name', 'mur620a')
-        self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'mur620a/UR10_r/base_link')
+        self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'UR10_r/base_link')
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
 
@@ -58,8 +58,8 @@ class MoveManipulatorToTarget:
         # Get the current pose of the manipulator base in the map frame
         try:
             now = rospy.Time(0)
-            self.tf_listener.waitForTransform("map", self.manipulator_base_link, now, rospy.Duration(2.0))
-            (trans, rot) = self.tf_listener.lookupTransform("map", self.manipulator_base_link, now)
+            self.tf_listener.waitForTransform("map", self.robot_name+"/"+self.manipulator_base_link, now, rospy.Duration(2.0))
+            (trans, rot) = self.tf_listener.lookupTransform("map", self.robot_name+"/"+self.manipulator_base_link, now)
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
             rospy.logerr(f"TF error: {e}")
             return

@@ -5,7 +5,7 @@
         <param name="mir_path_topic" value="/mir_path_original" />
         <param name="mir_pose_topic" value="/mur620/mir_pose_simple" />
         <param name="cmd_vel_topic" value="mur620/mobile_base_controller/cmd_vel" />
-        <param name="trajectory_index_topic" value="/trajectory_index" />
+        <param name="trajectory_index_topic" value="/path_index" />
     </node>
 </launch>
 

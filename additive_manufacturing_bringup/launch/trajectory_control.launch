@@ -1,0 +1,16 @@
+<launch>
+    <!-- Launch the twist simulation -->
+    <include file="$(find ur_trajectory_follower)/launch/twist_sim.launch" />
+
+    <!-- Launch the UR trajectory follower with feedforward only -->
+    <include file="$(find ur_trajectory_follower)/launch/complete_ur_trajectory_follower_ff_only.launch" />
+
+    <!-- Uncomment the following line to use the complete UR trajectory follower instead -->
+    <!-- <include file="$(find ur_trajectory_follower)/launch/complete_ur_trajectory_follower.launch" /> -->
+
+    <!-- Relay the /ur_cmd topic to /mur620/UR10_l/twist_fb_command -->
+    <node pkg="topic_tools" type="relay" name="relay_ur_cmd" args="/ur_cmd /mur620/UR10_l/twist_fb_command" />
+
+    <!-- Launch the MiR trajectory follower -->
+    <include file="$(find mir_trajectory_follower)/launch/mir_trajectory_follower.launch" />
+</launch>

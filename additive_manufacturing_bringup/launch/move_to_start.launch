@@ -1,0 +1,7 @@
+<launch>
+    <!-- Launch MIR robot to start pose -->
+    <include file="$(find move_mir_to_start_pose)/launch/move_mir_to_start_pose.launch" />
+
+    <!-- Launch UR robot to start pose -->
+    <include file="$(find move_ur_to_start_pose)/launch/move_ur_to_start_pose.launch" />
+</launch>

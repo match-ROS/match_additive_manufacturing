@@ -1,8 +1,11 @@
 <launch>
+    <arg name="robot_name" default="mur620a" />
+    <arg name="path_topic" default="/mir_path_original" />
+
     <!-- Node that runs the path transformer script -->
     <node name="move_mir_to_start_pose" pkg="move_mir_to_start_pose" type="move_mir_to_start_pose.py" output="screen">
         <!-- Transformation parameters -->
-        <param name="path_topic" value="/mir_path_original" />
-        <param name="robot_name" value="mur620a" />
+        <param name="path_topic" value="$(arg path_topic)" />
+        <param name="robot_name" value="$(arg robot_name)" />
     </node>
 </launch>

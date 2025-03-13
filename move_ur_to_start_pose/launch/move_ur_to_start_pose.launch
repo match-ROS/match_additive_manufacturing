@@ -1,14 +1,19 @@
 <launch>
 
     <arg name="node_start_delay" default="0.0" /> 
+    <arg name="robot_name" default="mur620a" />
+    <arg name="manipulator_base_link" default="mur620a/base_footprint" />
+    <arg  name="manipulator_tcp_link" default="UR10_l/tool0" />
+    <arg name="planning_group" default="UR_arm_l" />
+
     <!-- Node that runs the path transformer script -->
     <node name="move_ur_to_start_pose" pkg="move_ur_to_start_pose" type="move_ur_to_start_pose.py" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
         <!-- Transformation parameters -->
         <param name="path_topic" value="/ur_path_transformed" />
-        <param name="robot_name" value="mur620" />
+        <param name="robot_name" value="$(arg robot_name)" />
         <!-- <param name="manipulator_base_link" value="mur620/UR10_l/base_link" /> -->
-        <param name="manipulator_base_link" value="mur620/base_footprint" />
-        <param name="manipulator_tcp_link" value="UR10_l/tool0" />
-        <param name="planning_group" value="UR_arm_l" />
+        <param name="manipulator_base_link" value="$(arg manipulator_base_link)" />
+        <param name="manipulator_tcp_link" value="$(arg manipulator_tcp_link)" />
+        <param name="planning_group" value="$(arg planning_group)" />
     </node>
 </launch>

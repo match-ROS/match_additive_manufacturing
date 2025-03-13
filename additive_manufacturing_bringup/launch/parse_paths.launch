@@ -1,0 +1,7 @@
+<launch>
+    <!-- Include the launch file for parsing MIR paths -->
+    <include file="$(find parse_mir_path)/launch/parse_mir_path.launch" />
+    
+    <!-- Include the launch file for parsing UR paths -->
+    <include file="$(find parse_ur_path)/launch/parse_ur_path.launch" />
+</launch>
