@@ -1,0 +1,15 @@
+<launch xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- Arguments -->
+    <arg name="object_center_pose" default="[0.0, 0.0, 0.0]" />
+
+    <!-- Set GAZEBO_MODEL_PATH relativ zum ROS-Paket -->
+    <env name="GAZEBO_MODEL_PATH" value="$(optenv GAZEBO_MODEL_PATH):$(find component)/models/meshes" />
+
+    <node name="layer_spawner" pkg="print_sim" type="layer_spawner.py" output="screen">
+        <!-- Transformation parameters -->
+        <param name="current_layer_topic" value="current_layer" />
+        <rosparam param="object_center_pose" subst_value="True">$(arg object_center_pose) </rosparam>
+    </node>
+
+  </launch>

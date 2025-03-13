@@ -11,6 +11,7 @@ from std_msgs.msg import Header
 from geometry_msgs.msg import Point, Pose
 from moveit_msgs.msg import DisplayTrajectory
 import math
+from tf import transformations as tr
 
 
 class MoveManipulatorToTarget:
@@ -24,6 +25,9 @@ class MoveManipulatorToTarget:
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'mur620a/UR10_r/base_link')
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
+
+        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.4)
+        self.spray_distance = rospy.get_param('~spray_distance', 0.3)
         
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
@@ -48,6 +52,8 @@ class MoveManipulatorToTarget:
 
         # Get the first TCP pose from the path
         target_tcp_pose = path_msg.poses[0]
+        # the target pose is the pose of the path, we need to compute the actual tcp pose
+        target_tcp_pose.pose.position.z += self.tcp_nozzle_distance + self.spray_distance
         
         # Get the current pose of the manipulator base in the map frame
         try:
@@ -66,6 +72,12 @@ class MoveManipulatorToTarget:
         
         # Compute the target position in the manipulator’s local frame
         relative_position = target_tcp_position - manipulator_base_position
+        
+        # rotate the relative position to the local frame of the manipulator
+        # get the rotation matrix from the quaternion
+        rot_matrix = tr.quaternion_matrix(tr.quaternion_inverse(rot))
+        # rotate the relative position
+        relative_position = np.dot(rot_matrix[:3, :3], relative_position)
 
         relative_pose = [0.0,0.0,0.0,0.0,0.0,0.0]
         relative_pose[0] = relative_position[0]
