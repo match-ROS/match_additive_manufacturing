@@ -17,8 +17,10 @@ class PurePursuitNode:
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.25)
-        self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
+        self.search_range = rospy.get_param("~search_range", 10) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.1)
+        self.K_index = rospy.get_param("~K_index", 0.05)
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
@@ -42,10 +44,11 @@ class PurePursuitNode:
         self.current_pose = None
         self.is_active = False
         self.broadcaster = TransformBroadcaster()
-        self.last_index = 0
+        self.ur_trajectory_index = 0
         self.ur_trajectory_index = 0
         self.current_lookahead_point = None
         self.current_mir_path_index = 0
+        self.current_target_index = 0
         self.time_stamp_old = rospy.Time.now()
 
     def start_callback(self, msg):
@@ -55,6 +58,15 @@ class PurePursuitNode:
         self.is_active = True
         rospy.loginfo_once("Start command received. Starting ...")
         self.follow_path()
+
+    def reached_target(self, target_position):
+        if self.current_pose is None:
+            return False
+        
+        current_position = self.current_pose.position
+        distance = math.sqrt((target_position.x - current_position.x) ** 2 + (target_position.y - current_position.y) ** 2)
+        #print("Distance: ", distance)
+        return distance < self.distance_threshold
 
     def follow_path(self):
 
@@ -67,10 +79,13 @@ class PurePursuitNode:
             if not self.path or self.current_pose is None:
                 continue
             
-            # Increment index if time has passed - the index is not incremented by reaching the lookahead point only time
-            if rospy.Time.now() - self.time_stamp_old > rospy.Duration(self.dT):
-                self.time_stamp_old = rospy.Time.now()
-                self.last_index += 1
+            if self.reached_target(self.path[self.current_mir_path_index].pose.position):
+                self.current_mir_path_index += 1
+                if self.current_mir_path_index >= len(self.path):
+                    self.is_active = False
+                    self.completion_pub.publish(Bool(data=True))
+                    rospy.loginfo("Pfadverfolgung abgeschlossen.")
+                    break
 
             # Berechne den Lookahead-Punkt
             lookahead_point = self.find_lookahead_point()
@@ -95,15 +110,15 @@ class PurePursuitNode:
 
     def find_lookahead_point(self):
         # Suche im Pfadausschnitt
-        search_range = self.path[self.last_index:self.last_index + self.search_range]
-        print("last_index", self.last_index)
+        search_range = self.path[self.current_mir_path_index:self.current_mir_path_index + self.search_range]
+        #print("last_index", self.ur_trajectory_index)
 
         for idx, pose in enumerate(search_range):
             position = pose.pose.position
             distance = self.calculate_distance(self.current_pose.position, position)
             
             # Überprüfe, ob der Lookahead-Punkt weit genug entfernt ist
-            if distance >= self.lookahead_distance:
+            if distance >= self.lookahead_distance and idx + self.current_mir_path_index >= self.current_target_index:
                 # Sende den Lookahead-Punkt an tf
                 self.broadcaster.sendTransform(
                     (position.x, position.y, position.z),
@@ -112,7 +127,7 @@ class PurePursuitNode:
                     "lookahead_point",
                     "map"
                 )
-                rospy.loginfo(f"Lookahead point updated: Index {self.last_index}")
+                self.current_target_index = idx + self.current_mir_path_index
                 return position
         return None
 
@@ -134,11 +149,11 @@ class PurePursuitNode:
 
     def apply_control(self, curvature):
         # Berechne die Steuerbefehle
-        index_error = self.ur_trajectory_index - (self.last_index)    
-        distance_error = self.calculate_distance(self.current_pose.position, self.path[self.last_index].pose.position)
+        index_error = self.ur_trajectory_index - (self.current_mir_path_index)    
+        distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
 
         velocity = Twist()
-        velocity.linear.x = self.Kv * self.velocities[self.last_index] * (1/self.dT) + 0.1 * distance_error * (1.0 + 0.1*index_error) 
+        velocity.linear.x = self.Kv * self.velocities[self.ur_trajectory_index] * (1/self.dT) + self.K_distance * distance_error + self.K_index* (1.0 + 0.1*index_error) 
         velocity.angular.z = velocity.linear.x * curvature
         self.cmd_vel_pub.publish(velocity)
 
