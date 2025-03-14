@@ -16,10 +16,10 @@ class PurePursuitNode:
         # Config
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
-        self.distance_threshold = rospy.get_param("~distance_threshold", 0.25)
-        self.search_range = rospy.get_param("~search_range", 10) # Number of points to search for lookahead point
+        self.distance_threshold = rospy.get_param("~distance_threshold", 0.10)
+        self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 0.0)  # Linear speed multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.1)
+        self.K_distance = rospy.get_param("~K_distance", 0.3)  # Distance error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
@@ -28,7 +28,6 @@ class PurePursuitNode:
         self.dT = rospy.get_param("~dT", 0.2)
         
         # Subscriber
-        rospy.Subscriber(self.mir_path_topic, Path, self.path_callback)
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
         rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
         
@@ -36,7 +35,6 @@ class PurePursuitNode:
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
         
         # Start und Status
-        rospy.Subscriber("/start_follow_path", Empty, self.start_callback)
         self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
         
         # Init
@@ -50,13 +48,10 @@ class PurePursuitNode:
         self.current_target_index = 0
         self.time_stamp_old = rospy.Time.now()
 
-    def start_callback(self, msg):
-        if not self.path:
-            rospy.logwarn("Got no path. Ignoring start command")
-            return
-        self.is_active = True
-        rospy.loginfo_once("Start command received. Starting ...")
+        # Start
+        self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
         self.follow_path()
+        
 
     def reached_target(self, target_position):
         if self.current_pose is None:
@@ -71,9 +66,12 @@ class PurePursuitNode:
 
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
         self.calculate_velocities()
+        while not rospy.is_shutdown() and self.is_active == False:
+            rospy.loginfo_throttle(5, "Waiting for trajectory index.")
+            rospy.sleep(0.01)
 
         rate = rospy.Rate(self.control_rate)
-        while not rospy.is_shutdown() and self.is_active:
+        while not rospy.is_shutdown():
             # Überprüfe, ob Pfad und aktuelle Pose vorhanden sind
             if not self.path or self.current_pose is None:
                 continue
@@ -117,7 +115,7 @@ class PurePursuitNode:
             distance = self.calculate_distance(self.current_pose.position, position)
             
             # Überprüfe, ob der Lookahead-Punkt weit genug entfernt ist
-            if distance >= self.lookahead_distance and idx + self.current_mir_path_index >= self.current_target_index:
+            if (distance >= self.lookahead_distance and idx + self.current_mir_path_index >= self.current_target_index) or idx == len(search_range) - 1:
                 # Sende den Lookahead-Punkt an tf
                 self.broadcaster.sendTransform(
                     (position.x, position.y, position.z),
@@ -168,12 +166,13 @@ class PurePursuitNode:
             speed = distance  # Goal: reach the next point in 1 second
             self.velocities.append(speed)
 
-    def path_callback(self, msg):
-        self.path = msg.poses
-
     def pose_callback(self, msg):
         self.current_pose = msg
         # broadcast current pose
+        now = rospy.Time.now()
+        if now == self.time_stamp_old:
+            return
+        self.time_stamp_old = now
         self.broadcaster.sendTransform(
             (msg.position.x, msg.position.y, msg.position.z),
             (msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
@@ -185,6 +184,8 @@ class PurePursuitNode:
 
     def trajectory_index_callback(self, msg):
         self.ur_trajectory_index = msg.data
+        if self.ur_trajectory_index > 0:
+            self.is_active = True
 
     def calculate_distance(self, pos1, pos2):
         return math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)

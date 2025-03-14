@@ -9,6 +9,7 @@ Panels:
         - /Path1
         - /Path2
         - /RobotModel1
+        - /Pose1
         - /MotionPlanning1/Scene Robot1
         - /MotionPlanning1/Planning Request1
         - /MotionPlanning1/Planning Metrics1
@@ -420,7 +421,7 @@ Visualization Manager:
       Shaft Length: 1
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
-      Topic: /ur_local_target_pose
+      Topic: /next_goal
       Unreliable: false
       Value: true
     - Acceleration_Scaling_Factor: 0.1
@@ -537,6 +538,10 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        current_pose:
+          Value: true
+        lookahead_point:
+          Value: true
         map:
           Value: false
         mur620a/UR10_l/base:
@@ -673,6 +678,10 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
+          current_pose:
+            {}
+          lookahead_point:
+            {}
           mur620a/odom:
             mur620a/base_footprint:
               mur620a/base_link:
@@ -825,26 +834,20 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Class: rviz/ThirdPersonFollower
-      Distance: 46.450775146484375
+      Angle: 0
+      Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
-      Field of View: 0.7853981852531433
-      Focal Point:
-        X: 52.14163589477539
-        Y: 40.11272048950195
-        Z: -3.0994415283203125e-06
-      Focal Shape Fixed Size: true
-      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1053978204727173
+      Scale: 190.40074157714844
       Target Frame: <Fixed Frame>
-      Yaw: 6.238592147827148
+      X: 50.34292221069336
+      Y: 42.99772644042969
     Saved: ~
 Window Geometry:
   Displays:
