@@ -18,9 +18,8 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.25)
         self.search_range = rospy.get_param("~search_range", 10) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
+        self.Kv = rospy.get_param("~Kv", 0.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.1)
-        self.K_index = rospy.get_param("~K_index", 0.05)
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
@@ -149,11 +148,14 @@ class PurePursuitNode:
 
     def apply_control(self, curvature):
         # Berechne die Steuerbefehle
-        index_error = self.ur_trajectory_index - (self.current_mir_path_index)    
+        index_error = self.ur_trajectory_index - (self.current_mir_path_index) 
+        #print("index_error", index_error)   
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
 
         velocity = Twist()
-        velocity.linear.x = self.Kv * self.velocities[self.ur_trajectory_index] * (1/self.dT) + self.K_distance * distance_error + self.K_index* (1.0 + 0.1*index_error) 
+        velocity.linear.x = self.Kv * self.velocities[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error 
+        velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
+         
         velocity.angular.z = velocity.linear.x * curvature
         self.cmd_vel_pub.publish(velocity)
 
