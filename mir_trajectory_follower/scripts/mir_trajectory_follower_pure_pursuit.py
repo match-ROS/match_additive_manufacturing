@@ -18,14 +18,14 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.10)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 0.0)  # Linear speed multiplier
+        self.Kv = rospy.get_param("~Kv", 0.2)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.3)  # Distance error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
         self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.control_rate = rospy.get_param("~control_rate", 100)
-        self.dT = rospy.get_param("~dT", 0.2)
+        self.dT = rospy.get_param("~dT", 0.3)
         
         # Subscriber
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
@@ -146,16 +146,30 @@ class PurePursuitNode:
 
     def apply_control(self, curvature):
         # Berechne die Steuerbefehle
-        index_error = self.ur_trajectory_index - (self.current_mir_path_index) 
+        index_error = self.ur_trajectory_index - (self.current_mir_path_index-1) # -1 because of the current_mir_path_index is the next point
         #print("index_error", index_error)   
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
 
+
+
+        # broadcast target point
+        self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
+
         velocity = Twist()
         velocity.linear.x = self.Kv * self.velocities[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error 
-        velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
+        velocity.linear.x *= max(0.5, (1.0 + 0.1*index_error))
          
         velocity.angular.z = velocity.linear.x * curvature
         self.cmd_vel_pub.publish(velocity)
+
+    def broadcast_target_point(self, point):
+        self.broadcaster.sendTransform(
+            (point.x, point.y, point.z),
+            (0, 0, 0, 1),
+            rospy.Time.now(),
+            "target_point",
+            "map"
+        )
 
     def calculate_velocities(self):
         self.velocities = []
