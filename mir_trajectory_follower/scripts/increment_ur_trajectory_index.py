@@ -8,7 +8,7 @@ class IncrementUrTrajectoryIndex:
     def __init__(self):
         rospy.init_node('increment_ur_trajectory_index')
         self.trajectory_index_pub = rospy.Publisher("/path_index", Int32, queue_size=1)
-        self.rate = rospy.Rate(2)
+        self.rate = rospy.Rate(4)
         self.trajectory_index = 0
 
     def run(self):

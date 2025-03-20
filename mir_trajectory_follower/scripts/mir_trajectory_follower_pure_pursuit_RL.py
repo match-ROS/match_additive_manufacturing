@@ -252,8 +252,11 @@ class PurePursuitNode:
         progress = Float32()
         points_in_current_layer = self.points_per_layer[self.current_layer]
         points_in_previous_layers = sum(self.points_per_layer[:self.current_layer])
-        
-        progress.data = points_in_current_layer / (self.current_mir_path_index - points_in_previous_layers)
+          
+        if points_in_current_layer == 0:
+            progress.data = 0
+        else: 
+            progress.data = (self.current_mir_path_index - points_in_previous_layers) / points_in_current_layer
         self.layer_progress.publish(progress)
 
 if __name__ == '__main__':
