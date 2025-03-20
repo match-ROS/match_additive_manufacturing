@@ -7,6 +7,7 @@ from nav_msgs.msg import Path
 import tf.transformations as tf
 import math
 
+
 # Add the parent directory to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -111,6 +112,8 @@ def publish_paths():
     # Transform and fill transformed Path message
     transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
     
+    set_metadata()
+
     rate = rospy.Rate(0.5)  # Publish at 1 Hz
     while not rospy.is_shutdown():
         # Update headers' timestamps
@@ -121,6 +124,21 @@ def publish_paths():
         original_pub.publish(original_path)
         transformed_pub.publish(transformed_path)
         rate.sleep()
+
+def set_metadata():
+
+    nL_ = nL.nL()
+
+    # points per layer
+    points_per_layer = [zero for zero in range(0,int(max(nL_)))]  
+    print("Points per layer: ", points_per_layer)
+    for i in range(len(nL_)):
+        points_per_layer[int(nL_[i])-1] += 1
+    #print("Points per layer: ", points_per_layer)
+
+    rospy.set_param("/points_per_layer", points_per_layer)
+
+
 
 if __name__ == '__main__':
     try:
