@@ -6,65 +6,16 @@
     <arg name="input_twist_topic" default="/input_twist"/>
     <arg name="output_twist_topic" default="/output_twist"/>
 
-    <!-- Argument if TwistStamped is used -->
-    <arg name="stamped" default="true"/>
+    <!-- use yaml instead of args for setting parameters -->
+    <arg name="pid_values_path" default="$(find additive_manufacturing_helpers)/config/pid_twist_controller.yaml"/>
     
-    <!-- Arguments for PID parameters -->
-    <arg name="Kp_linear_x" default="1.0"/>
-    <arg name="Ki_linear_x" default="0.0"/>
-    <arg name="Kd_linear_x" default="0.0"/>
-    
-    <arg name="Kp_linear_y" default="1.0"/>
-    <arg name="Ki_linear_y" default="0.0"/>
-    <arg name="Kd_linear_y" default="0.0"/>
-    
-    <arg name="Kp_linear_z" default="1.0"/>
-    <arg name="Ki_linear_z" default="0.0"/>
-    <arg name="Kd_linear_z" default="0.0"/>
-    
-    <arg name="Kp_angular_x" default="1.0"/>
-    <arg name="Ki_angular_x" default="0.0"/>
-    <arg name="Kd_angular_x" default="0.0"/>
-    
-    <arg name="Kp_angular_y" default="1.0"/>
-    <arg name="Ki_angular_y" default="0.0"/>
-    <arg name="Kd_angular_y" default="0.0"/>
-    
-    <arg name="Kp_angular_z" default="1.0"/>
-    <arg name="Ki_angular_z" default="0.0"/>
-    <arg name="Kd_angular_z" default="0.0"/>
-    
-    <!-- Node definition -->
-    <node name="$(arg node_name)" pkg="additive_manufacturing_helpers" type="pid_twist_controller.py" output="screen">
-        <!-- Remap topics -->
-        <remap from="input_twist" to="$(arg input_twist_topic)"/>
-        <remap from="output_twist" to="$(arg output_twist_topic)"/>
-        
-        <!-- Set parameters -->
-        <param name="stamped" value="$(arg stamped)"/>
-
-        <param name="Kp_linear_x" value="$(arg Kp_linear_x)"/>
-        <param name="Ki_linear_x" value="$(arg Ki_linear_x)"/>
-        <param name="Kd_linear_x" value="$(arg Kd_linear_x)"/>
-        
-        <param name="Kp_linear_y" value="$(arg Kp_linear_y)"/>
-        <param name="Ki_linear_y" value="$(arg Ki_linear_y)"/>
-        <param name="Kd_linear_y" value="$(arg Kd_linear_y)"/>
-        
-        <param name="Kp_linear_z" value="$(arg Kp_linear_z)"/>
-        <param name="Ki_linear_z" value="$(arg Ki_linear_z)"/>
-        <param name="Kd_linear_z" value="$(arg Kd_linear_z)"/>
-        
-        <param name="Kp_angular_x" value="$(arg Kp_angular_x)"/>
-        <param name="Ki_angular_x" value="$(arg Ki_angular_x)"/>
-        <param name="Kd_angular_x" value="$(arg Kd_angular_x)"/>
-        
-        <param name="Kp_angular_y" value="$(arg Kp_angular_y)"/>
-        <param name="Ki_angular_y" value="$(arg Ki_angular_y)"/>
-        <param name="Kd_angular_y" value="$(arg Kd_angular_y)"/>
-        
-        <param name="Kp_angular_z" value="$(arg Kp_angular_z)"/>
-        <param name="Ki_angular_z" value="$(arg Ki_angular_z)"/>
-        <param name="Kd_angular_z" value="$(arg Kd_angular_z)"/>
-    </node>
+    <group ns="$(arg node_name)">
+    <rosparam command="load" file="$(arg pid_values_path)"/>
+        <!-- Node definition -->
+        <node name="$(arg node_name)" pkg="additive_manufacturing_helpers" type="pid_twist_controller.py" output="screen">
+            <!-- Remap topics -->
+            <remap from="input_twist" to="$(arg input_twist_topic)"/>
+            <remap from="output_twist" to="$(arg output_twist_topic)"/>
+        </node>
+    </group>
 </launch>

@@ -23,30 +23,30 @@ class PIDTwistController:
         self.stamped = rospy.get_param('~stamped', False)
         # Load PID parameters for each twist component via ROS parameters
         # Linear components
-        Kp_linear_x = rospy.get_param('~Kp_linear_x', 1.0)
-        Ki_linear_x = rospy.get_param('~Ki_linear_x', 0.0)
-        Kd_linear_x = rospy.get_param('~Kd_linear_x', 0.0)
+        Kp_linear_x = rospy.get_param('Kp_linear_x', 1.0)
+        Ki_linear_x = rospy.get_param('Ki_linear_x', 0.0)
+        Kd_linear_x = rospy.get_param('Kd_linear_x', 0.0)
         
-        Kp_linear_y = rospy.get_param('~Kp_linear_y', 1.0)
-        Ki_linear_y = rospy.get_param('~Ki_linear_y', 0.0)
-        Kd_linear_y = rospy.get_param('~Kd_linear_y', 0.0)
+        Kp_linear_y = rospy.get_param('Kp_linear_y', 1.0)
+        Ki_linear_y = rospy.get_param('Ki_linear_y', 0.0)
+        Kd_linear_y = rospy.get_param('Kd_linear_y', 0.0)
         
-        Kp_linear_z = rospy.get_param('~Kp_linear_z', 1.0)
-        Ki_linear_z = rospy.get_param('~Ki_linear_z', 0.0)
-        Kd_linear_z = rospy.get_param('~Kd_linear_z', 0.0)
+        Kp_linear_z = rospy.get_param('Kp_linear_z', 1.0)
+        Ki_linear_z = rospy.get_param('Ki_linear_z', 0.0)
+        Kd_linear_z = rospy.get_param('Kd_linear_z', 0.0)
         
         # Angular components
-        Kp_angular_x = rospy.get_param('~Kp_angular_x', 1.0)
-        Ki_angular_x = rospy.get_param('~Ki_angular_x', 0.0)
-        Kd_angular_x = rospy.get_param('~Kd_angular_x', 0.0)
+        Kp_angular_x = rospy.get_param('Kp_angular_x', 1.0)
+        Ki_angular_x = rospy.get_param('Ki_angular_x', 0.0)
+        Kd_angular_x = rospy.get_param('Kd_angular_x', 0.0)
         
-        Kp_angular_y = rospy.get_param('~Kp_angular_y', 1.0)
-        Ki_angular_y = rospy.get_param('~Ki_angular_y', 0.0)
-        Kd_angular_y = rospy.get_param('~Kd_angular_y', 0.0)
+        Kp_angular_y = rospy.get_param('Kp_angular_y', 1.0)
+        Ki_angular_y = rospy.get_param('Ki_angular_y', 0.0)
+        Kd_angular_y = rospy.get_param('Kd_angular_y', 0.0)
         
-        Kp_angular_z = rospy.get_param('~Kp_angular_z', 1.0)
-        Ki_angular_z = rospy.get_param('~Ki_angular_z', 0.0)
-        Kd_angular_z = rospy.get_param('~Kd_angular_z', 0.0)
+        Kp_angular_z = rospy.get_param('Kp_angular_z', 1.0)
+        Ki_angular_z = rospy.get_param('Ki_angular_z', 0.0)
+        Kd_angular_z = rospy.get_param('Kd_angular_z', 0.0)
 
         # Create PID controllers for each twist axis
         self.pid_linear_x  = PID(Kp_linear_x, Ki_linear_x, Kd_linear_x)

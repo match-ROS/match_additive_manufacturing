@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 
 import rospy
-from geometry_msgs.msg import Pose, Twist, Vector3
+from geometry_msgs.msg import PoseStamped, Twist, Vector3
 
 
 
 class OrthogonalErrorCorrection:
     def __init__(self):        
-        self.current_pose: Pose = None
-        self.goal_pose: Pose = None
+        self.current_pose: PoseStamped = None
+        self.goal_pose: PoseStamped = None
         self.normal: Vector3 = None
         
-        rospy.Subscriber('~current_endeffector_pose', Pose, self.current_pose_callback)
-        rospy.Subscriber('~goal_endeffector_pose', Pose, self.goal_pose_callback)
+        rospy.Subscriber('~current_endeffector_pose', PoseStamped, self.current_pose_callback)
+        rospy.Subscriber('~goal_endeffector_pose', PoseStamped, self.goal_pose_callback)
         rospy.Subscriber('~normal_vector', Vector3, self.normal_callback)
         
         self.twist_pub = rospy.Publisher('~orthogonal_twist', Twist, queue_size=10)
@@ -21,12 +21,12 @@ class OrthogonalErrorCorrection:
         twist = self.calculate_twist()
         self.twist_pub.publish(twist)
     
-    def current_pose_callback(self, msg):
-        self.current_pose = msg
+    def current_pose_callback(self, msg: PoseStamped):
+        self.current_pose = msg.pose
         self.publish_twist()
 
-    def goal_pose_callback(self, msg):
-        self.goal_pose = msg
+    def goal_pose_callback(self, msg: PoseStamped):
+        self.goal_pose = msg.pose
         self.publish_twist()
 
     def normal_callback(self, msg):

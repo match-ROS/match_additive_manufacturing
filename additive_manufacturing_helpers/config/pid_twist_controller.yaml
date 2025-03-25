@@ -1,0 +1,28 @@
+# Argument if TwistStamped is used or Twist
+stamped: true
+
+# PID parameters for linear components
+Kp_linear_x: 1.0
+Ki_linear_x: 0.0
+Kd_linear_x: 0.0
+
+Kp_linear_y: 1.0
+Ki_linear_y: 0.0
+Kd_linear_y: 0.0
+
+Kp_linear_z: 1.0
+Ki_linear_z: 0.0
+Kd_linear_z: 0.0
+
+# PID parameters for angular components
+Kp_angular_x: 1.0
+Ki_angular_x: 0.0
+Kd_angular_x: 0.0
+
+Kp_angular_y: 1.0
+Ki_angular_y: 0.0
+Kd_angular_y: 0.0
+
+Kp_angular_z: 1.0
+Ki_angular_z: 0.0
+Kd_angular_z: 0.0

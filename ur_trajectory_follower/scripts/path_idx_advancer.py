@@ -2,7 +2,8 @@
 
 import rospy
 import math
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Vector3
+from additive_manufacturing_msgs.msg import Vector3Array
 from nav_msgs.msg import Path
 from std_msgs.msg import Int32
 
@@ -27,6 +28,7 @@ class PathIndexAdvancer:
         # Publishers: next waypoint index and next waypoint pose
         self.index_pub = rospy.Publisher("/path_index", Int32, queue_size=10, latch=True)
         self.goal_pose_pub = rospy.Publisher("/next_goal", PoseStamped, queue_size=10, latch=True)
+        self.normal_pub = rospy.Publisher("/normal_vector", Vector3, queue_size=10, latch=True)
         
         # Choose the metric to use
         metric = rospy.get_param("~metric", "radius")
@@ -46,7 +48,11 @@ class PathIndexAdvancer:
 
         # Get the path from the topic /ur_path_transformed
         self.path = rospy.wait_for_message("/ur_path_transformed", Path)
-        self.path_length = len(self.path.poses)       
+        self.path_length = len(self.path.poses)
+
+        rospy.loginfo(f"Received path with {self.path_length} waypoints")
+        self.normals = rospy.wait_for_message("/ur_path_normals", Vector3Array)       
+        rospy.loginfo(f"Received normals with {len(self.normals.vectors)} vectors")
 
         # Create subscriber to your robot's current pose
         self.pose_sub = rospy.Subscriber("/current_pose", PoseStamped, self.pose_callback)
@@ -62,6 +68,7 @@ class PathIndexAdvancer:
 
         # If we are already at the final waypoint, do nothing further
         if self.current_index >= self.path_length - 1:
+            rospy.loginfo_throttle(10, "Already at the final waypoint!")
             self.publish_current_goal()
             return
 
@@ -85,11 +92,15 @@ class PathIndexAdvancer:
         """
         Publishes the current waypoint index and the corresponding goal pose.
         """
+        rospy.logwarn(f"Publishing current goal at index {self.current_index}")
         # Publish the waypoint index
         self.index_pub.publish(self.current_index)
 
         # Publish the goal pose
         self.goal_pose_pub.publish(self.path.poses[self.current_index])
+
+        # Publish the normal vector
+        self.normal_pub.publish(self.normals.vectors[self.current_index-1])
 
     def check_radius_condition(self, x, y):
         """

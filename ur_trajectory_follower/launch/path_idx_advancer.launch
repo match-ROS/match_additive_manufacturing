@@ -8,7 +8,8 @@
 
     <!-- Subscribers -->
     <arg name="path_topic" default="/ur_path_transformed"/>
-    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <!-- <arg name="current_pose_topic" default="/global_nozzle_pose"/> -->
+    <arg name="current_pose_topic" default="/mur620a/UR10_r/global_tcp_pose"/>
     <!-- Publishers -->
     <arg name="path_index_topic" default="/path_index"/>
     <arg name="next_goal_topic" default="/next_goal"/>

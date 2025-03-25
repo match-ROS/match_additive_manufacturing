@@ -11,7 +11,7 @@
     <arg name="current_pose_topic" default="/global_nozzle_pose"/>
     <arg name="velocity_override_topic" default="/velocity_override"/>
     <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
-    <arg name="twist_topic" default="/ur_twist_world"/>
+    <arg name="twist_topic" default="/ur_error_world"/>
     <arg name="ff_only" default="false"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
