@@ -4,8 +4,6 @@
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
 
-    <!-- <remap from="/ur_cmd" to="/mur620/UR10_l/twist_fb_command" /> -->
-    <!-- <node name="pose_relay" pkg="topic_tools" type="relay" args="/mur620/UR10_l/global_tcp_pose /global_nozzle_pose" /> -->
     <include file="$(find ur_trajectory_follower)/launch/twist_sim.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
@@ -26,7 +24,9 @@
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
     </include>
 
-    <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" />
+    <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
+        <arg name="virtual_line_threshold" value="0.01" />
+    </include>
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
     </include>
@@ -43,10 +43,10 @@
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
         <arg name="node_name" value="pid_twist_controller_direction" />
         <arg name="input_twist_topic" value="/ur_error_world" />
-        <!-- <arg name="output_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" /> -->
         <arg name="output_twist_topic" value="/ur_twist_direction_world" />
         <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_ff.yaml" />
     </include>
+    
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
         <arg name="node_name" value="pid_twist_controller_orthogonal" />
         <arg name="input_twist_topic" value="/orthogonal_error" />

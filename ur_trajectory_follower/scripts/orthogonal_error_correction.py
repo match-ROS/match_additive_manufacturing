@@ -42,10 +42,13 @@ class OrthogonalErrorCorrection:
             error_y = self.goal_pose.position.y - self.current_pose.position.y
             error_z = self.goal_pose.position.z - self.current_pose.position.z
 
-            # Set the twist along the normal
-            twist.linear.x = error_x * self.normal.x
-            twist.linear.y = error_y * self.normal.y
-            twist.linear.z = error_z * self.normal.z
+            # Get the error along the normal vector
+            error_normal = error_x * self.normal.x + error_y * self.normal.y + error_z * self.normal.z
+
+            # Get the twist along the normal vector
+            twist.linear.x = error_normal * self.normal.x
+            twist.linear.y = error_normal * self.normal.y
+            twist.linear.z = error_normal * self.normal.z
 
         return twist
 
