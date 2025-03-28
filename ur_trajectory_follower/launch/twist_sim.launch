@@ -15,6 +15,7 @@
 
     <!-- Launch the twist_sim node -->
     <node name="twist_sim" pkg="ur_controllers_match" type="twist_controller_fb" output="screen">
+    <!-- <node name="twist_sim" pkg="ur_controllers_match" type="twist_controller" output="screen"> -->
         <!-- Custom parameters -->
         <param name="prefix_ur" value="$(arg prefix_ur)" />
         <param name="group_name" value="$(arg group_name)" />

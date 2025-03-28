@@ -36,19 +36,8 @@ source devel/setup.bash
 To launch everything:
 
 ```bash
-roslaunch parse_mir_path parse_mir_path.launch
-roslaunch parse_ur_path parse_ur_path.launch
-roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch
-# wait for the MIR robot to reach the start pose
-roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch
-
-roslaunch ur_trajectory_follower twist_sim.launch
+roslaunch print_sim run_simulation_complete.launch
 roslaunch ur_trajectory_follower complete_ur_trajectory_follower_ff_only.launch
-# or
-# roslaunch ur_trajectory_follower complete_ur_trajectory_follower.launch
-rosrun topic_tools relay /ur_cmd /mur620/UR10_l/twist_fb_command
-
-roslaunch mir_trajectory_follower mir_trajectory_follower.launch
 ```
 
 ## Contributing
