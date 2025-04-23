@@ -16,7 +16,7 @@
         <arg name="robot_y"     default="39.0" />
         <arg name="robot_yaw"   default="0.0" /> 
         <arg name="tf_prefix"   default="$(arg robot1_name)" />      
-        <arg name="tool"   default="keyence_line_laser" />
+        <arg name="tool"   default="bauschaum_ee" />
         <arg name="enable_dual_collison_avoidance" default="false" /> 
     </include>
     
