@@ -26,7 +26,7 @@ class MoveManipulatorToTarget:
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
 
-        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.4)
+        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.6)
         self.spray_distance = rospy.get_param('~spray_distance', 0.3)
         
         # Initialize MoveIt
