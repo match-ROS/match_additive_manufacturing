@@ -8,6 +8,7 @@ import rospy
 from tf import TransformListener, transformations
 
 from geometry_msgs.msg import PoseStamped, Pose, Twist, Transform
+from nav_msgs.msg import Odometry
 
 
 class UrMobileRobotCompensation():
@@ -16,6 +17,9 @@ class UrMobileRobotCompensation():
                 # use parameters instead of hardcoded values
                 self.base_mir_frame_id = rospy.get_param("~base_mir_frame_id", base_mir)
                 self.base_ur_frame_id = rospy.get_param("~base_ur_frame_id", base_ur)
+                self.use_odom = rospy.get_param("~use_odom", True)
+                if self.use_odom:
+                    rospy.loginfo("Using odom for mir velocity")
 
                 self.ur_pose = Pose()
                 self.mir_pose = Pose()
@@ -30,7 +34,10 @@ class UrMobileRobotCompensation():
 
                 #Subscriber
                 rospy.Subscriber("~ur_pose", PoseStamped, self.ur_pose_callback)
-                rospy.Subscriber("~mir_cmd_vel", Twist, self.mir_cmd_vel_callback)
+                if self.use_odom:
+                    rospy.Subscriber("~mir_odom", Odometry, self.mir_odom_callback)
+                else:
+                    rospy.Subscriber("~mir_cmd_vel", Twist, self.mir_cmd_vel_callback)
 
                 self.last_mir_cmd = rospy.Time.now()
                 self.last_ur_pose = rospy.Time.now()
@@ -48,12 +55,18 @@ class UrMobileRobotCompensation():
             
         
         def ur_pose_callback(self, data = PoseStamped()):
-            t=data.header.stamp
-            data.header.stamp = rospy.Time(0) #use latest transform available
-            data = self.listener.transformPose(self.base_mir_frame_id, data)
-            data.header.stamp = t #restore original timestamp
+            # if not using static transform for rx, ry:
+            # t=data.header.stamp
+            # data.header.stamp = rospy.Time(0) #use latest transform available
+            # data = self.listener.transformPose(self.base_mir_frame_id, data)
+            # data.header.stamp = t #restore original timestamp
             self.ur_pose = data.pose
         
+        def mir_odom_callback(self, msg = Odometry()):
+            # if using ground truth as odom: false base_frame (map). use ground_truth_rotated
+            self.mir_vel = msg.twist.twist
+            self.pub_induced_vel_compensation()
+
         def mir_cmd_vel_callback(self, msg = Twist()):
             self.mir_vel = msg
             self.pub_induced_vel_compensation()
