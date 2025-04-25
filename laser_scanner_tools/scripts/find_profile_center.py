@@ -15,17 +15,19 @@ class WeldSeamDetector:
 
         # Parameters
         self.scan_topic = "/mur620a/UR10_r/line_laser/scan"
-        self.filtered_pub_topic = "/weld_seam/center_point"
-        self.median_filter_kernel = 5
-        self.peak_prominence = 0.005  # adjust based on noise level
+        self.output_topic = "/weld_seam/center_point"
         self.tf_target_frame = "mur620a/base_link"
+        self.median_filter_kernel = 5
+        self.peak_prominence = 0.005
+        self.gradient_threshold = 0.1
+        self.fallback_ratio = 0.6
 
-        # TF
+        # TF setup
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Publisher
-        self.pub = rospy.Publisher(self.filtered_pub_topic, PointStamped, queue_size=1)
+        self.pub = rospy.Publisher(self.output_topic, PointStamped, queue_size=1)
 
         # Subscriber
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_callback)
@@ -34,30 +36,33 @@ class WeldSeamDetector:
         rospy.spin()
 
     def scan_callback(self, msg: LaserScan):
-        # Convert scan ranges to numpy array
         ranges = np.array(msg.ranges)
-        ranges[ranges == 0.0] = np.nan  # remove invalid points
+        ranges[ranges == 0.0] = np.nan  # remove invalid zero values
 
         # Apply median filter
         filtered = medfilt(ranges, kernel_size=self.median_filter_kernel)
 
-        # Invert and find peaks (highest becomes lowest)
-        inverted = -filtered
+        # Crop the scan to remove edges
+        filtered_cropped, offset = self.crop_scan_adaptive(filtered)
+
+        # Invert and find peaks
+        inverted = -filtered_cropped
         peaks, properties = find_peaks(inverted, prominence=self.peak_prominence)
 
         if len(peaks) == 0:
             rospy.logwarn("No weld seam peak found.")
             return
 
-        # Take the most prominent peak
+        # Get most prominent peak
         best_peak = peaks[np.argmax(properties['prominences'])]
-        range_at_peak = filtered[best_peak]
-        angle_at_peak = msg.angle_min + best_peak * msg.angle_increment
+        absolute_index = best_peak + offset
+        range_at_peak = filtered[absolute_index]
+        angle_at_peak = msg.angle_min + absolute_index * msg.angle_increment
 
-        # Convert polar to cartesian in laser frame
+        # Convert to Cartesian in laser frame
         x = range_at_peak * np.cos(angle_at_peak)
         y = range_at_peak * np.sin(angle_at_peak)
-        z = 0.0  # Laser scans in 2D plane; z=0 in its frame
+        z = 0.0
 
         point_laser = PointStamped()
         point_laser.header = msg.header
@@ -65,7 +70,6 @@ class WeldSeamDetector:
         point_laser.point.y = y
         point_laser.point.z = z
 
-        # Transform to robot frame
         try:
             transform = self.tf_buffer.lookup_transform(
                 self.tf_target_frame,
@@ -76,9 +80,43 @@ class WeldSeamDetector:
             point_robot = tf2_geometry_msgs.do_transform_point(point_laser, transform)
             self.pub.publish(point_robot)
 
-            rospy.loginfo_throttle(1.0, f"Detected weld seam at x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
+            rospy.loginfo_throttle(1.0, f"Weld seam: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
         except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
             rospy.logwarn(f"TF transform failed: {e}")
+
+    def crop_scan_adaptive(self, filtered, grad_threshold=None, fallback_ratio=None):
+        if grad_threshold is None:
+            grad_threshold = self.gradient_threshold
+        if fallback_ratio is None:
+            fallback_ratio = self.fallback_ratio
+
+        gradient = np.abs(np.gradient(filtered))
+
+        edge_indices = np.where(gradient > grad_threshold)[0]
+
+        if len(edge_indices) >= 2:
+            left = min(edge_indices)
+            right = max(edge_indices)
+        elif len(edge_indices) == 1:
+            center = len(filtered) // 2
+            width = int(len(filtered) * fallback_ratio)
+            if edge_indices[0] < center:
+                left = edge_indices[0]
+                right = min(len(filtered) - 1, left + width)
+            else:
+                right = edge_indices[0]
+                left = max(0, right - width)
+        else:
+            # Fallback: use center region
+            margin = int((1 - fallback_ratio) / 2 * len(filtered))
+            left = margin
+            right = len(filtered) - margin
+
+        if right <= left:
+            left = 0
+            right = len(filtered) - 1
+
+        return filtered[left:right + 1], left
 
 
 if __name__ == '__main__':
