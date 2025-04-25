@@ -19,8 +19,9 @@ class WeldSeamDetector:
         self.tf_target_frame = "mur620a/base_link"
         self.median_filter_kernel = 5
         self.peak_prominence = 0.005
-        self.gradient_threshold = 0.1
+        self.gradient_threshold = 0.02
         self.fallback_ratio = 0.6
+        self.min_profile_width = 20  # minimum number of points to consider a valid profile
 
         # TF setup
         self.tf_buffer = tf2_ros.Buffer()
@@ -94,7 +95,8 @@ class WeldSeamDetector:
 
         edge_indices = np.where(gradient > grad_threshold)[0]
 
-        if len(edge_indices) >= 2:
+        if len(edge_indices) >= 2 and max(edge_indices) - min(edge_indices) >= self.min_profile_width:
+            # Use the first and last edge indices to define the crop
             left = min(edge_indices)
             right = max(edge_indices)
         elif len(edge_indices) == 1:
