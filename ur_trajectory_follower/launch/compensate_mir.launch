@@ -1,9 +1,11 @@
 <launch>
     <arg name="robot_name" default="mur620"/>
-    <arg name="prefix_ur" default="UR10_l/"/>
+    <arg name="prefix_ur" default="UR10_r/"/>
 
     <arg name="ur_pose_topic" default="/$(arg robot_name)/$(arg prefix_ur)tcp_pose"/>
     <arg name="mir_cmd_vel_topic" default="/$(arg robot_name)/mobile_base_controller/cmd_vel"/>
+    <arg name="mir_odom_topic" default="/$(arg robot_name)/mobile_base_controller/odom"/>
+    <!-- <arg name="mir_odom_topic" default="/$(arg robot_name)/ground_truth"/> -->
     <arg name="ur_cmd_vel_local_topic" default="/ur_twist_mir_compensation"/>
     <arg name="base_mir_frame_id" default="/$(arg robot_name)/base_link"/>
     <arg name="base_ur_frame_id" default="/$(arg robot_name)/$(arg prefix_ur)base_link"/>
@@ -16,6 +18,7 @@
         <!-- Topic remapping -->
         <remap from="~ur_pose" to="$(arg ur_pose_topic)" />
         <remap from="~mir_cmd_vel" to="$(arg mir_cmd_vel_topic)" />
+        <remap from="~mir_odom" to="$(arg mir_odom_topic)" />
         
         <remap from="~ur_cmd_vel_local" to="$(arg ur_cmd_vel_local_topic)" />
     </node>
