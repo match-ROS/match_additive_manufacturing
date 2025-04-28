@@ -60,13 +60,25 @@ class PathTransfomer:
     def compute_normals(self):
         normals = []
         x_coords, y_coords = self.x_coords, self.y_coords
+        centroid = (sum(x_coords)/len(x_coords), sum(y_coords)/len(y_coords))
+
+        rospy.logwarn("computing normals")
         
         for i in range(1, len(x_coords)-1):
             # Compute the normal vector to the path at each point
             dx = x_coords[i+1] - x_coords[i-1]
             dy = y_coords[i+1] - y_coords[i-1]
             norm = math.sqrt(dx**2 + dy**2)
-            normals.append((dy/norm, -dx/norm)) # TODO: Richtung?
+            normal = (dy/norm, -dx/norm)
+             # Create a vector from the current point to the centroid
+            # vec_to_centroid = (centroid[0] - x_coords[i], centroid[1] - y_coords[i])
+            
+            # # If the dot product is positive, the normal is pointing toward the centroid,
+            # # else flip it to make it point inward.
+            # if normal[0]*vec_to_centroid[0] + normal[1]*vec_to_centroid[1] < 0:
+            #     normal = (-normal[0], -normal[1])
+
+            normals.append(normal) # TODO: Richtung?
         normals.append(normals[-1])  # to have the same length as the path
         self.normals = Vector3Array()
         self.normals.vectors = [Vector3(x=n[0], y=n[1], z=0) for n in normals]

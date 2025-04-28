@@ -1,0 +1,94 @@
+<launch>
+    <arg name="robot_name" default="mur620a" />
+    <arg name="prefix_ur" default="UR10_r/" />
+
+    <remap from="/global_nozzle_pose" to="/virtual_tcp_pose_global" />
+    <!-- run node to transform tcp_pose to base_ideal for compensation etc: -->
+    <node name="tcp_in_global" pkg="mur_control" type="global_tcp_pose_publisher.py" output="screen">
+        <param name="UR_base_link_name" value="$(arg robot_name)/$(arg prefix_ur)base_ideal" />
+        <param name="target_frame" value="map" />
+        <param name="local_TCP_pose_topic" value="/virtual_tcp_pose" />
+        <param name="static_mode" value="false" />
+        <remap from="global_tcp_pose" to="/virtual_tcp_pose_global" />
+    </node>
+
+    <include file="$(find ur_trajectory_follower)/launch/twist_sim.launch" >
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="prefix_ur" value="$(arg prefix_ur)" />
+    </include>
+    
+    <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir'] -->
+    <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
+        <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command"/>
+    </include>
+
+    <node name="twist_combiner_world" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
+        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world']</rosparam>
+        <remap from="combined_twist" to="/ur_twist_world"/>
+    </node>
+
+    <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" >
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="prefix_ur" value="$(arg prefix_ur)" />
+        <arg name="base_ur_frame_id" value="$(arg robot_name)/$(arg prefix_ur)base_ideal"/>
+        <arg name="mir_odom_topic" default="/mur620a/mobile_base_controller/odom"/>
+        <!-- <arg name="mir_odom_topic" default="/mur620a/ground_truth_rotated"/> -->
+        <!-- <arg name="ur_pose_topic" value="UR10_r/tcp_pose_base_ideal"/> -->
+        <arg name="ur_pose_topic" value="/virtual_tcp_pose"/>
+    </include>
+    <!-- run node to transform tcp_pose to base_ideal for compensation etc: -->
+    <node name="tcp_in_base_ideal_publisher" pkg="additive_manufacturing_helpers" type="static_trafo_pose_pub.py" output="screen">
+        <param name="source_frame" value="$(arg robot_name)/$(arg prefix_ur)base_link" />
+        <param name="target_frame" value="$(arg robot_name)/$(arg prefix_ur)base_ideal" />
+        <param name="input_topic" value="$(arg robot_name)/$(arg prefix_ur)tcp_pose" />
+    </node>
+
+    <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
+        <arg name="virtual_line_threshold" value="0.01" />
+        <arg name="current_pose_topic" value="/virtual_tcp_pose_global" />
+    </include>
+    <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
+        <arg name="robot_name" value="$(arg robot_name)" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
+        <arg name="ff_only" value="true" />
+        <remap from="/ur_twist_world" to="/ur_error_world" />
+    </include>
+    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+        <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
+    </include>
+
+    <!-- PID controllers: -->
+    <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
+        <arg name="node_name" value="pid_twist_controller_direction" />
+        <arg name="input_twist_topic" value="/ur_error_world" />
+        <arg name="output_twist_topic" value="/ur_twist_direction_world" />
+        <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_ff.yaml" />
+    </include>
+    
+    <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
+        <arg name="node_name" value="pid_twist_controller_orthogonal" />
+        <arg name="input_twist_topic" value="/orthogonal_error" />
+        <!-- <arg name="output_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" /> -->
+        <arg name="output_twist_topic" value="/orthogonal_twist" />
+        <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_orthogonal.yaml" />
+    </include>
+
+
+    <node name="virtual_tcp_pose" pkg="additive_manufacturing_helpers" type="virtual_tcp_pose.py" output="screen">
+        <param name="pose_frame" value="$(arg robot_name)/$(arg prefix_ur)base_ideal" />
+        <param name="tcp_frame" value="$(arg robot_name)/$(arg prefix_ur)tcp" />
+        <param name="init_pose_from_tcp" value="true" />
+    </node>
+
+    <node name="ground_truth_in_base_frame" pkg="additive_manufacturing_helpers" type="ground_truth_in_base_frame.py" output="screen"/>
+
+    <node name="tcp_velocity_publisher" pkg="additive_manufacturing_helpers" type="velocity_from_pose_publisher.py" output="screen">
+        <!-- <param name="pose_topic" value="/virtual_tcp_pose_global" />
+        <param name="velocity_topic" value="/tcp_velocity" /> -->
+        <param name="use_stamp" value="false" />
+        <remap from="global_tcp_pose" to="/virtual_tcp_pose_global" />
+        <remap from="tcp_velocity" to="/tcp_velocity" />
+    </node>
+</launch>

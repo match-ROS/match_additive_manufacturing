@@ -1,0 +1,47 @@
+<launch xmlns:xacro="http://ros.org/wiki/xacro">
+    <!-- Basic launch file for one robot in the match_world_common map-->
+  
+    <include file="$(find match_gazebo)/launch/scale.launch">
+    </include>
+    
+    <!-- <include file="$(find additive_manufacturing_helpers)/launch/set_sim_speed.launch">
+        <arg name="node_start_delay" value="10.0" />
+    </include> -->
+  
+    <arg name="robot1_name"  default="mur620a"/>
+    <arg name="node_start_delay" default="20.0" doc="used to delay nodes that should not start right away"/>
+
+    <include file="$(find mur_launch_sim)/launch/mur_620.launch">
+        <arg name="robot_x"     default="51.0" />
+        <arg name="robot_y"     default="39.0" />
+        <arg name="robot_yaw"   default="0.0" /> 
+        <arg name="tf_prefix"   default="$(arg robot1_name)" />      
+        <!-- <arg name="tool"   default="keyence_line_laser" /> -->
+        <arg name="enable_dual_collison_avoidance" default="false" /> 
+    </include>
+    
+    <include file="$(find parse_mir_path)/launch/parse_mir_path.launch">
+    </include>
+
+    <include file="$(find parse_ur_path)/launch/parse_ur_path.launch">
+    </include>
+
+    <include file="$(find move_mir_to_start_pose)/launch/move_mir_to_start_pose.launch">
+        <arg name="robot_name" value="$(arg robot1_name)" />
+    </include>
+
+    <include file="$(find move_ur_to_start_pose)/launch/move_ur_to_start_pose.launch">
+        <arg name="node_start_delay" value="$(arg node_start_delay)" />
+        <arg name="robot_name" value="$(arg robot1_name)" />
+        <arg name="manipulator_base_link" value="base_footprint" />
+        <!-- <arg name="manipulator_base_link" value="$(arg robot1_name)/UR10_l/base_link" /> -->
+        <arg name="manipulator_tcp_link" value="UR10_r/tool0" />
+        <arg name="planning_group" value="UR_arm_r" />
+    </include>
+
+    <include file="$(find print_sim)/launch/layer_spawner.launch">
+    </include>
+
+    <node type="rviz" name="rviz_handling" pkg="rviz" args="-d $(find print_sim)/rviz/print_simulation.rviz" /> 
+
+  </launch>
