@@ -28,7 +28,7 @@ class PathTransfomer:
         self.original_pub = rospy.Publisher('/ur_path_original', Path, queue_size=10)
         self.transformed_pub = rospy.Publisher('/ur_path_transformed', Path, queue_size=10)
         self.normals_pub = rospy.Publisher('/ur_path_normals', Vector3Array, queue_size=10)
-        self.start_index = 100
+        self.start_index = 10
 
         # Retrieve the original path
         self.x_coords = xTCP.xTCP()

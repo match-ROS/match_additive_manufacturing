@@ -38,7 +38,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: LaserScan
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -541,6 +541,8 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        current_pose:
+          Value: true
         map:
           Value: false
         mur620a/UR10_l/base:
@@ -677,6 +679,8 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
+          current_pose:
+            {}
           mur620a/odom:
             mur620a/base_footprint:
               mur620a/base_link:
@@ -868,20 +872,26 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0.6749998331069946
-      Class: rviz/TopDownOrtho
+      Class: rviz/ThirdPersonFollower
+      Distance: 3.2403335571289062
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
+      Field of View: 0.7853981852531433
+      Focal Point:
+        X: 48.823883056640625
+        Y: 42.382781982421875
+        Z: -1.3113021850585938e-06
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 182.14979553222656
+      Pitch: 0.7853981852531433
       Target Frame: <Fixed Frame>
-      X: 49.64029312133789
-      Y: 41.15105056762695
+      Yaw: 0.7853981852531433
     Saved: ~
 Window Geometry:
   Displays:
@@ -904,4 +914,4 @@ Window Geometry:
     collapsed: false
   Width: 1920
   X: 118
-  Y: 8
+  Y: 0
