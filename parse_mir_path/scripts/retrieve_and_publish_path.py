@@ -10,7 +10,7 @@ import math
 
 # Add the parent directory to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+start_index = 10
 
 print(f"Parent directory: {parent_dir}")
 sys.path.append(parent_dir+ "/component/")
@@ -26,7 +26,7 @@ def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     # Convert rotation from Euler angles to a quaternion
     quaternion = tf.quaternion_from_euler(rx, ry, rz)
      
-    for i in range(1, len(x_coords)-1):
+    for i in range(start_index, len(x_coords)-1):
         pose_stamped = PoseStamped()
         R = tf.quaternion_matrix(quaternion)[:3, :3]
 
@@ -80,7 +80,7 @@ def publish_paths():
     transformed_path.header.frame_id = "map"
     
     # Fill original Path message
-    for i in range(1, len(x_coords)-1):
+    for i in range(start_index, len(x_coords)-1):
         pose_stamped = PoseStamped()
         pose_stamped.pose.position.x = x_coords[i]
         pose_stamped.pose.position.y = y_coords[i]

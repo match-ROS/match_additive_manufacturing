@@ -54,16 +54,16 @@
         <visual name="visual">
           <geometry>
             <mesh>
-              <uri>/home/rosmatch/catkin_ws/src/match_additive_manufacturing/component/meshes/FirstLayerError.stl</uri>
-              <scale>0.001 0.001 0.0001</scale>
+              <uri>/home/rosmatch/catkin_ws/src/match_additive_manufacturing/component/meshes/Layer1ShellTonicWallRounded500inWorkspace.stl</uri>
+              <scale>0.001 0.001 0.001</scale>
             </mesh>
           </geometry>
         </visual>
         <collision name="collision">
           <geometry>
             <mesh>
-              <uri>/home/rosmatch/catkin_ws/src/match_additive_manufacturing/component/meshes/FirstLayerError.stl</uri>
-              <scale>0.001 0.001 0.0001</scale>
+              <uri>/home/rosmatch/catkin_ws/src/match_additive_manufacturing/component/meshes/Layer1ShellTonicWallRounded500inWorkspace.stl</uri>
+              <scale>0.001 0.001 0.001</scale>
             </mesh>
           </geometry>
         </collision>

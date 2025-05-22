@@ -12,6 +12,7 @@ from additive_manufacturing_msgs.msg import Vector3Array
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(parent_dir+ "/component/")
 
+
 # Import mir_path to retrieve mirX and mirY
 # from path import ur_path
 from print_path import xTCP
@@ -27,7 +28,8 @@ class PathTransfomer:
         self.original_pub = rospy.Publisher('/ur_path_original', Path, queue_size=10)
         self.transformed_pub = rospy.Publisher('/ur_path_transformed', Path, queue_size=10)
         self.normals_pub = rospy.Publisher('/ur_path_normals', Vector3Array, queue_size=10)
-        
+        self.start_index = 100
+
         # Retrieve the original path
         self.x_coords = xTCP.xTCP()
         self.y_coords = yTCP.yTCP()
@@ -64,7 +66,7 @@ class PathTransfomer:
 
         rospy.logwarn("computing normals")
         
-        for i in range(1, len(x_coords)-1):
+        for i in range(self.start_index, len(x_coords)-1):
             # Compute the normal vector to the path at each point
             dx = x_coords[i+1] - x_coords[i-1]
             dy = y_coords[i+1] - y_coords[i-1]
@@ -92,7 +94,7 @@ class PathTransfomer:
         # Convert rotation from Euler angles to a quaternion
         quaternion = tf.quaternion_from_euler(rx, ry, rz)
         
-        for i in range(1, len(x_coords)-1):
+        for i in range(self.start_index, len(x_coords)-1):
             pose_stamped = PoseStamped()
             R = tf.quaternion_matrix(quaternion)[:3, :3]
 
@@ -120,15 +122,28 @@ class PathTransfomer:
         
     def create_paths(self):    
         # Fill original Path message
-        for x, y, z in zip(self.x_coords, self.y_coords, self.z_coords):
+        for i in range(self.start_index,len(self.x_coords)-1):
             pose_stamped = PoseStamped()
-            pose_stamped.pose.position.x = x
-            pose_stamped.pose.position.y = y
-            pose_stamped.pose.position.z = z  
-            pose_stamped.pose.orientation.w = 1.0  # no rotation for original path
-            pose_stamped.header.stamp = rospy.Time.now()
-            pose_stamped.header.frame_id = "map" # TODO: set this via parameter
+            pose_stamped.pose.position.x = self.x_coords[i]
+            pose_stamped.pose.position.y = self.y_coords[i]
+            pose_stamped.pose.position.z = self.z_coords[i]  
+            
+            orientation = math.atan2(self.y_coords[i+1] - self.y_coords[i], self.x_coords[i+1] - self.x_coords[i])
+            q = tf.quaternion_from_euler(0, 0, orientation)
+            pose_stamped.pose.orientation.x = q[0]
+            pose_stamped.pose.orientation.y = q[1]
+            pose_stamped.pose.orientation.z = q[2]
+            pose_stamped.pose.orientation.w = q[3]
+
+            # Set the current timestamp
+            if self.timestamps is not None:
+                pose_stamped.header.stamp = self.timestamps[i]
+            else:
+                pose_stamped.header.stamp = rospy.Time.now()
+            pose_stamped.header.frame_id = "map"
             self.original_path.poses.append(pose_stamped)
+
+
         
         # Transform and fill transformed Path message
         self.transformed_path.poses = self.apply_transformation(self.x_coords, self.y_coords, self.z_coords, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz, self.timestamps)

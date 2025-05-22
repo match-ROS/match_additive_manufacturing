@@ -10,9 +10,9 @@ import tf.transformations as tr
 from std_msgs.msg import Header
 from geometry_msgs.msg import Point, Pose
 from moveit_msgs.msg import DisplayTrajectory
+from moveit_msgs.msg import Constraints, JointConstraint
 import math
 from tf import transformations as tr
-
 
 class MoveManipulatorToTarget:
     def __init__(self):
@@ -79,13 +79,23 @@ class MoveManipulatorToTarget:
         # rotate the relative position
         relative_position = np.dot(rot_matrix[:3, :3], relative_position)
 
+        # relative orientation around the z-axis
+        target_tcp_pose = path_msg.poses[2]
+        # get path orientation
+        path_orientation = tr.euler_from_quaternion([target_tcp_pose.pose.orientation.x,
+                                                     target_tcp_pose.pose.orientation.y,
+                                                     target_tcp_pose.pose.orientation.z,
+                                                     target_tcp_pose.pose.orientation.w])
+        mir_orientation = rot[2]
+        
+
         relative_pose = [0.0,0.0,0.0,0.0,0.0,0.0]
         relative_pose[0] = relative_position[0]
         relative_pose[1] = relative_position[1]
         relative_pose[2] = relative_position[2]
         relative_pose[3] = math.pi
         relative_pose[4] = 0.0
-        relative_pose[5] = math.pi
+        relative_pose[5] = -mir_orientation + path_orientation[2] 
         
         # Set the target pose for MoveIt
         self.move_group.set_pose_target(relative_pose, end_effector_link=self.manipulator_tcp_link)
@@ -97,6 +107,24 @@ class MoveManipulatorToTarget:
         local_target_pose.pose.position.z = relative_position[2]
         self.local_target_pose_pub.publish(local_target_pose)
 
+        constraints = Constraints()
+        # Ellbogen oben (z. B. nahe -2.0 rad)
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/shoulder_lift_joint",
+            position=-1.5,
+            tolerance_above=1.0,
+            tolerance_below=1.0,
+            weight=1.0
+        ))
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/shoulder_pan_joint",
+            position=0.0,
+            tolerance_above=2.5,
+            tolerance_below=0.5,
+            weight=1.0
+        ))
+
+        self.move_group.set_path_constraints(constraints)
         
         # Plan and execute the motion
         plan_result = self.move_group.plan()
