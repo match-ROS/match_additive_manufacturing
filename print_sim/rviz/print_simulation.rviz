@@ -19,6 +19,7 @@ Panels:
         - /TwistStamped1
         - /Marker1
         - /Pose2
+        - /PointStamped1
       Splitter Ratio: 0.5
     Tree Height: 770
   - Class: rviz/Selection
@@ -543,6 +544,8 @@ Visualization Manager:
         All Enabled: false
         current_pose:
           Value: true
+        lookahead_point:
+          Value: true
         map:
           Value: false
         mur620a/UR10_l/base:
@@ -671,6 +674,8 @@ Visualization Manager:
           Value: false
         mur620a/us_2_frame:
           Value: false
+        target_point:
+          Value: true
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -680,6 +685,8 @@ Visualization Manager:
       Tree:
         map:
           current_pose:
+            {}
+          lookahead_point:
             {}
           mur620a/odom:
             mur620a/base_footprint:
@@ -766,6 +773,8 @@ Visualization Manager:
                   {}
                 mur620a/us_2_frame:
                   {}
+          target_point:
+            {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -845,6 +854,17 @@ Visualization Manager:
       Topic: /virtual_tcp_pose
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Class: rviz/PointStamped
+      Color: 204; 41; 204
+      Enabled: true
+      History Length: 10
+      Name: PointStamped
+      Queue Size: 10
+      Radius: 0.019999999552965164
+      Topic: /profile/center_point
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -873,7 +893,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 3.2403335571289062
+      Distance: 0.7941425442695618
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -881,17 +901,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 48.823883056640625
-        Y: 42.382781982421875
-        Z: -1.3113021850585938e-06
+        X: 49.42792510986328
+        Y: 42.15707015991211
+        Z: 0
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7853981852531433
+      Pitch: 0.5353987216949463
       Target Frame: <Fixed Frame>
-      Yaw: 0.7853981852531433
+      Yaw: 0.865398108959198
     Saved: ~
 Window Geometry:
   Displays:

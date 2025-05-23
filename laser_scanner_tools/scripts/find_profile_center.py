@@ -7,15 +7,17 @@ from geometry_msgs.msg import PointStamped
 from scipy.signal import medfilt, find_peaks
 import tf2_ros
 import tf2_geometry_msgs
+from collections import deque
+from std_msgs.msg import Float32
 
 
-class WeldSeamDetector:
+class ProfileCenterDetector:
     def __init__(self):
-        rospy.init_node("weld_seam_detector_node")
+        rospy.init_node("profile_center_detector_node")
 
         # Parameters
         self.scan_topic = "/mur620a/UR10_r/line_laser/scan"
-        self.output_topic = "/weld_seam/center_point"
+        self.output_topic = "/profile/center_point"
         self.tf_target_frame = "mur620a/base_link"
         self.median_filter_kernel = 5
         self.peak_prominence = 0.005
@@ -29,11 +31,13 @@ class WeldSeamDetector:
 
         # Publisher
         self.pub = rospy.Publisher(self.output_topic, PointStamped, queue_size=1)
+        self.offset_pub = rospy.Publisher("/layer_center/offset_mm", Float32, queue_size=1)
+        self.offset_buffer = deque(maxlen=100)  # gleitende Mittelung über 100 Scans
 
         # Subscriber
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_callback)
 
-        rospy.loginfo("Weld seam detector started.")
+        rospy.loginfo("Profile Center detector started.")
         rospy.spin()
 
     def scan_callback(self, msg: LaserScan):
@@ -50,8 +54,10 @@ class WeldSeamDetector:
         inverted = -filtered_cropped
         peaks, properties = find_peaks(inverted, prominence=self.peak_prominence)
 
+        
+
         if len(peaks) == 0:
-            rospy.logwarn("No weld seam peak found.")
+            rospy.logwarn("No profile peak found.")
             return
 
         # Get most prominent peak
@@ -59,6 +65,15 @@ class WeldSeamDetector:
         absolute_index = best_peak + offset
         range_at_peak = filtered[absolute_index]
         angle_at_peak = msg.angle_min + absolute_index * msg.angle_increment
+
+
+        center_idx = len(filtered) // 2
+        offset_idx = absolute_index - center_idx
+        offset_mm = offset_idx * msg.angle_increment * range_at_peak * 1000  # in mm
+        self.offset_buffer.append(offset_mm)
+
+        mean_offset = np.mean(self.offset_buffer)
+        self.offset_pub.publish(Float32(data=mean_offset))
 
         # Convert to Cartesian in laser frame
         x = range_at_peak * np.cos(angle_at_peak)
@@ -81,7 +96,7 @@ class WeldSeamDetector:
             point_robot = tf2_geometry_msgs.do_transform_point(point_laser, transform)
             self.pub.publish(point_robot)
 
-            rospy.loginfo_throttle(1.0, f"Weld seam: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
+            rospy.loginfo_throttle(1.0, f"Max: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
         except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
             rospy.logwarn(f"TF transform failed: {e}")
 
@@ -123,6 +138,6 @@ class WeldSeamDetector:
 
 if __name__ == '__main__':
     try:
-        WeldSeamDetector()
+        ProfileCenterDetector()
     except rospy.ROSInterruptException:
         pass
