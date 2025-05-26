@@ -51,7 +51,9 @@ class ProfileCenterDetector:
         filtered_cropped, offset = self.crop_scan_adaptive(filtered)
 
         # Invert and find peaks
-        inverted = -filtered_cropped
+        #inverted = -filtered_cropped
+        inverted = -filtered
+        offset = 0
         peaks, properties = find_peaks(inverted, prominence=self.peak_prominence)
 
         
