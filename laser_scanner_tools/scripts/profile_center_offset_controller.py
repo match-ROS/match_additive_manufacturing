@@ -13,10 +13,10 @@ class WeldSeamOffsetController:
         rospy.init_node("weld_seam_offset_controller")
 
         # Params
-        self.offset_topic = "/layer_center/offset_mm"
-        self.path_topic = "/ur_path_original"
-        self.index_topic = "/path_index"
-        self.cmd_topic = "/mur620a/UR10_r/twist_fb_command"
+        self.offset_topic = rospy.get_param("~offset_topic", "/layer_center/offset_mm")
+        self.path_topic = rospy.get_param("~path_topic", "/ur_path_original")
+        self.index_topic = rospy.get_param("~index_topic", "/path_index")
+        self.cmd_topic = rospy.get_param("~cmd_topic", "/mur620a/UR10_r/twist_fb_command")
 
         self.max_correction = 0.05  # m/s
         self.gain = 2.0  # proportional gain (m/s per mm)

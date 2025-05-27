@@ -16,9 +16,10 @@ class ProfileCenterDetector:
         rospy.init_node("profile_center_detector_node")
 
         # Parameters
-        self.scan_topic = "/mur620a/UR10_r/line_laser/scan"
-        self.output_topic = "/profile/center_point"
-        self.tf_target_frame = "mur620a/base_link"
+        self.scan_topic = rospy.get_param("~scan_topic", "/mur620a/UR10_r/line_laser/scan")
+        self.center_point_topic = rospy.get_param("~center_point_topic", "/profile/center_point")
+        self.tf_target_frame = rospy.get_param("~tf_target_frame", "mur620a/base_link")
+        self.lateral_offset_topic = rospy.get_param("~lateral_offset_topic", "/layer_center/offset_mm")
         self.median_filter_kernel = 5
         self.peak_prominence = 0.005
         self.gradient_threshold = 0.02
@@ -30,9 +31,9 @@ class ProfileCenterDetector:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Publisher
-        self.pub = rospy.Publisher(self.output_topic, PointStamped, queue_size=1)
-        self.offset_pub = rospy.Publisher("/layer_center/offset_mm", Float32, queue_size=1)
-        self.offset_buffer = deque(maxlen=100)  # gleitende Mittelung über 100 Scans
+        self.pub = rospy.Publisher(self.center_point_topic, PointStamped, queue_size=1)
+        self.offset_pub = rospy.Publisher(self.lateral_offset_topic, Float32, queue_size=1)
+        self.offset_buffer = deque(maxlen=10)  # gleitende Mittelung über 100 Scans
 
         # Subscriber
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_callback)
