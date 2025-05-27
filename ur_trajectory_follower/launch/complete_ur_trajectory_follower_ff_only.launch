@@ -38,7 +38,7 @@
     </node>
 
     <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
-        <arg name="virtual_line_threshold" value="0.01" />
+        <arg name="virtual_line_threshold" value="0.001" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />

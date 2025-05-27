@@ -7,6 +7,9 @@ This repository contains packages related to additive manufacturing processes. B
 ### 1. ur_trajectory_follower
 ![ur_trajectory_follower control structure](img/Control_Structure_UR.png)
 ![ur_trajectory_follower control structure using feedforward instead of control](img/Control_Structure_UR_ff.png)
+
+For details on the `ur_trajectory_follower` package, please refer to the [README](ur_trajectory_follower/README.md) file in the `ur_trajectory_follower` directory.
+
 ## Prerequisites
 
 This package requires the following to be installed:
