@@ -17,12 +17,12 @@ This package requires the following to be installed:
 
 ## Installation
 
-To install the packages, clone the repository and build the workspace:
+To install the packages, clone the repository and run the setup script to install dependencies and build the workspace:
 
 ```bash
-git clone https://github.com/yourusername/match_additive_manufacturing.git
+git clone https://github.com/match-ROS/match_additive_manufacturing.git
 cd match_additive_manufacturing
-catkin_make
+./setup.sh
 ```
 
 ## Usage
