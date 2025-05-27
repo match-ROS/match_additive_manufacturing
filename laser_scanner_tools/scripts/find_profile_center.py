@@ -16,9 +16,10 @@ class ProfileCenterDetector:
         rospy.init_node("profile_center_detector_node")
 
         # Parameters
-        self.scan_topic = "/mur620a/UR10_r/line_laser/scan"
-        self.output_topic = "/profile/center_point"
-        self.tf_target_frame = "mur620a/base_link"
+        self.scan_topic = rospy.get_param("~scan_topic", "/mur620a/UR10_r/line_laser/scan")
+        self.center_point_topic = rospy.get_param("~center_point_topic", "/profile/center_point")
+        self.tf_target_frame = rospy.get_param("~tf_target_frame", "mur620a/base_link")
+        self.lateral_offset_topic = rospy.get_param("~lateral_offset_topic", "/layer_center/offset_mm")
         self.median_filter_kernel = 5
         self.peak_prominence = 0.005
         self.gradient_threshold = 0.02
@@ -30,9 +31,9 @@ class ProfileCenterDetector:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         # Publisher
-        self.pub = rospy.Publisher(self.output_topic, PointStamped, queue_size=1)
-        self.offset_pub = rospy.Publisher("/layer_center/offset_mm", Float32, queue_size=1)
-        self.offset_buffer = deque(maxlen=100)  # gleitende Mittelung über 100 Scans
+        self.pub = rospy.Publisher(self.center_point_topic, PointStamped, queue_size=1)
+        self.offset_pub = rospy.Publisher(self.lateral_offset_topic, Float32, queue_size=1)
+        self.offset_buffer = deque(maxlen=10)  # gleitende Mittelung über 100 Scans
 
         # Subscriber
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_callback)
@@ -51,13 +52,15 @@ class ProfileCenterDetector:
         filtered_cropped, offset = self.crop_scan_adaptive(filtered)
 
         # Invert and find peaks
-        inverted = -filtered_cropped
+        #inverted = -filtered_cropped
+        inverted = -filtered
+        offset = 0
         peaks, properties = find_peaks(inverted, prominence=self.peak_prominence)
 
         
 
         if len(peaks) == 0:
-            rospy.logwarn("No profile peak found.")
+            rospy.logwarn_throttle(5,"No profile peak found.")
             return
 
         # Get most prominent peak
@@ -96,7 +99,7 @@ class ProfileCenterDetector:
             point_robot = tf2_geometry_msgs.do_transform_point(point_laser, transform)
             self.pub.publish(point_robot)
 
-            rospy.loginfo_throttle(1.0, f"Max: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
+            # rospy.loginfo_throttle(1.0, f"Max: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
         except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
             rospy.logwarn(f"TF transform failed: {e}")
 
