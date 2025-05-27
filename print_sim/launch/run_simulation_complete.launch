@@ -44,6 +44,12 @@
     <include file="$(find mir_trajectory_follower)/launch/mir_trajectory_follower.launch">
     </include>
 
+    <include file="$(find laser_scanner_tools)/launch/find_profile_center.launch">
+    </include>
+
+    <include file="$(find laser_scanner_tools)/launch/profile_center_offset_controller.launch">
+    </include>
+
 
 
     <!-- launch virtual object -->

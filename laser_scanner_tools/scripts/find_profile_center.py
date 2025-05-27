@@ -60,7 +60,7 @@ class ProfileCenterDetector:
         
 
         if len(peaks) == 0:
-            rospy.logwarn("No profile peak found.")
+            rospy.logwarn_throttle(5,"No profile peak found.")
             return
 
         # Get most prominent peak
@@ -99,7 +99,7 @@ class ProfileCenterDetector:
             point_robot = tf2_geometry_msgs.do_transform_point(point_laser, transform)
             self.pub.publish(point_robot)
 
-            rospy.loginfo_throttle(1.0, f"Max: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
+            # rospy.loginfo_throttle(1.0, f"Max: x={point_robot.point.x:.3f}, y={point_robot.point.y:.3f}, z={point_robot.point.z:.3f}")
         except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
             rospy.logwarn(f"TF transform failed: {e}")
 

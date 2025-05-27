@@ -67,7 +67,7 @@ class WeldSeamOffsetController:
         cmd.linear.y = np.clip(correction_y * self.gain, -self.max_correction, self.max_correction)
         self.cmd_pub.publish(cmd)
 
-        rospy.loginfo_throttle(1.0, f"Correction (x={cmd.linear.x:.3f}, y={cmd.linear.y:.3f})")
+        # rospy.loginfo_throttle(1.0, f"Correction (x={cmd.linear.x:.3f}, y={cmd.linear.y:.3f})")
 
 if __name__ == '__main__':
     try:
