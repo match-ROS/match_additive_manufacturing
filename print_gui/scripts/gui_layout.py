@@ -1,7 +1,8 @@
 import threading
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
 from PyQt5.QtCore import QTimer, Qt
-from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, enable_all_urs, launch_ros, move_to_initial_pose, parse_mir_path, parse_ur_path
+from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers
+from ros_interface import enable_all_urs, move_to_initial_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose
 from ros_interface import ROSInterface
 
 class ROSGui(QWidget):
@@ -122,9 +123,8 @@ class ROSGui(QWidget):
         print_function_buttons = {
             "Parse MiR Path": lambda: parse_mir_path(self),
             "Parse UR Path": lambda: parse_ur_path(self),
-            "Turn on Twist Controllers": lambda: turn_on_twist_controllers(self),
-            "Move to Initial Pose Left": lambda: move_to_initial_pose(self, "UR10_l"),
-            "Move to Initial Pose Right": lambda: move_to_initial_pose(self, "UR10_r"),
+            "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
+            "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
         }
 
         for text, function in print_function_buttons.items():

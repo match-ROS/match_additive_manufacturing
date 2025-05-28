@@ -273,3 +273,47 @@ def parse_mir_path(gui):
 def parse_ur_path(gui):
     command = "roslaunch parse_ur_path parse_ur_path.launch"
     subprocess.Popen(command, shell=True)
+
+def move_mir_to_start_pose(gui):
+    """Moves the MIR robot to the start pose."""
+    selected_robots = gui.get_selected_robots()
+    if selected_robots is None:
+        print("MIR robot not selected. Skipping move to start pose.")
+        return
+
+    # Ensure only one MIR robot is selected
+    if len(selected_robots) != 1:
+        print("Please select only the MIR robot to move to the start pose.")
+        return
+    command = "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:=selected_robots[0]"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+def move_ur_to_start_pose(gui):
+    """Moves the UR robot to the start pose."""
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+
+    if not selected_robots or not selected_urs:
+        print("No robots or URs selected. Skipping move to start pose.")
+        return
+
+    # Ensure only one UR and one mir robot is selected
+    if len(selected_robots) != 1 or len(selected_urs) != 1:
+        print("Please select exactly one UR and one MIR robot to move to the start pose.")
+        return
+
+    # ToDo: to risky to use for now
+    if selected_urs[0] == "UR10_l":
+        move_group_name = "UR_arm_l"
+        planning_group = "UR10_l/tool0"
+    else:
+        move_group_name = "UR_arm_r"
+        planning_group = "UR10_r/tool0"
+
+
+    for robot in selected_robots:
+        for ur in selected_urs:
+            command = f"ROS_NAMESPACE={robot} roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot}"
+            print(f"Executing: {command}")
+            subprocess.Popen(command, shell=True)
