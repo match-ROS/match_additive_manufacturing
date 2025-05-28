@@ -1,9 +1,9 @@
 
-    % TCP           x,y,z           [m]
+    % TCP           xTCP,y...,z...  [m]
     % timestamp     t               [s]
     % print speed   v               [m/s]
     % MIR           x,y,z           [m]
-    % VecMIR        x and y vector  []
+    % VecMIR        xVec, yVec      []
     % Index         k               []
     % TCP speed     vx,vy,vzTCP     [m/s]
     % MIR speed     vxMIR, vyMIR    [m/s, rad/s]
