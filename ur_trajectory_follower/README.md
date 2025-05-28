@@ -22,6 +22,11 @@ To start the UR trajectory follower with feed_rate in all directions and _no_ or
 ```sh
 roslaunch ur_trajectory_follower complete_ur_trajectory_follower.launch
 ```
+### HW
+Topics etc. have to be adjusted. For Exp. for the compensation:
+```sh
+roslaunch ur_trajectory_follower compensate_mir.launch ur_cmd_vel_local_topic:="/mur620d/UR10_r/twist_controller/command_collision_free" robot_name:=mur620d mir_odom_topic:="mur620d/odom"
+```
 
 ## Topics
 

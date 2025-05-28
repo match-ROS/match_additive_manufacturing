@@ -1,10 +1,12 @@
 <launch>
+    <arg name="robot_name" default="mur620a" doc="Name of the robot to be used in the launch file." />
+"
     <!-- Node that runs the path transformer script -->
     <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower_pure_pursuit_RL.py" output="screen">
         <!-- Transformation parameters -->
         <param name="mir_path_topic" value="/mir_path_original" />
-        <param name="mir_pose_topic" value="/mur620a/mir_pose_simple" />
-        <param name="cmd_vel_topic" value="mur620a/mobile_base_controller/cmd_vel" />
+        <param name="mir_pose_topic" value="/$(arg robot_name)/mir_pose_simple" />
+        <param name="cmd_vel_topic" value="$(arg robot_name)/cmd_vel" />
         <param name="trajectory_index_topic" value="/path_index" />
     </node>
 </launch>
