@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from match_lib.robot_mats.jacobians.jacobian_platform import getJacobianPlatformWithEEF
+from match_lib_package.robot_mats.jacobians.jacobian_platform import getJacobianPlatformWithEEF
 from helper.ur_helper import negateTwist
 import numpy as np
 import math

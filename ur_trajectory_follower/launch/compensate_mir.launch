@@ -14,6 +14,7 @@
         <!-- Custom parameters -->
         <param name="base_mir_frame_id" value="$(arg base_mir_frame_id)" />
         <param name="base_ur_frame_id" value="$(arg base_ur_frame_id)" />
+        <param name="use_odom" value="true" />
         
         <!-- Topic remapping -->
         <remap from="~ur_pose" to="$(arg ur_pose_topic)" />
