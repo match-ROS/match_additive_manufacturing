@@ -1,0 +1,275 @@
+import subprocess
+import yaml
+import threading
+import rospy
+from geometry_msgs.msg import PoseStamped
+from PyQt5.QtWidgets import QTableWidgetItem
+from PyQt5.QtCore import QTimer
+import tf.transformations as tf_trans
+from rosgraph_msgs.msg import Log
+
+import rospy
+from geometry_msgs.msg import PoseStamped
+
+class ROSInterface:
+    def __init__(self, gui):
+        self.gui = gui
+        self.workspace_name = "catkin_ws_recker"
+        self.updated_poses = {}
+        self.virtual_object_pose = None
+        
+    def subscribe_to_relative_poses(self):
+        """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
+        selected_robots = self.gui.get_selected_robots()
+        selected_urs = self.gui.get_selected_urs()
+
+        if not selected_robots or not selected_urs:
+            print("No robots or URs selected. Skipping update.")
+            return
+
+        if not rospy.core.is_initialized():
+            rospy.init_node("update_relative_poses", anonymous=True, disable_signals=True)
+        self.updated_poses = {}
+
+        def callback(data, robot_ur):
+            """Receives relative pose and extracts both position (x, y, z) and orientation (Rx, Ry, Rz) in Euler angles."""
+            
+            # Extract position
+            position = data.pose.position
+            x, y, z = position.x, position.y, position.z
+
+            # Extract orientation as quaternion
+            orientation = data.pose.orientation
+            quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
+
+            # Convert quaternion to Euler angles (roll, pitch, yaw)
+            rx, ry, rz = tf_trans.euler_from_quaternion(quaternion)
+
+            # Store the values in the dictionary
+            self.updated_poses[robot_ur] = {"x": x, "y": y, "z": z, "rx": rx, "ry": ry, "rz": rz}
+
+            print(f"✅ Received pose for {robot_ur}: {self.updated_poses[robot_ur]}")
+
+            # Check if all poses have been received, then trigger save
+            if len(self.updated_poses) >= len(selected_robots) * len(selected_urs):
+                rospy.signal_shutdown("Pose update complete")
+                self.save_poses_to_yaml()
+
+
+
+        for robot in selected_robots:
+            for ur in selected_urs:
+                topic_name = f"/{robot}/{ur}/relative_pose"
+                rospy.Subscriber(topic_name, PoseStamped, callback, (robot, ur))
+                print(f"Subscribed to {topic_name}")
+
+        rospy.spin()
+
+    def start_roscore(self):
+        """Starts roscore on the roscore PC."""
+        command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; roscore; exec bash'"
+        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+
+    def start_mocap(self):
+        """Starts the motion capture system on the roscore PC."""
+        command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; source ~/catkin_ws/devel/setup.bash; roslaunch launch_mocap mocap_launch.launch; exec bash'"
+        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+
+    def start_sync(self):
+        """Starts file synchronization between workspace and selected robots."""
+        selected_robots = self.gui.get_selected_robots()
+        self.gui.btn_sync.setStyleSheet("background-color: lightgreen;")  # Mark sync as active
+        
+        for robot in selected_robots:
+            command = f"while inotifywait -r -e modify,create,delete,move ~/{self.workspace_name}/src; do \n" \
+                      f"rsync --delete -avzhe ssh ~/{self.workspace_name}/src rosmatch@{robot}:~/{self.workspace_name}/ \n" \
+                      "done"
+            subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"]) 
+
+    def update_button_status(self):
+        """Checks if roscore and mocap are running and updates button colors."""
+        roscore_running = self.is_ros_node_running("/rosout")
+        mocap_running = self.is_ros_node_running("/qualisys")
+
+        self.gui.btn_roscore.setStyleSheet("background-color: lightgreen;" if roscore_running else "background-color: lightgray;")
+        self.gui.btn_mocap.setStyleSheet("background-color: lightgreen;" if mocap_running else "background-color: lightgray;")
+
+    def is_ros_node_running(self, node_name):
+        """Checks if a specific ROS node is running by using `rosnode list`."""
+        try:
+            output = subprocess.check_output("rosnode list", shell=True).decode()
+            return node_name in output.split("\n")
+        except subprocess.CalledProcessError:
+            return False
+        
+
+
+def launch_ros(gui, package, launch_file):
+    selected_robots = gui.get_selected_robots()
+    robot_names_str = "[" + ",".join(f"'{r}'" for r in selected_robots) + "]"
+
+    command = f"roslaunch {package} {launch_file} robot_names:={robot_names_str}"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+
+
+
+
+def start_status_update(gui):
+    threading.Thread(target=update_status, args=(gui,), daemon=True).start()
+
+def update_status(gui):
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+    active_counts = {"force_torque_sensor_controller": 0, "twist_controller": 0, "arm_controller": 0, "admittance": 0}
+    total_count = len(selected_robots) * len(selected_urs)
+    
+    for robot in selected_robots:
+        for ur in selected_urs:
+            service_name = f"/{robot}/{ur}/controller_manager/list_controllers"
+            try:
+                output = subprocess.check_output(f"rosservice call {service_name}", shell=True).decode()
+                controllers = yaml.safe_load(output).get("controller", [])
+                for controller in controllers:
+                    if controller.get("state") == "running":
+                        active_counts[controller["name"]] += 1
+            except Exception:
+                pass
+    
+    status_text = """
+    Force/Torque Sensor: {}/{} {}
+    Twist Controller: {}/{} {}
+    Arm Controller: {}/{} {}
+    Admittance Controller: {}/{} {}
+    """.format(
+        active_counts["force_torque_sensor_controller"], total_count, get_status_symbol(active_counts["force_torque_sensor_controller"], total_count),
+        active_counts["twist_controller"], total_count, get_status_symbol(active_counts["twist_controller"], total_count),
+        active_counts["arm_controller"], total_count, get_status_symbol(active_counts["arm_controller"], total_count),
+        active_counts["admittance"], total_count, get_status_symbol(active_counts["admittance"], total_count),
+    )
+    
+    gui.status_label.setText(status_text)
+
+def get_status_symbol(active, total):
+    if active == total:
+        return "✅"
+    elif active > 0:
+        return "⚠️"
+    return "❌"
+
+def open_rviz():
+    command = "roslaunch print_gui launch_rviz.launch"
+    subprocess.Popen(command, shell=True)
+
+def launch_drivers(gui):
+    selected_robots = gui.get_selected_robots()
+    for robot in selected_robots:
+        command = f"ssh -t -t {robot} 'source ~/.bashrc; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
+        print(f"Starting driver for {robot}...")
+        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+
+def quit_drivers():
+    print("Stopping all drivers...")
+    subprocess.Popen("pkill -f 'roslaunch'", shell=True)
+
+
+
+def turn_on_arm_controllers(gui):
+    """Turns on all arm controllers for the selected robots."""
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+
+    if not selected_robots or not selected_urs:
+        print("No robots or URs selected. Skipping launch.")
+        return
+
+    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
+    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+
+    command = f"roslaunch print_gui turn_on_all_arm_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+def turn_on_twist_controllers(gui):
+    """Turns on all twist controllers for the selected robots."""
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+
+    if not selected_robots or not selected_urs:
+        print("No robots or URs selected. Skipping launch.")
+        return
+
+    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
+    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+
+    command = f"roslaunch print_gui turn_on_all_twist_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+def enable_all_urs(gui):
+    """Enables all UR robots for the selected configurations."""
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+
+    if not selected_robots or not selected_urs:
+        print("No robots or URs selected. Skipping launch.")
+        return
+
+    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
+    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+
+    command = f"roslaunch print_gui enable_all_URs.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+
+def launch_drivers(gui):
+    """SSH into the selected robots and start the drivers in separate terminals."""
+    selected_robots = gui.get_selected_robots()
+
+    for robot in selected_robots:
+        workspace = gui.workspace_name
+        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
+        print(f"Opening SSH session and launching driver for: {robot}")
+
+        # Open a new terminal with SSH session + driver launch + keep open
+        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+
+def quit_drivers(gui):
+    """Terminates all running driver sessions and closes terminals."""
+    print("Stopping all driver sessions...")
+    try:
+        subprocess.Popen("pkill -f 'ssh -t -t'", shell=True)
+        subprocess.Popen("pkill -f 'gnome-terminal'", shell=True)
+    except Exception as e:
+        print(f"Error stopping processes: {e}")
+
+def move_to_initial_pose(gui, UR_prefix):
+    """Moves the selected robots to the initial pose with the correct namespace and move_group_name."""
+    selected_robots = gui.get_selected_robots()
+
+    # Set move_group_name based on UR_prefix
+    move_group_name = "UR_arm_l" if UR_prefix == "UR10_l" else "UR_arm_r"
+
+    for robot in selected_robots:
+        # Special case for mur620c with UR10_r
+        if robot == "mur620c" and UR_prefix == "UR10_r":
+            home_position = "handling_position_wide_lift_mur620c"
+        elif robot in ["mur620a", "mur620b"]:
+            home_position = "handling_position_wide"
+        else:  # Default case for mur620c, mur620d
+            home_position = "handling_position_wide_lift"
+
+        # ROS launch command with namespace
+        command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name}"
+        print(f"Executing: {command}")
+        subprocess.Popen(command, shell=True)
+
+def parse_mir_path(gui):
+    command = "roslaunch parse_mir_path parse_mir_path.launch"
+    subprocess.Popen(command, shell=True)
+
+def parse_ur_path(gui):
+    command = "roslaunch parse_ur_path parse_ur_path.launch"
+    subprocess.Popen(command, shell=True)
