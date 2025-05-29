@@ -1,8 +1,8 @@
 import threading
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
 from PyQt5.QtCore import QTimer, Qt
-from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers
-from ros_interface import enable_all_urs, move_to_initial_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose
+from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
+from ros_interface import enable_all_urs, move_to_initial_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
 
 class ROSGui(QWidget):
@@ -10,7 +10,7 @@ class ROSGui(QWidget):
         super().__init__()
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Multi-Robot Demo")
-        self.setGeometry(100, 100, 3200, 2500)  # Increased width
+        self.setGeometry(100, 100, 1000, 600)  # Increased width
         
         self.workspace_name = "catkin_ws_recker"
         main_layout = QHBoxLayout()
@@ -43,7 +43,7 @@ class ROSGui(QWidget):
         ur_layout.addWidget(QLabel("Select URs:"))
         self.ur10_l = QCheckBox("UR10_l")
         self.ur10_r = QCheckBox("UR10_r")
-        self.ur10_l.setChecked(True)
+        self.ur10_l.setChecked(False)
         self.ur10_r.setChecked(True)
         ur_layout.addWidget(self.ur10_l)
         ur_layout.addWidget(self.ur10_r)
@@ -125,6 +125,9 @@ class ROSGui(QWidget):
             "Parse UR Path": lambda: parse_ur_path(self),
             "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
             "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
+            "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
+            "Increment Path Index": lambda: increment_path_index(self),
+            "Stop MiR Motion": lambda: stop_mir_motion(self),
         }
 
         for text, function in print_function_buttons.items():

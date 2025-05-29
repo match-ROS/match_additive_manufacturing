@@ -285,7 +285,7 @@ def move_mir_to_start_pose(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to move to the start pose.")
         return
-    command = "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:=selected_robots[0]"
+    command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]}"
     print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)
 
@@ -314,6 +314,33 @@ def move_ur_to_start_pose(gui):
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"ROS_NAMESPACE={robot} roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot}"
+            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot}"
             print(f"Executing: {command}")
             subprocess.Popen(command, shell=True)
+
+def mir_follow_trajectory(gui):
+    """Moves the MIR robot along a predefined trajectory."""
+    selected_robots = gui.get_selected_robots()
+    if not selected_robots:
+        print("No MIR robot selected. Skipping follow trajectory.")
+        return
+    # Ensure only one MIR robot is selected
+    if len(selected_robots) != 1:
+        print("Please select only the MIR robot to follow the trajectory.")
+        return
+    command = f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={selected_robots[0]}"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+def increment_path_index(gui):
+    """Increments the path index for the MIR robot."""
+    command = f"roslaunch print_gui increment_path_index.launch"
+    print(f"Executing: {command}")
+    subprocess.Popen(command, shell=True)
+
+
+def stop_mir_motion(self):
+        """Stops any running Lissajous motion by killing the process."""
+        command = "pkill -f mir_trajectory_follower"
+        print(f"Stopping MiR motion with command: {command}")
+        subprocess.Popen(command, shell=True)
