@@ -344,3 +344,7 @@ def stop_mir_motion(self):
         command = "pkill -f mir_trajectory_follower"
         print(f"Stopping MiR motion with command: {command}")
         subprocess.Popen(command, shell=True)
+
+        command = "pkill -f increment_path_index"
+        print(f"Stopping path index increment with command: {command}")
+        subprocess.Popen(command, shell=True)
