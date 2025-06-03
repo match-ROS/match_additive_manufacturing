@@ -1,7 +1,7 @@
 <launch>
     <!-- Argument für die Liste der Roboter -->
     <arg name="path_index_topic" default="/path_index" />
-    <arg name="initial_path_index" default="0" />
+    <arg name="initial_path_index" default="10" />
 
     <node pkg="print_gui" type="increment_path_index.py" name="increment_path_index" output="screen">
         <param name="path_index_topic" value="$(arg path_index_topic)" />
