@@ -245,7 +245,7 @@ def quit_drivers(gui):
     except Exception as e:
         print(f"Error stopping processes: {e}")
 
-def move_to_initial_pose(gui, UR_prefix):
+def move_to_home_pose(gui, UR_prefix):
     """Moves the selected robots to the initial pose with the correct namespace and move_group_name."""
     selected_robots = gui.get_selected_robots()
 
@@ -255,11 +255,11 @@ def move_to_initial_pose(gui, UR_prefix):
     for robot in selected_robots:
         # Special case for mur620c with UR10_r
         if robot == "mur620c" and UR_prefix == "UR10_r":
-            home_position = "handling_position_wide_lift_mur620c"
+            home_position = "Home_custom"
         elif robot in ["mur620a", "mur620b"]:
-            home_position = "handling_position_wide"
+            home_position = "Home_custom"
         else:  # Default case for mur620c, mur620d
-            home_position = "handling_position_wide_lift"
+            home_position = "Home_custom"
 
         # ROS launch command with namespace
         command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name}"
