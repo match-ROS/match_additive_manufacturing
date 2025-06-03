@@ -14,7 +14,6 @@ from geometry_msgs.msg import PoseStamped
 class ROSInterface:
     def __init__(self, gui):
         self.gui = gui
-        self.workspace_name = "catkin_ws_recker"
         self.updated_poses = {}
         self.virtual_object_pose = None
         
@@ -78,6 +77,7 @@ class ROSInterface:
     def start_sync(self):
         """Starts file synchronization between workspace and selected robots."""
         selected_robots = self.gui.get_selected_robots()
+        self.workspace_name = self.gui.get_workspace_name()
         self.gui.btn_sync.setStyleSheet("background-color: lightgreen;")  # Mark sync as active
         
         for robot in selected_robots:
@@ -227,9 +227,10 @@ def enable_all_urs(gui):
 def launch_drivers(gui):
     """SSH into the selected robots and start the drivers in separate terminals."""
     selected_robots = gui.get_selected_robots()
+    workspace_name = gui.get_workspace_name()
 
     for robot in selected_robots:
-        workspace = gui.workspace_name
+        workspace = workspace_name
         command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
         print(f"Opening SSH session and launching driver for: {robot}")
 

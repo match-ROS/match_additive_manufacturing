@@ -1,9 +1,10 @@
 import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
 from PyQt5.QtCore import QTimer, Qt
 from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
+
 
 class ROSGui(QWidget):
     def __init__(self):
@@ -13,6 +14,7 @@ class ROSGui(QWidget):
         self.setGeometry(100, 100, 1000, 600)  # Increased width
         
         self.workspace_name = "catkin_ws_recker"
+        self.workspace_input = None
         main_layout = QHBoxLayout()
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.ros_interface.update_button_status)
@@ -84,6 +86,14 @@ class ROSGui(QWidget):
             btn.clicked.connect(lambda checked, f=function: f())
             btn.setStyleSheet("background-color: lightgray;")  # Standardfarbe
             setup_layout.addWidget(btn)
+
+        self.workspace_input = QLineEdit()
+        self.workspace_input.setText(self.workspace_name)
+        self.workspace_input.setPlaceholderText("Enter workspace name")
+        setup_layout.addWidget(QLabel("Workspace Name:"))
+        setup_layout.addWidget(self.workspace_input)
+
+
         setup_group.setLayout(setup_layout)
         left_layout.addWidget(setup_group)
         
@@ -224,3 +234,6 @@ class ROSGui(QWidget):
         
         # Default value if no match is found
         return [0.0, 0.0, 0.0]
+
+    def get_workspace_name(self):
+        return self.workspace_input.text() if self.workspace_input else self.workspace_name
