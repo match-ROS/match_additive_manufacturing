@@ -1,6 +1,7 @@
 import threading
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
 from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
@@ -12,6 +13,7 @@ class ROSGui(QWidget):
         super().__init__()
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Multi-Robot Demo")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/recker_head_small.jpg')))
         self.setGeometry(100, 100, 1000, 600)  # Increased width
         
         main_layout = QHBoxLayout()
