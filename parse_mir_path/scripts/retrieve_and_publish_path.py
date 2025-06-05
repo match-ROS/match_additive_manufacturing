@@ -19,6 +19,8 @@ sys.path.append(parent_dir+ "/component/")
 from print_path import xMIR
 from print_path import yMIR
 from print_path import nL
+from print_path import xVecMIRx
+from print_path import xVecMIRy
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
@@ -61,6 +63,8 @@ def publish_paths():
     # Retrieve the original path
     x_coords = xMIR.xMIR() 
     y_coords = yMIR.yMIR()
+    orientation_vector_x = xVecMIRx.xVecMIRx()
+    orientation_vector_y = xVecMIRy.xVecMIRy()
     layer_number = nL.nL()
     
     # Get transformation parameters from ROS params
@@ -87,8 +91,9 @@ def publish_paths():
         pose_stamped.pose.position.z = layer_number[i]  # assuming z=0 for 2D path
         
         # the path should always face towards the next point
-        orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
-        q = tf.quaternion_from_euler(0, 0, orientation)
+        #orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
+        phi = math.atan2(orientation_vector_y[i], orientation_vector_x[i])
+        q = tf.quaternion_from_euler(0, 0, phi)
         pose_stamped.pose.orientation.x = q[0]
         pose_stamped.pose.orientation.y = q[1]
         pose_stamped.pose.orientation.z = q[2]
