@@ -87,7 +87,8 @@ class ROSGui(QWidget):
             setup_layout.addWidget(btn)
 
         self.workspace_input = QLineEdit()
-        self.workspace_input.setText(self.get_default_workspace_name())
+        default_path = self.get_relative_workspace_path()
+        self.workspace_input.setText(default_path)
         self.workspace_input.setPlaceholderText("Enter workspace name")
         setup_layout.addWidget(QLabel("Workspace Name:"))
         setup_layout.addWidget(self.workspace_input)
@@ -155,23 +156,12 @@ class ROSGui(QWidget):
 
         self.setLayout(main_layout)
 
-    def get_default_workspace_name(self):
-        import os
-        # Startpunkt: voller Pfad zu gui_layout.py
-        current_path = os.path.abspath(__file__)
-        
-        # Schrittweise nach oben gehen, bis "src" gefunden wird
-        while current_path != "/":
-            if os.path.basename(current_path) == "src":
-                workspace_path = os.path.dirname(current_path)
-                return os.path.basename(workspace_path)
-            current_path = os.path.dirname(current_path)
-        
-        return "catkin_ws"  # Fallback
-
-
-
-
+    def get_relative_workspace_path(self):
+        full_path = self.get_full_workspace_path()
+        home_path = os.path.expanduser("~")
+        if full_path.startswith(home_path):
+            return os.path.relpath(full_path, home_path)
+        return full_path
 
     def update_virtual_object_pose(self, pose):
         """Updates the GUI table with the latest virtual object pose."""
