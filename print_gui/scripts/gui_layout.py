@@ -1,8 +1,8 @@
 import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
-from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
+from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
 import os
@@ -56,10 +56,34 @@ class ROSGui(QWidget):
         selection_group.setLayout(selection_layout)
         left_layout.addWidget(selection_group)
         
-        self.check_set_reference = QCheckBox("Set reference at runtime")
-        self.check_set_reference.setChecked(True)
-        left_layout.addWidget(self.check_set_reference)
-        
+
+                # Override Slider
+        override_layout = QVBoxLayout()
+        override_label = QLabel("Override (%)")
+        override_label.setAlignment(Qt.AlignCenter)
+
+        self.override_slider = QSlider(Qt.Horizontal)
+        self.override_slider.setMinimum(0)
+        self.override_slider.setMaximum(100)
+        self.override_slider.setValue(50)
+        self.override_slider.setTickInterval(10)
+        self.override_slider.setTickPosition(QSlider.TicksBelow)
+
+        self.override_value_label = QLabel("50%")
+        self.override_value_label.setAlignment(Qt.AlignCenter)
+
+        self.override_slider.valueChanged.connect(
+            lambda value: self.override_value_label.setText(f"{value}%")
+        )
+
+        override_layout.addWidget(override_label)
+        override_layout.addWidget(self.override_slider)
+        override_layout.addWidget(self.override_value_label)
+
+        left_layout.addLayout(override_layout)
+
+
+       
         # Setup Functions Group
         setup_group = QGroupBox("Setup Functions")
         setup_layout = QVBoxLayout()
@@ -140,6 +164,7 @@ class ROSGui(QWidget):
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
             "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
+            "UR Follow Trajectory": lambda: ur_follow_trajectory(self),
         }
 
         for text, function in print_function_buttons.items():
@@ -254,3 +279,6 @@ class ROSGui(QWidget):
 
     def get_workspace_name(self):
         return self.workspace_input.text().strip()
+
+    def get_override_value(self):
+        return self.override_slider.value()

@@ -358,3 +358,23 @@ def stop_mir_motion(self):
         command = "pkill -f increment_path_index"
         print(f"Stopping path index increment with command: {command}")
         subprocess.Popen(command, shell=True)
+
+def ur_follow_trajectory(gui):
+    """Moves the UR robot along a predefined trajectory."""
+    selected_robots = gui.get_selected_robots()
+    selected_urs = gui.get_selected_urs()
+
+    if not selected_robots or not selected_urs:
+        print("No UR robot selected. Skipping follow trajectory.")
+        return
+
+    # Ensure only one UR and one MIR robot is selected
+    if len(selected_robots) != 1 or len(selected_urs) != 1:
+        print("Please select exactly one UR and one MIR robot to follow the trajectory.")
+        return
+
+    for robot in selected_robots:
+        for ur in selected_urs:
+            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}"
+            print(f"Executing: {command}")
+            subprocess.Popen(command, shell=True)
