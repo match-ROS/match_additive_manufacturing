@@ -13,7 +13,7 @@ class ROSGui(QWidget):
         super().__init__()
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Multi-Robot Demo")
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/recker_head_small.jpg')))
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
         self.setGeometry(100, 100, 1000, 600)  # Increased width
         
         main_layout = QHBoxLayout()
