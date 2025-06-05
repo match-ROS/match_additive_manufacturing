@@ -4,6 +4,7 @@ from PyQt5.QtCore import QTimer, Qt
 from ros_interface import start_status_update, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
+import os
 
 
 class ROSGui(QWidget):
@@ -13,8 +14,6 @@ class ROSGui(QWidget):
         self.setWindowTitle("Multi-Robot Demo")
         self.setGeometry(100, 100, 1000, 600)  # Increased width
         
-        self.workspace_name = "catkin_ws_recker"
-        self.workspace_input = None
         main_layout = QHBoxLayout()
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.ros_interface.update_button_status)
@@ -88,7 +87,7 @@ class ROSGui(QWidget):
             setup_layout.addWidget(btn)
 
         self.workspace_input = QLineEdit()
-        self.workspace_input.setText(self.workspace_name)
+        self.workspace_input.setText(self.get_default_workspace_name())
         self.workspace_input.setPlaceholderText("Enter workspace name")
         setup_layout.addWidget(QLabel("Workspace Name:"))
         setup_layout.addWidget(self.workspace_input)
@@ -155,6 +154,20 @@ class ROSGui(QWidget):
         main_layout.addLayout(right_layout)  # Fügt das Layout auf der rechten Seite hinzu
 
         self.setLayout(main_layout)
+
+    def get_default_workspace_name(self):
+        import os
+        # Startpunkt: voller Pfad zu gui_layout.py
+        current_path = os.path.abspath(__file__)
+        
+        # Schrittweise nach oben gehen, bis "src" gefunden wird
+        while current_path != "/":
+            if os.path.basename(current_path) == "src":
+                workspace_path = os.path.dirname(current_path)
+                return os.path.basename(workspace_path)
+            current_path = os.path.dirname(current_path)
+        
+        return "catkin_ws"  # Fallback
 
 
 
@@ -236,4 +249,4 @@ class ROSGui(QWidget):
         return [0.0, 0.0, 0.0]
 
     def get_workspace_name(self):
-        return self.workspace_input.text() if self.workspace_input else self.workspace_name
+        return self.workspace_input.text().strip()
