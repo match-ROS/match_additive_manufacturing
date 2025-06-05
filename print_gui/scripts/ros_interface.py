@@ -67,12 +67,12 @@ class ROSInterface:
     def start_roscore(self):
         """Starts roscore on the roscore PC."""
         command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; roscore; exec bash'"
-        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+        subprocess.Popen(["terminator", "--title=Roscore Terminal", "-x", f"{command}; exec bash"])
 
     def start_mocap(self):
         """Starts the motion capture system on the roscore PC."""
         command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; source ~/catkin_ws/devel/setup.bash; roslaunch launch_mocap mocap_launch.launch; exec bash'"
-        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+        subprocess.Popen(["terminator", "--title=Mocap", "-x", f"{command}; exec bash"])
 
     def start_sync(self):
         """Starts file synchronization between workspace and selected robots."""
@@ -84,7 +84,7 @@ class ROSInterface:
             command = f"while inotifywait -r -e modify,create,delete,move ~/{self.workspace_name}/src; do \n" \
                       f"rsync --delete -avzhe ssh ~/{self.workspace_name}/src rosmatch@{robot}:~/{self.workspace_name}/ \n" \
                       "done"
-            subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"]) 
+            subprocess.Popen(["terminator", f"--title=Sync to {robot}", "-x", f"{command}; exec bash"]) 
 
     def update_button_status(self):
         """Checks if roscore and mocap are running and updates button colors."""
@@ -162,13 +162,6 @@ def open_rviz():
     command = "roslaunch print_gui launch_rviz.launch"
     subprocess.Popen(command, shell=True)
 
-def launch_drivers(gui):
-    selected_robots = gui.get_selected_robots()
-    for robot in selected_robots:
-        command = f"ssh -t -t {robot} 'source ~/.bashrc; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
-        print(f"Starting driver for {robot}...")
-        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
-
 def quit_drivers():
     print("Stopping all drivers...")
     subprocess.Popen("pkill -f 'roslaunch'", shell=True)
@@ -231,13 +224,29 @@ def launch_drivers(gui):
 
     for robot in selected_robots:
         workspace = workspace_name
-        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
-        print(f"Opening SSH session and launching driver for: {robot}")
+        # command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
+        selected_urs = gui.get_selected_urs()
+        launch_suffix=""
+        if "UR10_l" in selected_urs:
+            launch_suffix += " launch_ur_l:=true"
+        else:
+            launch_suffix += " launch_ur_l:=false"
+        if "UR10_r" in selected_urs:
+            launch_suffix += " launch_ur_r:=true"
+        else:
+            launch_suffix += " launch_ur_r:=false"
+        
+        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch"+launch_suffix+"; exec bash'"
 
         # Open a new terminal with SSH session + driver launch + keep open
-        subprocess.Popen(["gnome-terminal", "--", "bash", "-c", f"{command}; exec bash"])
+        subprocess.Popen([
+            "terminator",
+            f"--title=Driver {robot}",      # Set the window title to "Mur Driver" :contentReference[oaicite:0]{index=0}
+            "-x",                       # Execute the following command inside the terminal :contentReference[oaicite:1]{index=1}
+            f"{command}; exec bash"
+        ])
 
-def quit_drivers(gui):
+def quit_drivers():
     """Terminates all running driver sessions and closes terminals."""
     print("Stopping all driver sessions...")
     try:
