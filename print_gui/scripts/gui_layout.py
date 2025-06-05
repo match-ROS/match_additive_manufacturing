@@ -156,6 +156,18 @@ class ROSGui(QWidget):
 
         self.setLayout(main_layout)
 
+    def get_full_workspace_path(self):
+        import os
+        current_path = os.path.abspath(__file__)
+
+        while current_path != "/":
+            if os.path.basename(current_path) == "src":
+                return os.path.dirname(current_path)  # Absoluter Pfad zum Workspace
+            current_path = os.path.dirname(current_path)
+
+        return os.path.expanduser("~/catkin_ws")  # Fallback
+
+
     def get_relative_workspace_path(self):
         full_path = self.get_full_workspace_path()
         home_path = os.path.expanduser("~")
