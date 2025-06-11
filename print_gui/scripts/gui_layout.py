@@ -1,5 +1,5 @@
 import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
@@ -171,7 +171,24 @@ class ROSGui(QWidget):
             btn = QPushButton(text)
             btn.clicked.connect(lambda checked, f=function: f())
             print_functions_layout.addWidget(btn)
+        
+        self.idx_metric = "virtual line"
+        dropdown_idx_metric = QComboBox()
+        dropdown_idx_metric.addItems(["virtual line", "radius", "collinear"])
+        dropdown_idx_metric.setCurrentIndex(0)  # Set default index to 0
+        dropdown_idx_metric.setStyleSheet("background-color: lightgray;")
+        dropdown_idx_metric.currentTextChanged.connect(lambda text: self.set_idx_metric(text))
+        print_functions_layout.addWidget(dropdown_idx_metric)
 
+        self.spin_threshold = QDoubleSpinBox()
+        self.spin_threshold.setRange(0.0, 0.2)  # Set range for the spin box
+        self.spin_threshold.setSingleStep(0.002)
+        self.spin_threshold.setValue(0.010)
+        self.spin_threshold.setDecimals(3)  # Set number of decimal places
+        self.spin_threshold.setSuffix(" m")
+        self.spin_threshold.setStyleSheet("background-color: lightgray;")
+        print_functions_layout.addWidget(QLabel("Threshold:"))
+        print_functions_layout.addWidget(self.spin_threshold)
 
         print_functions_group.setLayout(print_functions_layout)
         
@@ -182,6 +199,9 @@ class ROSGui(QWidget):
         main_layout.addLayout(right_layout)  # Fügt das Layout auf der rechten Seite hinzu
 
         self.setLayout(main_layout)
+
+    def set_idx_metric(self, text):
+            self.idx_metric = text
 
     def get_full_workspace_path(self):
         import os

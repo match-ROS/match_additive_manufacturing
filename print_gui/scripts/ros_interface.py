@@ -15,8 +15,7 @@ class ROSInterface:
     def __init__(self, gui):
         self.gui = gui
         self.updated_poses = {}
-        self.virtual_object_pose = None
-        
+
     def subscribe_to_relative_poses(self):
         """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
         selected_robots = self.gui.get_selected_robots()
@@ -363,6 +362,9 @@ def ur_follow_trajectory(gui):
     """Moves the UR robot along a predefined trajectory."""
     selected_robots = gui.get_selected_robots()
     selected_urs = gui.get_selected_urs()
+    metric = gui.idx_metric
+    threshold = gui.spin_threshold.value()
+    rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
         print("No UR robot selected. Skipping follow trajectory.")
@@ -375,6 +377,6 @@ def ur_follow_trajectory(gui):
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}"
+            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur} metric:='{metric}' threshold:={threshold}"
             print(f"Executing: {command}")
             subprocess.Popen(command, shell=True)
