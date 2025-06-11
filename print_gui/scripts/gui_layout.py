@@ -28,6 +28,14 @@ class ROSGui(QWidget):
         self.status_label.setStyleSheet("border: 1px solid black; padding: 5px;")
         left_layout.addWidget(self.status_label)
 
+        # Battery Status
+        self.battery_group = QGroupBox("Battery Status")
+        self.battery_layout = QVBoxLayout()
+        self.battery_group.setLayout(self.battery_layout)
+        left_layout.addWidget(self.battery_group)
+
+        self.battery_labels = {}  # z.B. {"mur620a": (mir_label, ur_label)}
+
         # Robot and UR selection
         selection_group = QGroupBox("Robot and UR Selection")
         selection_layout = QHBoxLayout()
@@ -41,6 +49,23 @@ class ROSGui(QWidget):
         }
         for checkbox in self.robots.values():
             robot_layout.addWidget(checkbox)
+
+        for robot_name, checkbox in self.robots.items():
+            checkbox.stateChanged.connect(lambda _, r=robot_name: self.ros_interface.check_and_subscribe_battery())
+
+
+        for robot in self.robots.keys():
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"{robot}"))
+            
+            mir_label = QLabel("MiR: –")
+            ur_label = QLabel("UR: –")
+            row.addWidget(mir_label)
+            row.addWidget(ur_label)
+
+            self.battery_labels[robot] = (mir_label, ur_label)
+            self.battery_layout.addLayout(row)
+
 
         ur_layout = QVBoxLayout()
         ur_layout.addWidget(QLabel("Select URs:"))

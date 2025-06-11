@@ -7,6 +7,8 @@ from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer
 import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
+from std_msgs.msg import Float32
+from sensor_msgs.msg import BatteryState
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -16,6 +18,8 @@ class ROSInterface:
         self.gui = gui
         self.updated_poses = {}
         self.virtual_object_pose = None
+        self.battery_states = {}  
+        self.active_battery_subs = set()  
         
     def subscribe_to_relative_poses(self):
         """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
@@ -102,6 +106,63 @@ class ROSInterface:
         except subprocess.CalledProcessError:
             return False
         
+    def make_ur_callback(self, robot):
+        def callback(msg):
+            if robot not in self.battery_states:
+                self.battery_states[robot] = {}
+            self.battery_states[robot]["ur"] = msg.data
+            self.update_battery_display(robot)
+        return callback
+
+    def make_mir_callback(self, robot):
+        def callback(msg):
+            if robot not in self.battery_states:
+                self.battery_states[robot] = {}
+            self.battery_states[robot]["mir"] = msg.percentage * 100  # falls 0.0–1.0
+            self.update_battery_display(robot)
+        return callback
+
+    def update_battery_display(self, robot):
+        mir_label, ur_label = self.gui.battery_labels.get(robot, (None, None))
+        if not mir_label or not ur_label:
+            return
+
+        state = self.battery_states.get(robot, {})
+
+        if "mir" in state:
+            val = state["mir"]
+            mir_label.setText(f"MiR: {val:.0f}%")
+            mir_label.setStyleSheet(f"background-color: {self.get_color(val)}; padding: 2px;")
+
+        if "ur" in state:
+            val = state["ur"]
+            ur_label.setText(f"UR: {val:.0f}%")
+            ur_label.setStyleSheet(f"background-color: {self.get_color(val)}; padding: 2px;")
+
+
+    def check_and_subscribe_battery(self):
+        if not rospy.core.is_initialized():
+            rospy.init_node("battery_status_gui", anonymous=True, disable_signals=True)
+
+        for robot in self.gui.get_selected_robots():
+            if robot in self.active_battery_subs:
+                continue  # bereits abonniert
+
+            rospy.Subscriber(f"/{robot}/bms_status/SOC", Float32, self.make_ur_callback(robot), queue_size=1)
+            rospy.Subscriber(f"/{robot}/battery_state", BatteryState, self.make_mir_callback(robot))
+            self.active_battery_subs.add(robot)
+            print(f"🔌 Subscribed to battery topics for {robot}")
+
+    def get_color(self, val):
+        if val >= 50:
+            return "lightgreen"
+        elif val >= 20:
+            return "orange"
+        else:
+            return "red"
+
+
+
 
 
 def launch_ros(gui, package, launch_file):
