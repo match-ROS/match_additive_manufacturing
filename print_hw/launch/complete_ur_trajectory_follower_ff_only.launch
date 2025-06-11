@@ -1,6 +1,8 @@
 <launch>
     <arg name="robot_name" default="mur620d" />
     <arg name="prefix_ur" default="UR10_r/" />
+    <arg name="metric" default="virtual line" />
+    <arg name="threshold" default="0.01" />
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
     <group ns="$(arg robot_name)/UR10_r">
@@ -38,7 +40,8 @@
     </node>
 
     <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
-        <arg name="virtual_line_threshold" value="0.01" />
+        <arg name="metric" value="$(arg metric)" />
+        <arg name="threshold" value="$(arg threshold)" />
         <arg name="current_pose_topic" value="$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
