@@ -1,5 +1,8 @@
 #!/bin/bash
 
+sudo apt install python3-requests -y
+
+
 cd ..
 git clone https://github.com/pumablattlaus/match_lib_package.git
 cd match_lib_package
