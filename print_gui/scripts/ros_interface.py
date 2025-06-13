@@ -161,8 +161,22 @@ class ROSInterface:
         else:
             return "red"
 
+    def launch_keyence_scanner(self):
+        """Launches the Keyence scanner on the robots PC."""
+        selected_robots = self.gui.get_selected_robots()
+        workspace_name = self.gui.get_workspace_name()
 
+        for robot in selected_robots:
+            workspace = workspace_name
+            command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch laser_scanner_tools keyence_scanner.launch; exec bash'"
 
+            # Open a new terminal with SSH session + driver launch + keep open
+            subprocess.Popen([
+                "terminator",
+                f"--title=Driver {robot}",      # Set the window title to "Mur Driver" :contentReference[oaicite:0]{index=0}
+                "-x",                       # Execute the following command inside the terminal :contentReference[oaicite:1]{index=1}
+                f"{command}; exec bash"
+            ])
 
 
 def launch_ros(gui, package, launch_file):

@@ -115,7 +115,8 @@ class ROSGui(QWidget):
         setup_buttons = {
             "Check Status": lambda: start_status_update(self),
             "Launch Drivers": lambda: launch_drivers(self),
-            "Quit Drivers": lambda: quit_drivers(),
+            "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
+            #"Quit Drivers": lambda: quit_drivers(),
             "Open RVIZ": open_rviz,
             "Start Roscore": lambda: self.ros_interface.start_roscore(),
             "Start Mocap": lambda: self.ros_interface.start_mocap(),
