@@ -9,10 +9,11 @@ import sys
 import tf.transformations as tr
 from std_msgs.msg import Header
 from geometry_msgs.msg import Point, Pose
-from moveit_msgs.msg import DisplayTrajectory
+from moveit_msgs.msg import DisplayTrajectory, RobotState
 from moveit_msgs.msg import Constraints, JointConstraint
 import math
 from tf import transformations as tr
+from sensor_msgs.msg import JointState
 
 class MoveManipulatorToTarget:
     def __init__(self):
@@ -137,7 +138,13 @@ class MoveManipulatorToTarget:
                 # Publish the plan to the display path topic
                 display_trajectory_publisher = rospy.Publisher('/display_planned_path', DisplayTrajectory, queue_size=10)
                 display_trajectory = DisplayTrajectory()
-                display_trajectory.trajectory_start = self.move_group.get_current_state()
+                
+                #display_trajectory.trajectory_start = self.move_group.get_current_state()
+                joint_state = rospy.wait_for_message(self.robot_name+'/joint_states', JointState)
+                robot_state = RobotState()
+                robot_state.joint_state = joint_state
+                display_trajectory.trajectory_start = robot_state
+
                 display_trajectory.trajectory.append(plan_trajectory)
                 display_trajectory_publisher.publish(display_trajectory)
 

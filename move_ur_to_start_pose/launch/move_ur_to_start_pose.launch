@@ -1,7 +1,7 @@
 <launch>
 
     <arg name="node_start_delay" default="0.0" /> 
-    <arg name="robot_name" default="mur620a" />
+    <arg name="robot_name" default="mur620c" />
     <arg name="manipulator_base_link" default="base_footprint" />
     <arg  name="manipulator_tcp_link" default="UR10_r/tool0" />
     <arg name="planning_group" default="UR_arm_r" />
