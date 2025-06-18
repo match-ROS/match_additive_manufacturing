@@ -1,5 +1,4 @@
-import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
@@ -10,9 +9,14 @@ import os
 
 class ROSGui(QWidget):
     def __init__(self):
+        self.ur_follow_settings = {
+            'idx_metric': 'virtual line',
+            'threshold': 0.010
+        }
+
         super().__init__()
         self.ros_interface = ROSInterface(self)
-        self.setWindowTitle("Multi-Robot Demo")
+        self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
         self.setGeometry(100, 100, 1000, 600)  # Increased width
         
@@ -190,31 +194,27 @@ class ROSGui(QWidget):
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
             "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
-            "UR Follow Trajectory": lambda: ur_follow_trajectory(self),
         }
 
         for text, function in print_function_buttons.items():
             btn = QPushButton(text)
             btn.clicked.connect(lambda checked, f=function: f())
             print_functions_layout.addWidget(btn)
-        
-        self.idx_metric = "virtual line"
-        dropdown_idx_metric = QComboBox()
-        dropdown_idx_metric.addItems(["virtual line", "radius", "collinear"])
-        dropdown_idx_metric.setCurrentIndex(0)  # Set default index to 0
-        dropdown_idx_metric.setStyleSheet("background-color: lightgray;")
-        dropdown_idx_metric.currentTextChanged.connect(lambda text: self.set_idx_metric(text))
-        print_functions_layout.addWidget(dropdown_idx_metric)
 
-        self.spin_threshold = QDoubleSpinBox()
-        self.spin_threshold.setRange(0.0, 0.2)  # Set range for the spin box
-        self.spin_threshold.setSingleStep(0.002)
-        self.spin_threshold.setValue(0.010)
-        self.spin_threshold.setDecimals(3)  # Set number of decimal places
-        self.spin_threshold.setSuffix(" m")
-        self.spin_threshold.setStyleSheet("background-color: lightgray;")
-        print_functions_layout.addWidget(QLabel("Threshold:"))
-        print_functions_layout.addWidget(self.spin_threshold)
+        # Print Functions UR:
+        ur_btn = QPushButton("UR Follow Trajectory")
+        ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings))
+
+        # 1) Add a settings button next to the UR Follow Trajectory button
+        ur_settings_btn = QPushButton("Settings")
+        ur_settings_btn.clicked.connect(self.open_ur_settings)
+        ur_settings_btn.setStyleSheet("background-color: lightgray;")
+         # horizontal layout for side-by-side placement
+        hbox = QHBoxLayout()
+        hbox.addWidget(ur_btn)
+        hbox.addWidget(ur_settings_btn)
+        print_functions_layout.addLayout(hbox)        
+       
 
         print_functions_group.setLayout(print_functions_layout)
         
@@ -225,6 +225,13 @@ class ROSGui(QWidget):
         main_layout.addLayout(right_layout)  # Fügt das Layout auf der rechten Seite hinzu
 
         self.setLayout(main_layout)
+
+    def open_ur_settings(self):
+        dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
+        if dlg.exec_() == QDialog.Accepted:
+            # Retrieve and store new settings
+            self.ur_follow_settings = dlg.getValues()
+            print("New UR Follow settings:", self.ur_follow_settings)
 
     def set_idx_metric(self, text):
             self.idx_metric = text
@@ -328,3 +335,49 @@ class ROSGui(QWidget):
 
     def get_override_value(self):
         return self.override_slider.value()
+
+class URFollowSettingsDialog(QDialog):
+    def __init__(self, parent=None, initial_settings=None):
+        super().__init__(parent)
+        self.setWindowTitle("UR Follow Trajectory Settings")
+
+        # Default settings
+        init = initial_settings or {}
+        idx_metrics = ["virtual line", "radius", "collinear"]
+        idx_metric = init.get('idx_metric', idx_metrics[0])
+        threshold = init.get('threshold', 0.010)
+
+        form = QFormLayout()        
+        self.dropdown_idx_metric = QComboBox()
+        self.dropdown_idx_metric.addItems(idx_metrics)
+        self.dropdown_idx_metric.setCurrentText(idx_metric)  # Set default text
+        self.dropdown_idx_metric.setStyleSheet("background-color: lightgray;")
+        # self.dropdown_idx_metric.currentTextChanged.connect(lambda text: self.set_idx_metric(text))
+        form.addRow("Index Metric:", self.dropdown_idx_metric)
+
+        self.spin_threshold = QDoubleSpinBox()
+        self.spin_threshold.setRange(0.0, 0.2)  # Set range for the spin box
+        self.spin_threshold.setSingleStep(0.002)
+        self.spin_threshold.setDecimals(3)  # Set number of decimal places
+        self.spin_threshold.setValue(threshold)
+        self.spin_threshold.setSuffix(" m")
+        self.spin_threshold.setStyleSheet("background-color: lightgray;")
+        form.addRow("Threshold:", self.spin_threshold)
+
+        # OK / Cancel
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        # Layout
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def getValues(self):
+        return {
+            'idx_metric': self.dropdown_idx_metric.currentText(),
+            'threshold': self.spin_threshold.value(),
+        }
+

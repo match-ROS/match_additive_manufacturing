@@ -434,12 +434,12 @@ def stop_mir_motion(self):
         print(f"Stopping path index increment with command: {command}")
         subprocess.Popen(command, shell=True)
 
-def ur_follow_trajectory(gui):
+def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""
     selected_robots = gui.get_selected_robots()
     selected_urs = gui.get_selected_urs()
-    metric = gui.idx_metric
-    threshold = gui.spin_threshold.value()
+    metric = ur_follow_settings.get("idx_metric")
+    threshold = ur_follow_settings.get("threshold")
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
