@@ -22,6 +22,7 @@ class MoveManipulatorToTarget:
 
         # Initialize parameters
         self.path_topic = rospy.get_param('~path_topic', '/ur_path')
+        self.initial_path_index = rospy.get_param('~initial_path_index', 0)
         self.robot_name = rospy.get_param('~robot_name', 'mur620a')
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'UR10_r/base_link')
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
@@ -52,7 +53,7 @@ class MoveManipulatorToTarget:
             return
 
         # Get the first TCP pose from the path
-        target_tcp_pose = path_msg.poses[0]
+        target_tcp_pose = path_msg.poses[self.initial_path_index]
         # the target pose is the pose of the path, we need to compute the actual tcp pose
         target_tcp_pose.pose.position.z += self.tcp_nozzle_distance + self.spray_distance
         
@@ -81,7 +82,7 @@ class MoveManipulatorToTarget:
         relative_position = np.dot(rot_matrix[:3, :3], relative_position)
 
         # relative orientation around the z-axis
-        target_tcp_pose = path_msg.poses[2]
+        target_tcp_pose = path_msg.poses[self.initial_path_index+1]
         # get path orientation
         path_orientation = tr.euler_from_quaternion([target_tcp_pose.pose.orientation.x,
                                                      target_tcp_pose.pose.orientation.y,

@@ -379,7 +379,7 @@ def move_mir_to_start_pose(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to move to the start pose.")
         return
-    command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]}"
+    command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()}"
     print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)
 
@@ -408,7 +408,7 @@ def move_ur_to_start_pose(gui):
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot}"
+            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()}"
             print(f"Executing: {command}")
             subprocess.Popen(command, shell=True)
 
@@ -465,11 +465,23 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
         print("Please select exactly one UR and one MIR robot to follow the trajectory.")
         return
 
+    base_command = [
+        "roslaunch",
+        "print_hw",
+        "complete_ur_trajectory_follower_ff_only.launch",
+    ]
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold}, initial_path_index:={initial_path_index}"
-            print(f"Executing: {command}")
-            subprocess.Popen(command, shell=True)
+            args = [
+                f"robot_name:={robot}",
+                f"prefix_ur:={ur}/",
+                f"metric:={metric}",
+                f"threshold:={threshold}",             # no comma
+                f"initial_path_index:={initial_path_index}",
+            ]
+            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold} initial_path_index:={initial_path_index}"
+            print("Executing:", " ".join(base_command+args))
+            subprocess.Popen(base_command + args, shell=False)  #shell=True?
 
 def stop_idx_advancer(gui):
     """Stops any running UR motion by killing the process."""
