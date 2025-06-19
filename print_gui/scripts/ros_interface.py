@@ -21,11 +21,14 @@ class ROSInterface:
         self.battery_states = {}  
         self.active_battery_subs = set()  
         self.current_index = 0
-        # … your existing init …
-        rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
 
+        if not rospy.core.is_initialized():
+            rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
+        rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
+    
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
+        self.gui.path_idx.emit(self.current_index)  # Update the GUI with the new index
         
     def subscribe_to_relative_poses(self):
         """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
@@ -425,9 +428,13 @@ def mir_follow_trajectory(gui):
 
 def increment_path_index(gui):
     """Increments the path index for the MIR robot."""
-    command = f"roslaunch print_gui increment_path_index.launch"
+    command = f"roslaunch print_gui increment_path_index.launch initial_path_index:={gui.idx_spin.value()}"
     print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)
+
+    # if not rospy.core.is_initialized():
+    #     rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
+    # rospy.Subscriber('/path_index', Int32, gui.ros_interface._path_idx_cb, queue_size=10)
 
 
 def stop_mir_motion(self):
@@ -446,6 +453,7 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
     selected_urs = gui.get_selected_urs()
     metric = ur_follow_settings.get("idx_metric")
     threshold = ur_follow_settings.get("threshold")
+    initial_path_index = gui.idx_spin.value()
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
@@ -459,7 +467,7 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold}"
+            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold}, initial_path_index:={initial_path_index}"
             print(f"Executing: {command}")
             subprocess.Popen(command, shell=True)
 

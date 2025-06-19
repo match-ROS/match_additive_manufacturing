@@ -6,7 +6,7 @@
     <arg name="prev_idx_dist" default="1"/>
     <arg name="next_idx_dist" default="1"/>
     <arg name="metric" default="virtual line"/> <!-- Options: ["radius", "collinear", "virtual line"] -->
-    <arg name="start_idx" default="1"/>
+    <arg name="initial_path_index" default="1"/>
 
     <!-- Subscribers -->
     <arg name="path_topic" default="/ur_path_transformed"/>
@@ -24,7 +24,7 @@
         <param name="prev_idx_dist" value="$(arg prev_idx_dist)"/>
         <param name="next_idx_dist" value="$(arg next_idx_dist)"/>
         <param name="metric" value="$(arg metric)"/>
-        <param name="start_idx" value="$(arg start_idx)"/>
+        <param name="initial_path_index" value="$(arg initial_path_index)"/>
         
         <!-- Topic remapping -->
         <!-- Subscribers: -->

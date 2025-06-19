@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
+from PyQt5.QtCore import QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion, stop_idx_advancer
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
@@ -8,13 +8,17 @@ import os
 
 
 class ROSGui(QWidget):
+    path_idx = pyqtSignal(int)
+    
     def __init__(self):
         self.ur_follow_settings = {
             'idx_metric': 'virtual line',
-            'threshold': 0.010
+            'threshold': 0.010,
         }
 
         super().__init__()
+        self.path_idx.connect(self._update_spinbox)
+        
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
@@ -217,22 +221,19 @@ class ROSGui(QWidget):
 
         # ── current‐index display + stop button ──
         idx_box = QHBoxLayout()
-        idx_box.addWidget(QLabel("Current Index:"))
-        self.idx_label = QLabel("000")
-        idx_box.addWidget(self.idx_label)
+        idx_box.addWidget(QLabel("Index:"))
+        # self.idx_label = QLabel("000")
+        # idx_box.addWidget(self.idx_label)
+        self.idx_spin = QSpinBox()
+        self.idx_spin.setRange(0, 10000)
+        self.idx_spin.setValue(0)
+        # self.idx_spin.valueChanged.connect(
+        idx_box.addWidget(self.idx_spin)
+        
         stop_idx_btn = QPushButton("Stop Index Advancer")
         stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self))
         idx_box.addWidget(stop_idx_btn)
-        print_functions_layout.addLayout(idx_box)
-
-        # ── timer to refresh the label ──
-        self.idx_timer = QTimer(self)
-        self.idx_timer.timeout.connect(
-            lambda: self.idx_label.setText(str(self.ros_interface.current_index))
-        )
-        self.idx_timer.start(200)  # update every 200 ms
-        
-       
+        print_functions_layout.addLayout(idx_box)       
 
         print_functions_group.setLayout(print_functions_layout)
         
@@ -244,6 +245,11 @@ class ROSGui(QWidget):
 
         self.setLayout(main_layout)
 
+    @pyqtSlot(int)
+    def _update_spinbox(self, idx):
+        # guaranteed to run in Qt (GUI) thread
+        self.idx_spin.setValue(idx)
+        
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
         if dlg.exec_() == QDialog.Accepted:
