@@ -16,7 +16,7 @@ class PurePursuitNode:
         # Config
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
-        self.distance_threshold = rospy.get_param("~distance_threshold", 0.10)
+        self.distance_threshold = rospy.get_param("~distance_threshold", 0.15)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 0.2)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.3)  # Distance error multiplier
@@ -33,16 +33,16 @@ class PurePursuitNode:
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
 
         
-        # Subscriber
-        rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
-        rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
-        rospy.Subscriber(self.RL_cmd_vel_offset_topic, Twist, self.RL_cmd_vel_offset_callback)
-        
         # Publisher
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
         self.target_pose_pub = rospy.Publisher(self.target_pose_topic, PoseStamped, queue_size=1)
         self.actual_pose_pub = rospy.Publisher(self.actual_pose_topic, PoseStamped, queue_size=1)
         self.layer_progress = rospy.Publisher(self.layer_progress_topic, Float32, queue_size=1)
+        
+        # Subscriber
+        rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
+        rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
+        rospy.Subscriber(self.RL_cmd_vel_offset_topic, Twist, self.RL_cmd_vel_offset_callback)
         
         # Start und Status
         self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
