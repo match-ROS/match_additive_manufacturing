@@ -52,7 +52,6 @@ class PurePursuitNode:
         self.is_active = False
         self.broadcaster = TransformBroadcaster()
         self.ur_trajectory_index = 0
-        self.ur_trajectory_index = 0
         self.current_lookahead_point = None
         self.current_mir_path_index = 0
         self.current_target_index = 0
@@ -62,6 +61,8 @@ class PurePursuitNode:
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
+        self.ur_trajectory_index = rospy.wait_for_message(self.trajectory_index_topic, Int32).data
+        self.current_mir_path_index = self.ur_trajectory_index
         self.follow_path()
         
 
