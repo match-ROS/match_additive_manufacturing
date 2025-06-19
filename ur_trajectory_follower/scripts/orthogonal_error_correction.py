@@ -11,11 +11,11 @@ class OrthogonalErrorCorrection:
         self.goal_pose: PoseStamped = None
         self.normal: Vector3 = None
         
+        self.twist_pub = rospy.Publisher('~orthogonal_twist', Twist, queue_size=10)
+        
         rospy.Subscriber('~current_endeffector_pose', PoseStamped, self.current_pose_callback)
         rospy.Subscriber('~goal_endeffector_pose', PoseStamped, self.goal_pose_callback)
         rospy.Subscriber('~normal_vector', Vector3, self.normal_callback)
-        
-        self.twist_pub = rospy.Publisher('~orthogonal_twist', Twist, queue_size=10)
     
     def publish_twist(self):
         twist = self.calculate_twist()

@@ -56,6 +56,8 @@ class PathIndexAdvancer:
 
         # Create subscriber to your robot's current pose
         self.pose_sub = rospy.Subscriber("/current_pose", PoseStamped, self.pose_callback)
+
+        self.publish_current_goal()
         
     
     def pose_callback(self, pose_msg):
