@@ -3,6 +3,7 @@
     <arg name="prefix_ur" default="UR10_r/" />
     <arg name="metric" default="virtual line" />
     <arg name="threshold" default="0.01" />
+    <arg name="initial_path_index" default="0" />
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
     <group ns="$(arg robot_name)/UR10_r">
@@ -43,6 +44,7 @@
         <arg name="metric" value="$(arg metric)" />
         <arg name="threshold" value="$(arg threshold)" />
         <arg name="current_pose_topic" value="$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
