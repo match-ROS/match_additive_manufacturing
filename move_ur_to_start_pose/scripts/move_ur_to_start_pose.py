@@ -28,7 +28,7 @@ class MoveManipulatorToTarget:
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
 
-        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.7)
+        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.59)
         self.spray_distance = rospy.get_param('~spray_distance', 0.2)
         
         # Initialize MoveIt
@@ -113,7 +113,7 @@ class MoveManipulatorToTarget:
         # Ellbogen oben (z. B. nahe -2.0 rad)
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/shoulder_lift_joint",
-            position=-1.5,
+            position=-0.5,
             tolerance_above=1.0,
             tolerance_below=1.0,
             weight=1.0
@@ -128,6 +128,13 @@ class MoveManipulatorToTarget:
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/wrist_1_joint",
             position=-2.1,
+            tolerance_above=1.1,
+            tolerance_below=1.1,
+            weight=1.0
+        ))
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/wrist_2_joint",
+            position=-1.5,
             tolerance_above=1.1,
             tolerance_below=1.1,
             weight=1.0
