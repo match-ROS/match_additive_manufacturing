@@ -6,6 +6,8 @@ from std_msgs.msg import Float32, Int32
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path
 from tf.transformations import euler_from_quaternion
+import tf2_ros
+from geometry_msgs.msg import PointStamped
 
 
 class WeldSeamOffsetController:
@@ -17,9 +19,13 @@ class WeldSeamOffsetController:
         self.path_topic = rospy.get_param("~path_topic", "/ur_path_original")
         self.index_topic = rospy.get_param("~index_topic", "/path_index")
         self.cmd_topic = rospy.get_param("~cmd_topic", "/mur620a/UR10_r/twist_fb_command")
+        self.sensor_frame = rospy.get_param("~sensor_frame", "mur620a/UR10_r/line_laser_frame")
+        self.target_frame = rospy.get_param("~target_frame", "mur620a/base_link")
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         self.max_correction = 0.05  # m/s
-        self.gain = 2.0  # proportional gain (m/s per mm)
+        self.gain = 0.2  # proportional gain (m/s per mm)
 
         # Internal state
         self.current_index = 0
@@ -52,22 +58,30 @@ class WeldSeamOffsetController:
             rospy.logwarn_throttle(1.0, "Path not available or index out of bounds.")
             return
 
-        pose = self.path[self.current_index].pose
-        q = pose.orientation
-        _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
+        try:
+            # Offset in Sensor-X-Richtung
+            offset_m = self.latest_offset / 1000.0
 
-        # Transform offset from scanner frame (right = +, left = -) to world
-        offset_m = self.latest_offset / 1000.0
-        correction_x = -offset_m * np.sin(yaw)
-        correction_y =  offset_m * np.cos(yaw)
+            # Erzeuge Punkt auf X-Achse des Sensors
+            offset_point = PointStamped()
+            offset_point.header.frame_id = self.sensor_frame
+            offset_point.header.stamp = rospy.Time(0)
+            offset_point.point.x = -offset_m  # gegen +X des Sensors
+            offset_point.point.y = 0.0
+            offset_point.point.z = 0.0
 
-        # Apply gain and saturation
-        cmd = Twist()
-        cmd.linear.x = np.clip(correction_x * self.gain, -self.max_correction, self.max_correction)
-        cmd.linear.y = np.clip(correction_y * self.gain, -self.max_correction, self.max_correction)
-        self.cmd_pub.publish(cmd)
+            # Transformiere in Weltkoordinaten
+            transformed = self.tf_buffer.transform(offset_point, self.target_frame, rospy.Duration(0.5))
 
-        # rospy.loginfo_throttle(1.0, f"Correction (x={cmd.linear.x:.3f}, y={cmd.linear.y:.3f})")
+            # Verwende x/y für Geschwindigkeit
+            cmd = Twist()
+            cmd.linear.x = np.clip(transformed.point.x * self.gain, -self.max_correction, self.max_correction)
+            cmd.linear.y = np.clip(transformed.point.y * self.gain, -self.max_correction, self.max_correction)
+            self.cmd_pub.publish(cmd)
+
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            rospy.logwarn_throttle(1.0, f"TF lookup failed: {e}")
+
 
 if __name__ == '__main__':
     try:
