@@ -42,6 +42,7 @@ class ProfileCenterDetector:
         rospy.spin()
 
     def scan_callback(self, msg: LaserScan):
+        rospy.loginfo_throttle(1.0, "Received LaserScan message.")
         ranges = np.array(msg.ranges)
         ranges[ranges == 0.0] = np.nan  # remove invalid zero values
 
