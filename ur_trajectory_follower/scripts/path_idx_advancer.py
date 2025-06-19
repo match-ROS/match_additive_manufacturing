@@ -14,7 +14,7 @@ class PathIndexAdvancer:
         # Example path of (x, y) waypoints
         # In practice, load from params or another topic
         self.path = Path()
-        self.current_index = 1  # Start at the first waypoint in the path
+        self.current_index = rospy.get_param('~start_index', 1)  # Start at the second waypoint by default
 
         # Thresholds (meters) for each metric
         # Adjust them as needed
