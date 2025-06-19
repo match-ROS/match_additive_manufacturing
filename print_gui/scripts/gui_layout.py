@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
-from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion
+from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion, stop_idx_advancer
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
 import os
@@ -213,7 +213,25 @@ class ROSGui(QWidget):
         hbox = QHBoxLayout()
         hbox.addWidget(ur_btn)
         hbox.addWidget(ur_settings_btn)
-        print_functions_layout.addLayout(hbox)        
+        print_functions_layout.addLayout(hbox)
+
+        # ── current‐index display + stop button ──
+        idx_box = QHBoxLayout()
+        idx_box.addWidget(QLabel("Current Index:"))
+        self.idx_label = QLabel("000")
+        idx_box.addWidget(self.idx_label)
+        stop_idx_btn = QPushButton("Stop Index Advancer")
+        stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self))
+        idx_box.addWidget(stop_idx_btn)
+        print_functions_layout.addLayout(idx_box)
+
+        # ── timer to refresh the label ──
+        self.idx_timer = QTimer(self)
+        self.idx_timer.timeout.connect(
+            lambda: self.idx_label.setText(str(self.ros_interface.current_index))
+        )
+        self.idx_timer.start(200)  # update every 200 ms
+        
        
 
         print_functions_group.setLayout(print_functions_layout)

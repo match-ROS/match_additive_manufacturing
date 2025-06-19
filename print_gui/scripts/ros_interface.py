@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer
 import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Int32
 from sensor_msgs.msg import BatteryState
 
 import rospy
@@ -20,6 +20,12 @@ class ROSInterface:
         self.virtual_object_pose = None
         self.battery_states = {}  
         self.active_battery_subs = set()  
+        self.current_index = 0
+        # … your existing init …
+        rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
+
+    def _path_idx_cb(self, msg: Int32):
+        self.current_index = msg.data
         
     def subscribe_to_relative_poses(self):
         """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
@@ -425,14 +431,14 @@ def increment_path_index(gui):
 
 
 def stop_mir_motion(self):
-        """Stops any running Lissajous motion by killing the process."""
-        command = "pkill -f mir_trajectory_follower"
-        print(f"Stopping MiR motion with command: {command}")
-        subprocess.Popen(command, shell=True)
+    """Stops any running Lissajous motion by killing the process."""
+    command = "pkill -f mir_trajectory_follower"
+    print(f"Stopping MiR motion with command: {command}")
+    subprocess.Popen(command, shell=True)
 
-        command = "pkill -f increment_path_index"
-        print(f"Stopping path index increment with command: {command}")
-        subprocess.Popen(command, shell=True)
+    command = "pkill -f increment_path_index"
+    print(f"Stopping path index increment with command: {command}")
+    subprocess.Popen(command, shell=True)
 
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""
@@ -453,6 +459,16 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur} metric:='{metric}' threshold:={threshold}"
+            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold}"
             print(f"Executing: {command}")
             subprocess.Popen(command, shell=True)
+
+def stop_idx_advancer(gui):
+    """Stops any running UR motion by killing the process."""
+    command = "pkill -f path_index_advancer"
+    print(f"Stopping path_index_advancer wih command: {command}")
+    subprocess.Popen(command, shell=True)
+
+    command = "pkill -f increment_path_index"
+    print(f"Stopping increment_path_index with command: {command}")
+    subprocess.Popen(command, shell=True)
