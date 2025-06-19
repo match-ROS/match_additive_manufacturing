@@ -44,28 +44,53 @@ class ProfileCenterFromPointCloud:
             rospy.logwarn_throttle(5, "PointCloud has too few valid points.")
             return
 
-        point_index = points[:, 0]  # index (0 to N)
-        depth = points[:, 2]        # height
+        point_index = points[:, 0]  # logical scan index
+        lateral = points[:, 1]      # assume y-axis = lateral
+        depth = points[:, 2]        # assume z-axis = height
 
-        # Filter out NaN and Inf
-        valid_mask = np.isfinite(point_index) & np.isfinite(depth)
+        # Filter out invalid values
+        valid_mask = np.isfinite(point_index) & np.isfinite(lateral) & np.isfinite(depth)
         point_index = point_index[valid_mask]
+        lateral = lateral[valid_mask]
         depth = depth[valid_mask]
 
         if len(depth) == 0:
             rospy.logwarn_throttle(5, "No valid depth values.")
             return
 
-        # Find highest point
-        max_idx = np.argmin(depth)
-        max_depth = depth[max_idx]
+        # Find the highest point (max height = max z)
+        max_idx = np.argmax(depth)
+        max_depth = depth[max_idx]  # Sensor offset correction
+        max_lateral = lateral[max_idx]
         max_index = point_index[max_idx]
 
-        # Calculate offset from center
+        # Compute lateral offset from center (in mm)
         center_index = (np.max(point_index) + np.min(point_index)) / 2
         offset_from_center = max_index - center_index
+        offset_mm = max_lateral * 1000  # publish lateral distance in mm
 
-        rospy.loginfo_throttle(2.0, f"Max height: {max_depth:.3f} at index {max_index:.1f}, offset from center: {offset_from_center:.1f}")
+        self.offset_buffer.append(offset_mm)
+        mean_offset = np.mean(self.offset_buffer)
+        self.offset_pub.publish(Float32(data=mean_offset))
+
+        # Prepare PointStamped
+        point = PointStamped()
+        point.header = msg.header
+        point.point.x = points[max_idx, 0]  # x
+        point.point.y = max_lateral         # y
+        point.point.z = max_depth           # z
+
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self.tf_target_frame,
+                point.header.frame_id,
+                rospy.Time(0),
+                rospy.Duration(1.0)
+            )
+            transformed_point = tf2_geometry_msgs.do_transform_point(point, transform)
+            self.pub.publish(transformed_point)
+        except (tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+            rospy.logwarn(f"TF transform failed: {e}")
 
 
 
