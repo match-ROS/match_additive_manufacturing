@@ -24,7 +24,16 @@ class ROSInterface:
 
         if not rospy.core.is_initialized():
             rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
+
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
+        
+    def init_override_velocity_slider(self):
+        self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
+        self.gui.override_slider.valueChanged.connect(
+            lambda value: self.gui.override_value_label.setText(f"{value}%")
+            # publish to /velocity_override as well:
+            or self.velocity_override_pub.publish(value / 100.0)  # Convert to a float between 0.0 and 1.0
+        )
     
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
@@ -445,6 +454,14 @@ def stop_mir_motion(self):
 
     command = "pkill -f increment_path_index"
     print(f"Stopping path index increment with command: {command}")
+    subprocess.Popen(command, shell=True)
+
+def stop_ur_motion(self):
+    """Stops any running UR motion by killing the process."""
+
+    # stop ur_direction_controller, orthogonal_error_correction, move_ur_to_start_pose, ur_vel_induced_by_mir
+    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir'"
+    print(f"Stopping UR motion with command: {command}")
     subprocess.Popen(command, shell=True)
 
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
