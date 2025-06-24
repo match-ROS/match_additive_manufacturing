@@ -20,6 +20,7 @@ class PurePursuitNode:
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 0.2)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.3)  # Distance error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.RL_cmd_vel_offset_topic = rospy.get_param("~RL_cmd_vel_offset_topic", "/RL_cmd_vel_offset")
@@ -89,8 +90,10 @@ class PurePursuitNode:
             if not self.path or self.current_pose is None:
                 continue
             
+            # check if the current path index is reaced 
             if self.reached_target(self.path[self.current_mir_path_index].pose.position):
                 self.current_mir_path_index += 1
+                # check if trajectory is finished
                 if self.current_mir_path_index >= len(self.path):
                     self.is_active = False
                     self.completion_pub.publish(Bool(data=True))
@@ -173,8 +176,9 @@ class PurePursuitNode:
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
 
         velocity = Twist()
-        velocity.linear.x = self.Kv * self.velocities[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error 
-        velocity.linear.x *= max(0.5, (1.0 + 0.1*index_error))
+        target_vel = self.Kv * self.velocities[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error + self.K_idx * index_error
+        velocity.linear.x = max(0.0, target_vel )  # min 0.0 to avoid negative speeds
+        #velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
          
         velocity.angular.z = velocity.linear.x * curvature
 
@@ -219,14 +223,24 @@ class PurePursuitNode:
             "map"
         )
 
-
     def trajectory_index_callback(self, msg):
         self.ur_trajectory_index = msg.data
         if self.ur_trajectory_index > 0:
             self.is_active = True
 
     def calculate_distance(self, pos1, pos2):
-        return math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
+        # compute direction
+        orientation = math.atan2(pos2.y - pos1.y, pos2.x - pos1.x)
+        if orientation < math.pi / 2 and orientation > -math.pi / 2:
+            direction = -1  # mir is in front of the target point so we need to go backwards
+        else:
+            direction = 1
+        # compute distance
+        print("direction", direction)
+        distance = math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
+            
+        return distance * direction
+    
 
     def get_yaw_from_pose(self, pose):
         orientation = pose.orientation
