@@ -79,7 +79,7 @@ class PurePursuitNode:
     def follow_path(self):
 
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
-        self.calculate_velocities()
+        self.calculate_distances_path_points()
         while not rospy.is_shutdown() and self.is_active == False:
             rospy.loginfo_throttle(5, "Waiting for trajectory index.")
             rospy.sleep(0.01)
@@ -176,7 +176,7 @@ class PurePursuitNode:
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
 
         velocity = Twist()
-        target_vel = self.Kv * self.velocities[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error + self.K_idx * index_error
+        target_vel = self.Kv * self.distances_path_points[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error + self.K_idx * index_error
         velocity.linear.x = max(0.0, target_vel )  # min 0.0 to avoid negative speeds
         #velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
          
@@ -199,14 +199,13 @@ class PurePursuitNode:
             "map"
         )
 
-    def calculate_velocities(self):
-        self.velocities = []
+    def calculate_distances_path_points(self):
+        self.distances_path_points = []
         for i in range(len(self.path) - 1):
             p1 = self.path[i].pose.position
             p2 = self.path[i + 1].pose.position
             distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-            speed = distance  # Goal: reach the next point in 1 second
-            self.velocities.append(speed)
+            self.distances_path_points.append(distance)
 
     def pose_callback(self, msg):
         self.current_pose = msg
