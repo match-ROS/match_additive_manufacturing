@@ -226,9 +226,9 @@ def update_status(gui):
                 controllers = yaml.safe_load(output).get("controller", [])
                 for controller in controllers:
                     if controller.get("state") == "running":
-                        active_counts[controller["name"]] += 1
-            except Exception:
-                pass
+                        active_counts[controller["name"]] = active_counts.get(controller["name"], 0) + 1
+            except Exception as e:
+                rospy.logwarn(f"Error checking controllers for {robot}/{ur}: {e}")
     
     status_text = """
     Force/Torque Sensor: {}/{} {}
