@@ -31,7 +31,8 @@
         <arg name="robot_name" value="$(arg robot_name)" />
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
         <arg name="base_ur_frame_id" value="$(arg robot_name)/$(arg prefix_ur)base_ideal"/>
-        <arg name="ur_pose_topic" value="UR10_r/tcp_pose_base_ideal"/>
+        <arg name="ur_pose_topic" value="$(arg robot_name)/$(arg prefix_ur)ur_calibrated_pose"/>
+        <arg name="mir_odom_topic" value="$(arg robot_name)/odom"/>
     </include>
     <!-- run node to transform tcp_pose to base_ideal for compensation etc: -->
     <node name="tcp_in_base_ideal_publisher" pkg="additive_manufacturing_helpers" type="static_trafo_pose_pub.py" output="screen">
