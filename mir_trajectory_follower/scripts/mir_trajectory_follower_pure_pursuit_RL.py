@@ -32,7 +32,7 @@ class PurePursuitNode:
         self.target_pose_topic = rospy.get_param("~target_pose_topic", "/mir_target_pose")
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
-
+        self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
         
         # Publisher
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
@@ -44,6 +44,7 @@ class PurePursuitNode:
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
         rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
         rospy.Subscriber(self.RL_cmd_vel_offset_topic, Twist, self.RL_cmd_vel_offset_callback)
+        rospy.Subscriber(self.override_topic, Float32, self.override_callback)
         
         # Start und Status
         self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
@@ -59,6 +60,7 @@ class PurePursuitNode:
         self.time_stamp_old = rospy.Time.now()
         self.RL_cmd_vel_offset = Twist()
         self.current_layer = 0
+        self.override = 1.0  # Default override value
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -177,7 +179,7 @@ class PurePursuitNode:
 
         velocity = Twist()
         target_vel = self.Kv * self.distances_path_points[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error + self.K_idx * index_error
-        velocity.linear.x = max(0.0, target_vel )  # min 0.0 to avoid negative speeds
+        velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
         #velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
          
         velocity.angular.z = velocity.linear.x * curvature
@@ -248,6 +250,10 @@ class PurePursuitNode:
     
     def RL_cmd_vel_offset_callback(self, msg):
         self.RL_cmd_vel_offset = msg
+
+    def override_callback(self, msg):
+        # Override the current velocity with the received value
+        self.override = msg.data
 
     def publish_actual_and_target_pose(self):
         actual_pose = PoseStamped()

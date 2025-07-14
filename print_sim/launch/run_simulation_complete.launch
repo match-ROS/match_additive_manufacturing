@@ -8,7 +8,7 @@
         <arg name="node_start_delay" value="10.0" />
     </include> -->
   
-    <arg name="robot1_name"  default="mur620a"/>
+    <arg name="robot1_name"  default="mur620c"/>
     <arg name="node_start_delay" default="20.0" doc="used to delay nodes that should not start right away"/>
 
     <include file="$(find mur_launch_sim)/launch/mur_620.launch">
