@@ -14,6 +14,8 @@ from moveit_msgs.msg import Constraints, JointConstraint
 import math
 from tf import transformations as tr
 from sensor_msgs.msg import JointState
+from controller_manager_msgs.srv import ListControllers
+from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest, LoadController, LoadControllerRequest
 
 class MoveManipulatorToTarget:
     def __init__(self):
@@ -27,6 +29,7 @@ class MoveManipulatorToTarget:
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'UR10_r/base_link')
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
+        self.UR_prefix = rospy.get_param('~UR_prefix', 'UR10_r')
 
         self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.59)
         self.spray_distance = rospy.get_param('~spray_distance', 0.2)
@@ -46,6 +49,50 @@ class MoveManipulatorToTarget:
         # initialize the publisher for the target pose
         self.local_target_pose_pub = rospy.Publisher('/ur_local_target_pose', PoseStamped, queue_size=1)
         self.display_trajectory_publisher = rospy.Publisher('move_group/display_planned_path', DisplayTrajectory, queue_size=10)
+
+        # check if arm controller is loaded
+        list_controllers_service = f'/{self.robot_name}/{self.UR_prefix}/controller_manager/list_controllers'
+        print(f"Waiting for controller list on topic: {list_controllers_service}")
+        try:
+            rospy.wait_for_service(list_controllers_service, timeout=5)
+            rospy.loginfo("Controller list service is available.")
+
+            controllers_list = rospy.ServiceProxy(list_controllers_service, ListControllers)()
+            rospy.loginfo("Controller list retrieved successfully.")
+            # get arm_controller state
+            arm_controller_state = [controller for controller in controllers_list.controller if controller.name == 'arm_controller']
+            print(f"Arm controller state: {arm_controller_state}")
+            if not arm_controller_state:
+                # load the arm controller
+                rospy.logwarn("Arm controller not loaded. Trying to load it.")
+                rospy.wait_for_service(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/load_controller')
+                try:
+                    load_controller_client = rospy.ServiceProxy(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/load_controller', LoadController)
+                    load_controller_request = LoadControllerRequest()
+                    load_controller_request.name = 'arm_controller'
+                    load_controller_client(load_controller_request)
+                except rospy.ServiceException as e:
+                    rospy.logerr(f"Failed to load arm controller: {e}")
+            if arm_controller_state[0].state == 'running':
+                rospy.loginfo("Arm controller is running.")
+            elif arm_controller_state[0].state == 'stopped' or arm_controller_state[0].state == 'initialized':
+                # switch on the arm controller
+                rospy.wait_for_service(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller')
+                try:
+                    switch_controller_client = rospy.ServiceProxy(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller', SwitchController)
+                    switch_controller_request = SwitchControllerRequest()
+                    switch_controller_request.start_controllers = ['arm_controller']
+                    switch_controller_request.stop_controllers = ['twist_controller']
+                    switch_controller_request.strictness = 2  # Best effort
+                    switch_controller_client(switch_controller_request)
+                except rospy.ServiceException as e:
+                    rospy.logerr(f"Failed to start arm controller: {e}")
+            else:        
+                rospy.logwarn(f"Arm controller is in an unexpected state: {arm_controller_state[0].state}")
+        except rospy.ROSException as e:
+            rospy.WARN(f"Failed to get controllers list: {e}")
+            return
+            
 
     def path_callback(self, path_msg):
         if len(path_msg.poses) == 0:

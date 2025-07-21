@@ -236,8 +236,6 @@ class PurePursuitNode:
             direction = -1  # mir is in front of the target point so we need to go backwards
         else:
             direction = 1
-        # compute distance
-        print("direction", direction)
         distance = math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
             
         return distance * direction
