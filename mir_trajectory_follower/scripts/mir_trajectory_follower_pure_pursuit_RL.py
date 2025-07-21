@@ -19,13 +19,12 @@ class PurePursuitNode:
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.2)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 0.5)  # Linear speed multiplier
+        self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.1)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
-        self.RL_cmd_vel_offset_topic = rospy.get_param("~RL_cmd_vel_offset_topic", "/RL_cmd_vel_offset")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
         self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.layer_progress_topic = rospy.get_param("~layer_progress_topic", "/layer_progress")
@@ -45,7 +44,6 @@ class PurePursuitNode:
         # Subscriber
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
         rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
-        rospy.Subscriber(self.RL_cmd_vel_offset_topic, Twist, self.RL_cmd_vel_offset_callback)
         rospy.Subscriber(self.override_topic, Float32, self.override_callback)
         
         # Start und Status
@@ -60,7 +58,6 @@ class PurePursuitNode:
         self.current_mir_path_index = 0
         self.current_target_index = 0
         self.time_stamp_old = rospy.Time.now()
-        self.RL_cmd_vel_offset = Twist()
         self.current_layer = 0
         self.override = 1.0  # Default override value
 
@@ -88,7 +85,7 @@ class PurePursuitNode:
     def follow_path(self):
 
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
-        self.calculate_distances_path_points()
+        self.calculate_path_velocities()
         while not rospy.is_shutdown() and self.is_active == False:
             rospy.loginfo_throttle(5, "Waiting for trajectory index.")
             rospy.sleep(0.01)
@@ -180,7 +177,7 @@ class PurePursuitNode:
 
         # Normalisiere den Winkelunterschied
         angle_diff = target_yaw - current_yaw
-        angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalisiere den Winkel
+        #angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalisiere den Winkel
         return angle_diff  # Rückgabe des normalisierten Winkelunterschieds
 
     def apply_control(self, curvature):
@@ -190,21 +187,17 @@ class PurePursuitNode:
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
         orientation_error = self.calculate_orientation_error(self.current_pose, self.path[self.current_mir_path_index].pose)
 
+        print("index_error", index_error, "distance_error", distance_error, "orientation_error", orientation_error, "path_velocities_lin", self.path_velocities_lin[self.current_mir_path_index], "path_velocities_ang", self.path_velocities_ang[self.current_mir_path_index] )
 
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
 
         velocity = Twist()
-        target_vel = self.Kv * self.distances_path_points[self.current_mir_path_index] * (1/self.dT) + self.K_distance * distance_error + self.K_idx * index_error
+        target_vel = self.Kv * self.path_velocities_lin[self.current_mir_path_index] + self.K_distance * distance_error + self.K_idx * index_error
+        print("target_vel", target_vel)
         velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
-        #velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
-         
-        #velocity.angular.z = #velocity.linear.x * curvature + self.K_orientation * orientation_error
-        velocity.angular.z =  self.K_orientation * orientation_error
 
-        # Add RL offset
-        velocity.linear.x += self.RL_cmd_vel_offset.linear.x
-        velocity.angular.z += self.RL_cmd_vel_offset.angular.z
+        velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * self.path_velocities_ang[self.current_mir_path_index] 
 
         self.cmd_vel_pub.publish(velocity)
 
@@ -219,13 +212,28 @@ class PurePursuitNode:
             "map"
         )
 
-    def calculate_distances_path_points(self):
-        self.distances_path_points = []
+    # def calculate_distances_path_points(self):
+    #     self.path_points_linear_distance = []
+    #     for i in range(len(self.path) - 1):
+    #         p1 = self.path[i].pose.position
+    #         p2 = self.path[i + 1].pose.position
+    #         distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+    #         self.path_points_distance.append(distance)
+
+    def calculate_path_velocities(self):
+        self.path_velocities_lin = [0.0]
+        self.path_velocities_ang = [0.0]
+
         for i in range(len(self.path) - 1):
             p1 = self.path[i].pose.position
             p2 = self.path[i + 1].pose.position
             distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-            self.distances_path_points.append(distance)
+            angular_diff_unwrapped = self.get_yaw_from_pose(self.path[i + 1].pose) - self.get_yaw_from_pose(self.path[i].pose)
+            angular_diff = math.atan2(math.sin(angular_diff_unwrapped), math.cos(angular_diff_unwrapped))  # Normalize angle
+            
+            self.path_velocities_lin.append(distance * (1.0/self.dT))  # Linear velocity
+            self.path_velocities_ang.append(angular_diff * (1.0/self.dT))
+
 
     def pose_callback(self, msg):
         self.current_pose = msg
@@ -255,6 +263,8 @@ class PurePursuitNode:
         else:
             direction = 1
         distance = math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
+
+        print("orientation", orientation, "direction", direction)
             
         return distance * direction
     
@@ -264,9 +274,6 @@ class PurePursuitNode:
         _, _, yaw = tr.euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])
         return yaw
     
-    def RL_cmd_vel_offset_callback(self, msg):
-        self.RL_cmd_vel_offset = msg
-
     def override_callback(self, msg):
         # Override the current velocity with the received value
         self.override = msg.data
