@@ -16,7 +16,8 @@ class PurePursuitNode:
         # Config
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
-        self.distance_threshold = rospy.get_param("~distance_threshold", 0.1)
+        self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.2)
+        self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 0.5)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.1)  # Distance error multiplier
@@ -76,8 +77,13 @@ class PurePursuitNode:
         
         current_position = self.current_pose.position
         distance = math.sqrt((target_position.x - current_position.x) ** 2 + (target_position.y - current_position.y) ** 2)
-        #print("Distance: ", distance)
-        return distance < self.distance_threshold
+        # compute lateral and tangential distance
+        orientation = self.get_yaw_from_pose(self.current_pose)
+        direction = math.atan2(target_position.y - current_position.y, target_position.x - current_position.x)
+        lateral_distance = distance * math.sin(direction - orientation)
+        tangent_distance = distance * math.cos(direction - orientation)
+
+        return abs(tangent_distance) < self.tangent_distance_threshold and abs(lateral_distance) < self.lateral_distance_threshold
 
     def follow_path(self):
 
