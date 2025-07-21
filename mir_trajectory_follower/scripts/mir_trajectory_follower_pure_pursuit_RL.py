@@ -18,8 +18,9 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.25)
         self.distance_threshold = rospy.get_param("~distance_threshold", 0.15)
         self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 0.2)  # Linear speed multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.3)  # Distance error multiplier
+        self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
+        self.K_orientation = rospy.get_param("~K_orientation", 0.2)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
@@ -28,7 +29,7 @@ class PurePursuitNode:
         self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.layer_progress_topic = rospy.get_param("~layer_progress_topic", "/layer_progress")
         self.control_rate = rospy.get_param("~control_rate", 100)
-        self.dT = rospy.get_param("~dT", 0.3)
+        self.dT = rospy.get_param("~dT", 1.0)
         self.target_pose_topic = rospy.get_param("~target_pose_topic", "/mir_target_pose")
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
@@ -166,12 +167,22 @@ class PurePursuitNode:
             return 0.0
         return 2 * transformed_y / (self.lookahead_distance ** 2)
 
+    def calculate_orientation_error(self, current_pose, target_pose):
+        # Berechne den Winkel zwischen der aktuellen Pose und der Zielpose
+        current_yaw = self.get_yaw_from_pose(current_pose)
+        target_yaw = self.get_yaw_from_pose(target_pose)
+
+        # Normalisiere den Winkelunterschied
+        angle_diff = target_yaw - current_yaw
+        angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalisiere den Winkel
+        return angle_diff  # Rückgabe des normalisierten Winkelunterschieds
+
     def apply_control(self, curvature):
         # Berechne die Steuerbefehle
         index_error = self.ur_trajectory_index - (self.current_mir_path_index-1) # -1 because of the current_mir_path_index is the next point
         #print("index_error", index_error)   
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
-
+        orientation_error = self.calculate_orientation_error(self.current_pose, self.path[self.current_mir_path_index].pose)
 
 
         # broadcast target point
@@ -182,7 +193,7 @@ class PurePursuitNode:
         velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
         #velocity.linear.x *= max(0.0, (1.0 + 0.1*index_error))
          
-        velocity.angular.z = velocity.linear.x * curvature
+        velocity.angular.z = velocity.linear.x * curvature + self.K_orientation * orientation_error
 
         # Add RL offset
         velocity.linear.x += self.RL_cmd_vel_offset.linear.x
@@ -262,6 +273,7 @@ class PurePursuitNode:
 
         target_pose = PoseStamped()
         target_pose.pose.position = self.path[self.current_mir_path_index].pose.position
+        target_pose.pose.orientation = self.path[self.current_mir_path_index].pose.orientation
         target_pose.header.frame_id = "map"
         target_pose.header.stamp = rospy.Time.now()
         self.target_pose_pub.publish(target_pose)
