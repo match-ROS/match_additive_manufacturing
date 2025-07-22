@@ -111,6 +111,9 @@ class PurePursuitNode:
             if lookahead_point is None:
                 rospy.loginfo_throttle(5,"No valid lookahead point found. Stopping.")
                 continue
+                
+            # Berechne Fortschritt im Erreichen des aktuellen Pfadpunktes
+            self.calculate_sub_step_progress()
 
             self.apply_control()
 
@@ -128,6 +131,12 @@ class PurePursuitNode:
 
 
             rate.sleep()
+
+
+    def calculate_sub_step_progress(self):
+        # compute number of control cycles per path point
+        cycles_per_point = int(self.dT * self.control_rate)
+        
 
     def find_lookahead_point(self):
         # Suche im Pfadausschnitt
