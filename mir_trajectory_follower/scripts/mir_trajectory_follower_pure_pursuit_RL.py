@@ -18,7 +18,7 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.2)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
-        self.search_range = rospy.get_param("~search_range", 20) # Number of points to search for lookahead point
+        self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.1)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
@@ -112,9 +112,7 @@ class PurePursuitNode:
                 rospy.loginfo_throttle(5,"No valid lookahead point found. Stopping.")
                 continue
 
-            # Berechne die Krümmung und Steuerung
-            curvature = self.calculate_curvature(lookahead_point)
-            self.apply_control(curvature)
+            self.apply_control()
 
             # update layer progress
             self.publish_layer_progress()
@@ -154,22 +152,6 @@ class PurePursuitNode:
                 return position
         return None
 
-    def calculate_curvature(self, lookahead_point):
-        # Aktuelle Position und Orientierung
-        robot_position = self.current_pose.position
-        robot_yaw = self.get_yaw_from_pose(self.current_pose)
-
-        # Relativer Lookahead-Punkt im Roboterrahmen
-        dx = lookahead_point.x - robot_position.x
-        dy = lookahead_point.y - robot_position.y
-        transformed_x = math.cos(-robot_yaw) * dx - math.sin(-robot_yaw) * dy
-        transformed_y = math.sin(-robot_yaw) * dx + math.cos(-robot_yaw) * dy
-
-        # Berechne die Krümmung
-        if transformed_y == 0:
-            return 0.0
-        return 2 * transformed_y / (self.lookahead_distance ** 2)
-
     def calculate_orientation_error(self, current_pose, target_pose):
         # Berechne den Winkel zwischen der aktuellen Pose und der Zielpose
         current_yaw = self.get_yaw_from_pose(current_pose)
@@ -180,24 +162,22 @@ class PurePursuitNode:
         #angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalisiere den Winkel
         return angle_diff  # Rückgabe des normalisierten Winkelunterschieds
 
-    def apply_control(self, curvature):
+    def apply_control(self):
         # Berechne die Steuerbefehle
         index_error = self.ur_trajectory_index - (self.current_mir_path_index-1) # -1 because of the current_mir_path_index is the next point
-        #print("index_error", index_error)   
+ 
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
         orientation_error = self.calculate_orientation_error(self.current_pose, self.path[self.current_mir_path_index].pose)
 
-        print("index_error", index_error, "distance_error", distance_error, "orientation_error", orientation_error, "path_velocities_lin", self.path_velocities_lin[self.current_mir_path_index], "path_velocities_ang", self.path_velocities_ang[self.current_mir_path_index] )
-
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
-
+        rospy.loginfo_throttle(1, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}")
         velocity = Twist()
         target_vel = self.Kv * self.path_velocities_lin[self.current_mir_path_index] + self.K_distance * distance_error + self.K_idx * index_error
-        print("target_vel", target_vel)
+
         velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
 
-        velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * self.path_velocities_ang[self.current_mir_path_index] 
+        velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * (self.path_velocities_ang[self.current_mir_path_index])
 
         self.cmd_vel_pub.publish(velocity)
 
@@ -211,14 +191,6 @@ class PurePursuitNode:
             "target_point",
             "map"
         )
-
-    # def calculate_distances_path_points(self):
-    #     self.path_points_linear_distance = []
-    #     for i in range(len(self.path) - 1):
-    #         p1 = self.path[i].pose.position
-    #         p2 = self.path[i + 1].pose.position
-    #         distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
-    #         self.path_points_distance.append(distance)
 
     def calculate_path_velocities(self):
         self.path_velocities_lin = [0.0]
@@ -255,18 +227,23 @@ class PurePursuitNode:
         if self.ur_trajectory_index > 0:
             self.is_active = True
 
-    def calculate_distance(self, pos1, pos2):
-        # compute direction
-        orientation = math.atan2(pos2.y - pos1.y, pos2.x - pos1.x)
-        if orientation < math.pi / 2 and orientation > -math.pi / 2:
-            direction = -1  # mir is in front of the target point so we need to go backwards
-        else:
-            direction = 1
-        distance = math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
+    def calculate_distance(self, current_pose, target_pose):
+        # Compute if the mir is in front or behind the target point
+        mir_yaw = self.get_yaw_from_pose(self.current_pose)
+        target_direction = math.atan2(target_pose.y - current_pose.y, target_pose.x - current_pose.x)
+        angle_diff = target_direction - mir_yaw
+        angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalize angle
 
-        print("orientation", orientation, "direction", direction)
-            
-        return distance * direction
+        # If the angle difference is between -pi/2 and pi/2, mir is facing towards the target (in front)
+        # Otherwise, it's behind
+        if -math.pi/2 <= angle_diff <= math.pi/2:
+            direction = 1
+        else:
+            direction = -1
+        # Calculate the distance
+        distance = math.sqrt((target_pose.x - current_pose.x) ** 2 + (target_pose.y - current_pose.y) ** 2)
+
+        return distance * direction 
     
 
     def get_yaw_from_pose(self, pose):
