@@ -20,7 +20,7 @@ class PurePursuitNode:
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.1)  # Distance error multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
@@ -60,6 +60,7 @@ class PurePursuitNode:
         self.time_stamp_old = rospy.Time.now()
         self.current_layer = 0
         self.override = 1.0  # Default override value
+        self.current_sub_step = 0
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -99,6 +100,7 @@ class PurePursuitNode:
             # check if the current path index is reaced 
             if self.reached_target(self.path[self.current_mir_path_index].pose.position):
                 self.current_mir_path_index += 1
+                self.current_sub_step = 0
                 # check if trajectory is finished
                 if self.current_mir_path_index >= len(self.path):
                     self.is_active = False
@@ -136,6 +138,8 @@ class PurePursuitNode:
     def calculate_sub_step_progress(self):
         # compute number of control cycles per path point
         cycles_per_point = int(self.dT * self.control_rate)
+        self.current_sub_step_progress = min(1.0, self.current_sub_step / cycles_per_point)  # Ensure progress does not exceed 1.0
+        self.current_sub_step += 1
         
 
     def find_lookahead_point(self):
