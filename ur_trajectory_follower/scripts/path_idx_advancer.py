@@ -15,6 +15,9 @@ class PathIndexAdvancer:
         # In practice, load from params or another topic
         self.path = Path()
         self.current_index = rospy.get_param('~initial_path_index', 1)  # Start at the second waypoint by default
+        if self.current_index < 1:
+            rospy.logwarn("Initial path index is less than 1. Setting to 1.")
+            self.current_index = 1
 
         # Thresholds (meters) for each metric
         # Adjust them as needed
