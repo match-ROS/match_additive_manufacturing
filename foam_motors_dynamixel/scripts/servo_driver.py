@@ -9,8 +9,13 @@ from ur_dashboard_msgs.srv import GetSafetyMode
 class ServoDriver():
     def __init__(self):
         # Give serial read/write permission
-        bashCommand = "sudo chmod 666 /dev/ttyUSB2"
+        bashCommand = "sudo chmod 666 /dev/ttyUSB2" #rosrun dynamixel_workbench_controllers find_dynamixel /dev/ttyUSB0
         process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
+        # process = subprocess.Popen(
+        #     ["bash", "-c", bashCommand],
+        #     stdout=subprocess.PIPE,
+        #     stderr=subprocess.PIPE
+        # )
         process.communicate()
         
         rospy.loginfo("Starting servo driver with multiple motors")

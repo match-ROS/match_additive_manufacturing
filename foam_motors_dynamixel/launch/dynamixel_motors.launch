@@ -2,7 +2,7 @@
 <launch>
     <include file="$(find dynamixel_workbench_controllers)/launch/dynamixel_controllers.launch">
         <arg name="usb_port" value="/dev/ttyUSB0"/>
-        <arg name="dynamixel_info" value="$(find dynamixel_workbench_controllers)/config/basic.yaml"/>
+        <param name="dynamixel_info" value="$(find foam_motors_dynamixel)/config/two_motor_setup.yaml"/>
     </include>
 
     <node pkg="foam_motors_dynamixel" type="servo_driver.py" name="servo_driver" output="screen">
