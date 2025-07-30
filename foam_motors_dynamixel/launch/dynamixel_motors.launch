@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<launch>
+    <include file="$(find dynamixel_workbench_controllers)/launch/dynamixel_controllers.launch">
+        <arg name="usb_port" value="/dev/ttyUSB0"/>
+        <arg name="dynamixel_info" value="$(find dynamixel_workbench_controllers)/config/basic.yaml"/>
+    </include>
+
+    <node pkg="foam_motors_dynamixel" type="servo_driver.py" name="servo_driver" output="screen">
+        <rosparam param="dynamixel_motors">
+          - {name: left, id: 1, servo_target_topic: /servo_target_position_left}
+          - {name: right, id: 2, servo_target_topic: /servo_target_position_right}
+        </rosparam>
+        <param name="servo_service_topic" value="/dynamixel_workbench/dynamixel_command"/>
+        <param name="ur_safety_service_topic" value="/ur_safety_service"/>
+    </node>
+</launch>
