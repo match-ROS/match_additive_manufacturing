@@ -1,0 +1,14 @@
+[submodule "foam_motors_dynamixel/DynamixelSDK"]
+	path = foam_motors_dynamixel/submodules/DynamixelSDK
+	url = https://github.com/ROBOTIS-GIT/DynamixelSDK.git
+	branch=noetic
+[submodule "foam_motors_dynamixel/dynamixel-workbench"]
+	path = foam_motors_dynamixel/submodules/dynamixel-workbench
+	#url = https://github.com/ROBOTIS-GIT/dynamixel-workbench.git
+	url = https://github.com/match-ROS/dynamixel-workbench.git
+	branch=noetic
+[submodule "foam_motors_dynamixel/dynamixel-workbench-msgs"]
+	path = foam_motors_dynamixel/submodules/dynamixel-workbench-msgs
+	url = https://github.com/ROBOTIS-GIT/dynamixel-workbench-msgs.git
+	branch=noetic
+

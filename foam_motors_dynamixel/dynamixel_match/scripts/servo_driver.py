@@ -8,7 +8,7 @@ from ur_dashboard_msgs.srv import GetSafetyMode
 
 class ServoDriver():
     def __init__(self):
-        # Give serial read/write permission: USE "sudo usermod -a -G dialout $USER" ONCE instead for all /dev/tty*
+        # Give serial read/write permission:
         # bashCommand = "sudo chmod 666 /dev/ttyUSB2" #rosrun dynamixel_workbench_controllers find_dynamixel /dev/ttyUSB0
         # process.communicate()
         
