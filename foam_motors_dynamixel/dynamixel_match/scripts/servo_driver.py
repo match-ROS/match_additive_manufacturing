@@ -14,6 +14,8 @@ class ServoDriver():
         
         rospy.loginfo("Starting servo driver with multiple motors")
         rospy.init_node("servo_driver_node", anonymous=True)
+
+        self.use_safery_loop = rospy.get_param("~use_safety_loop", False) # enable periodic safety checks
         
         # Load service topics from parameters
         servo_service_topic = rospy.get_param("~servo_service_topic", "/dynamixel_workbench/dynamixel_command")
@@ -25,14 +27,20 @@ class ServoDriver():
         rospy.sleep(0.1)
         self.servo_command_service = rospy.ServiceProxy(servo_service_topic, DynamixelCommand)
         
-        rospy.wait_for_service(ur_safety_service_topic)
-        self.ur_safety_mode_service = rospy.ServiceProxy(ur_safety_service_topic, GetSafetyMode)
+        try:
+            rospy.wait_for_service(ur_safety_service_topic, timeout=5)
+            self.ur_safety_mode_service = rospy.ServiceProxy(ur_safety_service_topic, GetSafetyMode)
+        # except rospy.ROSException as e:
+        except:
+            rospy.logwarn("UR safety mode service not found:")# %s", e)
+            rospy.logwarn("Continuing. Proceed with caution!")
         
         # Load motor configurations
         motor_configs = rospy.get_param("~dynamixel_motors", [
             {"name": "left", "id": 1},
             {"name": "right", "id": 2}
         ])
+        rospy.loginfo("Loaded motor configurations: %s", motor_configs)
         self.motors = {}       # stores motor info: motor id, etc.
         self.last_command = {} # stores last command per motor
 
@@ -45,9 +53,10 @@ class ServoDriver():
             rospy.Subscriber(topic, Int16, self.generate_callback(motor))
             rospy.loginfo("Subscribed to [%s] for motor '%s' (ID %d)", topic, motor, motor_id)
             
-        # Uncomment below to enable periodic safety checks
-        # self.safety_loop()
-        rospy.spin()
+        if self.use_safery_loop:
+            self.safety_loop()
+        else:
+            rospy.spin()
     
     def generate_callback(self, motor):
         # Creates a closure that captures motor name and corresponding motor id
