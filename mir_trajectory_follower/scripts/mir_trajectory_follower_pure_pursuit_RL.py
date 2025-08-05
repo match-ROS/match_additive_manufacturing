@@ -15,14 +15,18 @@ class PurePursuitNode:
         
         # Config
         self.path = []
-        self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
+        self.base_lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
+        self.lookahead_distance = self.base_lookahead_distance  # Will be adaptive
+        self.max_lookahead_distance = rospy.get_param("~max_lookahead_distance", 0.5)  # Maximum lookahead
+        self.lookahead_velocity_gain = rospy.get_param("~lookahead_velocity_gain", 0.1)  # Velocity scaling factor
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.2)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
-        self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.05)  # Index error multiplier (increased from 0.01)
+        self.K_feedforward = rospy.get_param("~K_feedforward", 0.2)  # Feedforward compensation gain
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
@@ -142,6 +146,14 @@ class PurePursuitNode:
         self.current_sub_step += 1
         
 
+    def update_adaptive_lookahead(self, current_velocity):
+        """
+        Update lookahead distance based on current velocity to improve tracking at high speeds
+        """
+        # Adaptive lookahead: increase lookahead distance with velocity
+        velocity_based_lookahead = self.base_lookahead_distance + (current_velocity * self.lookahead_velocity_gain)
+        self.lookahead_distance = min(velocity_based_lookahead, self.max_lookahead_distance)
+
     def find_lookahead_point(self):
         # Suche im Pfadausschnitt
         search_range = self.path[self.current_mir_path_index:self.current_mir_path_index + self.search_range]
@@ -182,15 +194,36 @@ class PurePursuitNode:
         distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
         orientation_error = self.calculate_orientation_error(self.current_pose, self.path[self.current_mir_path_index].pose)
 
+        # Get current path velocity for adaptive lookahead (with bounds checking)
+        current_path_velocity = (self.path_velocities_lin[self.current_mir_path_index] 
+                                if self.current_mir_path_index < len(self.path_velocities_lin) 
+                                else 0.0)
+        
+        # Update adaptive lookahead distance based on current velocity
+        self.update_adaptive_lookahead(current_path_velocity)
+
+        # Enhanced feedforward compensation for high-speed tracking
+        # Predict where the robot should be based on velocity and lag
+        feedforward_compensation = self.K_feedforward * current_path_velocity * max(0, index_error)
+        
+        # Enhanced index error compensation with non-linear scaling for large errors
+        enhanced_index_compensation = self.K_idx * index_error
+        if abs(index_error) > 2:  # Significant lag
+            enhanced_index_compensation *= (1.0 + 0.5 * abs(index_error))  # Non-linear scaling
+
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
-        rospy.loginfo_throttle(1, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}")
+        rospy.loginfo_throttle(1, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}, Lookahead: {self.lookahead_distance:.3f}")
+        
         velocity = Twist()
-        target_vel = self.Kv * self.path_velocities_lin[self.current_mir_path_index] + self.K_distance * distance_error + self.K_idx * index_error
+        target_vel = (self.Kv * current_path_velocity + 
+                     self.K_distance * distance_error + 
+                     enhanced_index_compensation + 
+                     feedforward_compensation)
 
-        velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
+        velocity.linear.x = max(0.0, target_vel) * self.override  # min 0.0 to avoid negative speeds
 
-        velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * (self.path_velocities_ang[self.current_mir_path_index])
+        velocity.angular.z = self.K_orientation * orientation_error + self.Kv * (self.path_velocities_ang[self.current_mir_path_index])
 
         self.cmd_vel_pub.publish(velocity)
 
