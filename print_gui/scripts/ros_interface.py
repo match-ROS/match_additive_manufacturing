@@ -18,14 +18,16 @@ class ROSInterface:
         self.gui = gui
         self.updated_poses = {}
         self.virtual_object_pose = None
-        self.battery_states = {}  
-        self.active_battery_subs = set()  
+        self.battery_states = {}
+        self.active_battery_subs = set()
         self.current_index = 0
 
         if not rospy.core.is_initialized():
             rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
 
+        # Subscriptions and publishers used by the GUI
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
+        self._init_dynamixel_publishers()
         
     def init_override_velocity_slider(self):
         self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
@@ -195,6 +197,53 @@ class ROSInterface:
                 "-x",                       # Execute the following command inside the terminal :contentReference[oaicite:1]{index=1}
                 f"{command}; exec bash"
             ])
+
+    # -------------------- Dynamixel Driver & Servo Targets --------------------
+    def start_dynamixel_driver(self):
+        """Start the local Dynamixel servo driver launch file in a new terminal."""
+        # Run locally; assumes environment sourced from the GUI process or bashrc
+        cmd = "bash -lc 'roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
+        subprocess.Popen([
+            "terminator",
+            "--title=Dynamixel Driver",
+            "-x",
+            "bash",
+            "-lc",
+            "roslaunch dynamixel_match dynamixel_motors.launch; exec bash"
+        ])
+
+    def stop_dynamixel_driver(self):
+        """Stop the Dynamixel servo driver processes."""
+        # Try to kill by rosnode name and fallback to pkill patterns
+        try:
+            subprocess.Popen("rosnode kill /servo_driver", shell=True)
+        except Exception:
+            pass
+        # Also stop associated roslaunch processes if any
+        subprocess.Popen("pkill -f dynamixel_motors.launch", shell=True)
+        subprocess.Popen("pkill -f servo_driver.py", shell=True)
+        subprocess.Popen("pkill -f dynamixel_workbench_controllers", shell=True)
+
+    def _init_dynamixel_publishers(self):
+        """Initialize publishers for left/right servo target topics."""
+        try:
+            self.servo_left_pub = rospy.Publisher('/servo_target_position_left', Float32, queue_size=10)
+            self.servo_right_pub = rospy.Publisher('/servo_target_position_right', Float32, queue_size=10)
+        except Exception as e:
+            rospy.logwarn(f"Failed to create Dynamixel target publishers: {e}")
+
+    def publish_servo_targets(self, left_value: float, right_value: float):
+        """Publish target positions for both servos.
+        Values are forwarded as std_msgs/Float32 on /servo_target_position_left and /servo_target_position_right.
+        """
+        if not hasattr(self, 'servo_left_pub'):
+            self._init_dynamixel_publishers()
+        try:
+            self.servo_left_pub.publish(Float32(left_value))
+            self.servo_right_pub.publish(Float32(right_value))
+            rospy.loginfo(f"Published servo targets L={left_value}, R={right_value}")
+        except Exception as e:
+            rospy.logerr(f"Failed to publish servo targets: {e}")
 
 
 def launch_ros(gui, package, launch_file):

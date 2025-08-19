@@ -122,6 +122,8 @@ class ROSGui(QWidget):
             "Check Status": lambda: start_status_update(self),
             "Launch Drivers": lambda: launch_drivers(self),
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
+            "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
+            "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
             #"Quit Drivers": lambda: quit_drivers(),
             "Open RVIZ": open_rviz,
             "Start Roscore": lambda: self.ros_interface.start_roscore(),
@@ -234,15 +236,49 @@ class ROSGui(QWidget):
         idx_box.addWidget(stop_idx_btn)
         print_functions_layout.addLayout(idx_box)
 
-        print_functions_group.setLayout(print_functions_layout)
-        
+        # Dynamixel Servo Target Controls (added under Print Functions)
+        servo_box = QGroupBox("Dynamixel Servo Targets")
+        servo_layout = QHBoxLayout()
+        # Left servo
+        left_col = QVBoxLayout()
+        left_col.addWidget(QLabel("Left target"))
+        self.servo_left_spin = QDoubleSpinBox()
+        self.servo_left_spin.setRange(-1000.0, 1000.0)
+        self.servo_left_spin.setSingleStep(1.0)
+        self.servo_left_spin.setDecimals(2)
+        self.servo_left_spin.setValue(0.0)
+        left_col.addWidget(self.servo_left_spin)
+        # Right servo
+        right_col = QVBoxLayout()
+        right_col.addWidget(QLabel("Right target"))
+        self.servo_right_spin = QDoubleSpinBox()
+        self.servo_right_spin.setRange(-1000.0, 1000.0)
+        self.servo_right_spin.setSingleStep(1.0)
+        self.servo_right_spin.setDecimals(2)
+        self.servo_right_spin.setValue(0.0)
+        right_col.addWidget(self.servo_right_spin)
+        # Send button
+        send_col = QVBoxLayout()
+        send_btn = QPushButton("Send Targets")
+        send_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(self.servo_left_spin.value(), self.servo_right_spin.value()))
+        send_col.addWidget(QLabel(" "))
+        send_col.addWidget(send_btn)
+            
+        servo_layout.addLayout(left_col)
+        servo_layout.addLayout(right_col)
+        servo_layout.addLayout(send_col)
+        servo_box.setLayout(servo_layout)
+        print_functions_layout.addWidget(servo_box)
 
+        print_functions_group.setLayout(print_functions_layout)
+            
         right_layout.addWidget(controller_group)
         right_layout.addWidget(print_functions_group)
 
         main_layout.addLayout(right_layout)  # Fügt das Layout auf der rechten Seite hinzu
 
         self.setLayout(main_layout)
+    
 
     @pyqtSlot(int)
     def _update_spinbox(self, idx):
@@ -293,65 +329,6 @@ class ROSGui(QWidget):
         if self.ur10_r.isChecked():
             ur_prefixes.append("UR10_r")
         return ur_prefixes
-
-    def save_relative_poses(self, updated_poses=None):
-        """Collects values from the table and saves them. If updated_poses is provided, those values are used first."""
-        poses = {}
-
-        # Convert `updated_poses` keys to match the table format ("mur620c/UR10_l")
-        if updated_poses:
-            formatted_updated_poses = {f"{robot}/{ur}": pos for (robot, ur), pos in updated_poses.items()}
-        else:
-            formatted_updated_poses = {}
-
-        for row in range(self.table.rowCount()):
-            row_label = self.table.verticalHeaderItem(row).text()
-
-            # Use updated pose values if available; otherwise, keep existing table values
-            if row_label in formatted_updated_poses:
-                poses[row_label] = formatted_updated_poses[row_label]
-            else:
-                poses[row_label] = [
-                    float(self.table.item(row, col).text()) if self.table.item(row, col) else 0.0
-                    for col in range(6)  # Jetzt für X, Y, Z, Rx, Ry, Rz
-                ]
-
-        # Save values to poses.yaml
-        relative_poses = RelativePoses()
-        relative_poses.save_poses(poses)
-
-
-
-    def load_relative_poses(self):
-        """Lädt die gespeicherten Posen und setzt sie in die Tabelle ein."""
-        relative_poses = RelativePoses()  # Instanz erstellen
-        poses = relative_poses.load_poses()  # Geladene Posen als Dictionary
-
-        for row in range(self.table.rowCount()):
-            row_label = self.table.verticalHeaderItem(row).text()
-            if row_label in poses:
-                for col in range(self.table.columnCount()):
-                    print(f"Setting {row_label} at {col} to {poses[row_label][col]}")
-                    print("coloncount", self.table.columnCount())
-                    value = poses[row_label][col] if col < len(poses[row_label]) else 0.0
-                    self.table.setItem(row, col, QTableWidgetItem(str(value)))
-
-                    if row_label == "Virtual Object":
-                        self.ros_interface.virtual_object_pose = poses[row_label]  # Ensure it's loaded properly
-
-    def get_relative_pose(self, robot, ur):
-        """Retrieves the relative pose [x, y, z] from the table for the given robot and UR arm."""
-        row_label = f"{robot}/{ur}"
-        
-        for row in range(self.table.rowCount()):
-            if self.table.verticalHeaderItem(row).text() == row_label:
-                return [
-                    float(self.table.item(row, col).text()) if self.table.item(row, col) else 0.0
-                    for col in range(6)  # Jetzt für X, Y, Z, Rx, Ry, Rz
-                ]
-        
-        # Default value if no match is found
-        return [0.0, 0.0, 0.0]
 
     def get_workspace_name(self):
         return self.workspace_input.text().strip()
