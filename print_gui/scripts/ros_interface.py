@@ -200,29 +200,51 @@ class ROSInterface:
 
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
-        """Start the local Dynamixel servo driver launch file in a new terminal."""
-        # Run locally; assumes environment sourced from the GUI process or bashrc
-        cmd = "bash -lc 'roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
-        subprocess.Popen([
-            "terminator",
-            "--title=Dynamixel Driver",
-            "-x",
-            "bash",
-            "-lc",
-            "roslaunch dynamixel_match dynamixel_motors.launch; exec bash"
-        ])
+        """Start the Dynamixel servo driver on the selected robots over SSH (new terminal per robot)."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping Dynamixel start.")
+            return
+        workspace = self.gui.get_workspace_name()
+        for robot in selected_robots:
+            command = (
+                f"ssh -t -t {robot} '"
+                f"source ~/.bashrc; "
+                f"export ROS_MASTER_URI=http://roscore:11311/; "
+                f"source /opt/ros/noetic/setup.bash; "
+                f"source ~/{workspace}/devel/setup.bash; "
+                f"roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
+            )
+            subprocess.Popen([
+                "terminator",
+                f"--title=Dynamixel {robot}",
+                "-x",
+                f"{command}; exec bash"
+            ])
 
     def stop_dynamixel_driver(self):
-        """Stop the Dynamixel servo driver processes."""
-        # Try to kill by rosnode name and fallback to pkill patterns
-        try:
-            subprocess.Popen("rosnode kill /servo_driver", shell=True)
-        except Exception:
-            pass
-        # Also stop associated roslaunch processes if any
-        subprocess.Popen("pkill -f dynamixel_motors.launch", shell=True)
-        subprocess.Popen("pkill -f servo_driver.py", shell=True)
-        subprocess.Popen("pkill -f dynamixel_workbench_controllers", shell=True)
+        """Stop the Dynamixel servo driver on the selected robots over SSH."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping Dynamixel stop.")
+            return
+        workspace = self.gui.get_workspace_name()
+        for robot in selected_robots:
+            # Kill by rosnode and fall back to process patterns
+            remote_cmd = (
+                "source ~/.bashrc; "
+                "export ROS_MASTER_URI=http://roscore:11311/; "
+                "source /opt/ros/noetic/setup.bash; "
+                f"source ~/{workspace}/devel/setup.bash; "
+                "rosnode kill /servo_driver || true; "
+                "pkill -f dynamixel_motors.launch || true; "
+                "pkill -f servo_driver.py || true; "
+                "pkill -f dynamixel_workbench_controllers || true;"
+            )
+            subprocess.Popen(
+                f"ssh -t -t {robot} '{remote_cmd}'",
+                shell=True
+            )
 
     def _init_dynamixel_publishers(self):
         """Initialize publishers for left/right servo target topics."""
