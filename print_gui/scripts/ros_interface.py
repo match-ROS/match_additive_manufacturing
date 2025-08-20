@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer
 import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
-from std_msgs.msg import Float32, Int32
+from std_msgs.msg import Float32, Int32, Int16
 from sensor_msgs.msg import BatteryState
 
 import rospy
@@ -40,53 +40,6 @@ class ROSInterface:
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
         self.gui.path_idx.emit(self.current_index)  # Update the GUI with the new index
-        
-    def subscribe_to_relative_poses(self):
-        """Abonniert die relativen Posen der ausgewählten Roboter und speichert sie in YAML."""
-        selected_robots = self.gui.get_selected_robots()
-        selected_urs = self.gui.get_selected_urs()
-
-        if not selected_robots or not selected_urs:
-            print("No robots or URs selected. Skipping update.")
-            return
-
-        if not rospy.core.is_initialized():
-            rospy.init_node("update_relative_poses", anonymous=True, disable_signals=True)
-        self.updated_poses = {}
-
-        def callback(data, robot_ur):
-            """Receives relative pose and extracts both position (x, y, z) and orientation (Rx, Ry, Rz) in Euler angles."""
-            
-            # Extract position
-            position = data.pose.position
-            x, y, z = position.x, position.y, position.z
-
-            # Extract orientation as quaternion
-            orientation = data.pose.orientation
-            quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
-
-            # Convert quaternion to Euler angles (roll, pitch, yaw)
-            rx, ry, rz = tf_trans.euler_from_quaternion(quaternion)
-
-            # Store the values in the dictionary
-            self.updated_poses[robot_ur] = {"x": x, "y": y, "z": z, "rx": rx, "ry": ry, "rz": rz}
-
-            print(f"✅ Received pose for {robot_ur}: {self.updated_poses[robot_ur]}")
-
-            # Check if all poses have been received, then trigger save
-            if len(self.updated_poses) >= len(selected_robots) * len(selected_urs):
-                rospy.signal_shutdown("Pose update complete")
-                self.save_poses_to_yaml()
-
-
-
-        for robot in selected_robots:
-            for ur in selected_urs:
-                topic_name = f"/{robot}/{ur}/relative_pose"
-                rospy.Subscriber(topic_name, PoseStamped, callback, (robot, ur))
-                print(f"Subscribed to {topic_name}")
-
-        rospy.spin()
 
     def start_roscore(self):
         """Starts roscore on the roscore PC."""
@@ -247,23 +200,26 @@ class ROSInterface:
             )
 
     def _init_dynamixel_publishers(self):
-        """Initialize publishers for left/right servo target topics."""
+        """Initialize publishers for left/right servo target topics (Int16)."""
         try:
-            self.servo_left_pub = rospy.Publisher('/servo_target_position_left', Float32, queue_size=10)
-            self.servo_right_pub = rospy.Publisher('/servo_target_position_right', Float32, queue_size=10)
+            self.servo_left_pub = rospy.Publisher('/servo_target_pos_left', Int16, queue_size=10)
+            self.servo_right_pub = rospy.Publisher('/servo_target_pos_right', Int16, queue_size=10)
         except Exception as e:
             rospy.logwarn(f"Failed to create Dynamixel target publishers: {e}")
 
-    def publish_servo_targets(self, left_value: float, right_value: float):
-        """Publish target positions for both servos.
-        Values are forwarded as std_msgs/Float32 on /servo_target_position_left and /servo_target_position_right.
+    def publish_servo_targets(self, left_value: int, right_value: int):
+        """Publish target positions for both servos as Int16 (0..4095).
+        Values are forwarded as std_msgs/Int16 on /servo_target_pos_left and /servo_target_pos_right.
         """
         if not hasattr(self, 'servo_left_pub'):
             self._init_dynamixel_publishers()
         try:
-            self.servo_left_pub.publish(Float32(left_value))
-            self.servo_right_pub.publish(Float32(right_value))
-            rospy.loginfo(f"Published servo targets L={left_value}, R={right_value}")
+            # Coerce to servo range 0..4095
+            left_int = max(min(int(round(left_value)), 4095), 0)
+            right_int = max(min(int(round(right_value)), 4095), 0)
+            self.servo_left_pub.publish(Int16(left_int))
+            self.servo_right_pub.publish(Int16(right_int))
+            rospy.loginfo(f"Published servo targets L={left_int}, R={right_int}")
         except Exception as e:
             rospy.logerr(f"Failed to publish servo targets: {e}")
 
@@ -275,10 +231,6 @@ def launch_ros(gui, package, launch_file):
     command = f"roslaunch {package} {launch_file} robot_names:={robot_names_str}"
     print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)
-
-
-
-
 
 def start_status_update(gui):
     threading.Thread(target=update_status, args=(gui,), daemon=True).start()
@@ -325,12 +277,6 @@ def get_status_symbol(active, total):
 def open_rviz():
     command = "roslaunch print_gui launch_rviz.launch"
     subprocess.Popen(command, shell=True)
-
-def quit_drivers():
-    print("Stopping all drivers...")
-    subprocess.Popen("pkill -f 'roslaunch'", shell=True)
-
-
 
 def turn_on_arm_controllers(gui):
     """Turns on all arm controllers for the selected robots."""
