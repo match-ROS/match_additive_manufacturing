@@ -7,6 +7,18 @@ from ros_interface import ROSInterface
 import os
 
 
+class EnterSpinBox(QSpinBox):
+    """QSpinBox that emits returnPressed when user presses Enter."""
+    returnPressed = pyqtSignal()
+
+    def keyPressEvent(self, event):
+        key_return = getattr(Qt, 'Key_Return', None)
+        key_enter = getattr(Qt, 'Key_Enter', None)
+        if event.key() in [k for k in (key_return, key_enter) if k is not None]:
+            self.returnPressed.emit()
+        super().keyPressEvent(event)
+
+
 class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
     
@@ -86,8 +98,8 @@ class ROSGui(QWidget):
         idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
         # Servo section
         servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
-        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = QSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(0); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
-        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = QSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(0); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
+        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setOrientation(Qt.Horizontal); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = EnterSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(0); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); self.servo_left_spin.returnPressed.connect(self._send_percent_targets); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
+        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setOrientation(Qt.Horizontal); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = EnterSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(0); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); self.servo_right_spin.returnPressed.connect(self._send_percent_targets); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
         send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
         targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
