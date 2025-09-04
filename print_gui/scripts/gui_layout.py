@@ -236,14 +236,18 @@ class ROSGui(QWidget):
         idx_box.addWidget(stop_idx_btn)
         print_functions_layout.addLayout(idx_box)
 
-        # Dynamixel Servo Target Controls (0-4095 with slider + editable spinbox)
+        # Dynamixel Servo Target Controls (0-4095 with slider + editable spinbox + zero calibration)
         servo_box = QGroupBox("Dynamixel Servo Targets")
-        servo_layout = QHBoxLayout()
+        servo_outer_layout = QVBoxLayout()
 
-        # Left servo
+        # --- Top row: live targets ---
+        targets_row = QHBoxLayout()
+
+        # Left servo controls
         left_col = QVBoxLayout()
         left_col.addWidget(QLabel("Left target"))
-        self.servo_left_slider = QSlider(Qt.Horizontal)
+        self.servo_left_slider = QSlider()
+        self.servo_left_slider.setOrientation(Qt.Horizontal)  # type: ignore[attr-defined]
         self.servo_left_slider.setRange(0, 4095)
         self.servo_left_slider.setTickInterval(256)
         self.servo_left_slider.setTickPosition(QSlider.TicksBelow)
@@ -251,16 +255,16 @@ class ROSGui(QWidget):
         self.servo_left_spin.setRange(0, 4095)
         self.servo_left_spin.setSingleStep(1)
         self.servo_left_spin.setValue(0)
-        # sync both ways
         self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue)
         self.servo_left_spin.valueChanged.connect(self.servo_left_slider.setValue)
         left_col.addWidget(self.servo_left_slider)
         left_col.addWidget(self.servo_left_spin)
 
-        # Right servo
+        # Right servo controls
         right_col = QVBoxLayout()
         right_col.addWidget(QLabel("Right target"))
-        self.servo_right_slider = QSlider(Qt.Horizontal)
+        self.servo_right_slider = QSlider()
+        self.servo_right_slider.setOrientation(Qt.Horizontal)  # type: ignore[attr-defined]
         self.servo_right_slider.setRange(0, 4095)
         self.servo_right_slider.setTickInterval(256)
         self.servo_right_slider.setTickPosition(QSlider.TicksBelow)
@@ -268,23 +272,55 @@ class ROSGui(QWidget):
         self.servo_right_spin.setRange(0, 4095)
         self.servo_right_spin.setSingleStep(1)
         self.servo_right_spin.setValue(0)
-        # sync both ways
         self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue)
         self.servo_right_spin.valueChanged.connect(self.servo_right_slider.setValue)
         right_col.addWidget(self.servo_right_slider)
         right_col.addWidget(self.servo_right_spin)
 
-        # Send button
+        # Send current targets
         send_col = QVBoxLayout()
         send_btn = QPushButton("Send Targets")
-        send_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(self.servo_left_spin.value(), self.servo_right_spin.value()))
+        send_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(
+            self.servo_left_spin.value(), self.servo_right_spin.value()))
         send_col.addWidget(QLabel(" "))
         send_col.addWidget(send_btn)
 
-        servo_layout.addLayout(left_col)
-        servo_layout.addLayout(right_col)
-        servo_layout.addLayout(send_col)
-        servo_box.setLayout(servo_layout)
+        targets_row.addLayout(left_col)
+        targets_row.addLayout(right_col)
+        targets_row.addLayout(send_col)
+        servo_outer_layout.addLayout(targets_row)
+
+        # --- Second row: zero calibration ---
+        zero_row = QHBoxLayout()
+        zero_left_col = QVBoxLayout()
+        zero_left_col.addWidget(QLabel("Left zero"))
+        self.servo_left_zero_spin = QSpinBox()
+        self.servo_left_zero_spin.setRange(0, 4095)
+        self.servo_left_zero_spin.setSingleStep(1)
+        self.servo_left_zero_spin.setValue(0)
+        zero_left_col.addWidget(self.servo_left_zero_spin)
+
+        zero_right_col = QVBoxLayout()
+        zero_right_col.addWidget(QLabel("Right zero"))
+        self.servo_right_zero_spin = QSpinBox()
+        self.servo_right_zero_spin.setRange(0, 4095)
+        self.servo_right_zero_spin.setSingleStep(1)
+        self.servo_right_zero_spin.setValue(0)
+        zero_right_col.addWidget(self.servo_right_zero_spin)
+
+        zero_btn_col = QVBoxLayout()
+        send_zero_btn = QPushButton("Send Zero Position")
+        send_zero_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(
+            self.servo_left_zero_spin.value(), self.servo_right_zero_spin.value()))
+        zero_btn_col.addWidget(QLabel(" "))
+        zero_btn_col.addWidget(send_zero_btn)
+
+        zero_row.addLayout(zero_left_col)
+        zero_row.addLayout(zero_right_col)
+        zero_row.addLayout(zero_btn_col)
+        servo_outer_layout.addLayout(zero_row)
+
+        servo_box.setLayout(servo_outer_layout)
         print_functions_layout.addWidget(servo_box)
 
         print_functions_group.setLayout(print_functions_layout)
