@@ -11,186 +11,67 @@ class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
     
     def __init__(self):
-        self.ur_follow_settings = {
-            'idx_metric': 'virtual line',
-            'threshold': 0.010,
-        }
-
         super().__init__()
+        # state
+        self.ur_follow_settings = {'idx_metric': 'virtual line', 'threshold': 0.010}
+        self.servo_calib = {'left': {'min': 0, 'zero': 0, 'max': 4095}, 'right': {'min': 0, 'zero': 0, 'max': 4095}}
+        # ROS + window
         self.path_idx.connect(self._update_spinbox)
-        
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
-        self.setGeometry(100, 100, 1000, 600)  # Increased width
-        
+        self.setGeometry(100, 100, 1000, 600)
         main_layout = QHBoxLayout()
-        self.status_timer = QTimer()
-        self.status_timer.timeout.connect(self.ros_interface.update_button_status)
-        self.status_timer.start(5000)  # Check status every 5 seconds
-        
-        # Left Side (Status & Buttons)
+        # Left column
         left_layout = QVBoxLayout()
         self.status_label = QLabel("Controller Status: Not Checked")
-        self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("border: 1px solid black; padding: 5px;")
         left_layout.addWidget(self.status_label)
-
-        # Battery Status
-        self.battery_group = QGroupBox("Battery Status")
-        self.battery_layout = QVBoxLayout()
-        self.battery_group.setLayout(self.battery_layout)
-        left_layout.addWidget(self.battery_group)
-
-        self.battery_labels = {}  # z.B. {"mur620a": (mir_label, ur_label)}
-
-        # Robot and UR selection
-        selection_group = QGroupBox("Robot and UR Selection")
-        selection_layout = QHBoxLayout()
-
-        robot_layout = QVBoxLayout()
-        self.robots = {
-            "mur620a": QCheckBox("mur620a"),
-            "mur620b": QCheckBox("mur620b"),
-            "mur620c": QCheckBox("mur620c"),
-            "mur620d": QCheckBox("mur620d"),
-        }
-        for checkbox in self.robots.values():
-            robot_layout.addWidget(checkbox)
-
-        for robot_name, checkbox in self.robots.items():
-            checkbox.stateChanged.connect(lambda _, r=robot_name: self.ros_interface.check_and_subscribe_battery())
-
-
+        # Battery
+        self.battery_group = QGroupBox("Battery Status"); self.battery_layout = QVBoxLayout(); self.battery_group.setLayout(self.battery_layout); left_layout.addWidget(self.battery_group); self.battery_labels = {}
+        # Selection
+        selection_group = QGroupBox("Robot and UR Selection"); selection_layout = QHBoxLayout(); robot_layout = QVBoxLayout()
+        self.robots = {n: QCheckBox(n) for n in ["mur620a", "mur620b", "mur620c", "mur620d"]}
+        for cb in self.robots.values(): robot_layout.addWidget(cb)
+        for name, cb in self.robots.items(): cb.stateChanged.connect(lambda _, r=name: self.ros_interface.check_and_subscribe_battery())
         for robot in self.robots.keys():
-            row = QHBoxLayout()
-            row.addWidget(QLabel(f"{robot}"))
-            
-            mir_label = QLabel("MiR: –")
-            ur_label = QLabel("UR: –")
-            row.addWidget(mir_label)
-            row.addWidget(ur_label)
-
-            self.battery_labels[robot] = (mir_label, ur_label)
-            self.battery_layout.addLayout(row)
-
-
-        ur_layout = QVBoxLayout()
-        ur_layout.addWidget(QLabel("Select URs:"))
-        self.ur10_l = QCheckBox("UR10_l")
-        self.ur10_r = QCheckBox("UR10_r")
-        self.ur10_l.setChecked(False)
-        self.ur10_r.setChecked(True)
-        ur_layout.addWidget(self.ur10_l)
-        ur_layout.addWidget(self.ur10_r)
-
-        selection_layout.addLayout(robot_layout)
-        selection_layout.addLayout(ur_layout)
-        selection_group.setLayout(selection_layout)
-        left_layout.addWidget(selection_group)
-        
-
-                # Override Slider
-        override_layout = QVBoxLayout()
-        override_label = QLabel("Override (%)")
-        override_label.setAlignment(Qt.AlignCenter)
-
-        self.override_slider = QSlider(Qt.Horizontal)
-        self.override_slider.setMinimum(0)
-        self.override_slider.setMaximum(100)
-        self.override_slider.setValue(100)
-        self.override_slider.setTickInterval(10)
-        self.override_slider.setTickPosition(QSlider.TicksBelow)
-
-        self.override_value_label = QLabel("100%")
-        self.override_value_label.setAlignment(Qt.AlignCenter)
-
-        self.ros_interface.init_override_velocity_slider()
-
-        override_layout.addWidget(override_label)
-        override_layout.addWidget(self.override_slider)
-        override_layout.addWidget(self.override_value_label)
-
-        left_layout.addLayout(override_layout)
-
-
-       
-        # Setup Functions Group
-        setup_group = QGroupBox("Setup Functions")
-        setup_layout = QVBoxLayout()
+            row = QHBoxLayout(); row.addWidget(QLabel(robot)); mir_label = QLabel("MiR: –"); ur_label = QLabel("UR: –"); row.addWidget(mir_label); row.addWidget(ur_label); self.battery_labels[robot] = (mir_label, ur_label); self.battery_layout.addLayout(row)
+        ur_layout = QVBoxLayout(); ur_layout.addWidget(QLabel("Select URs:")); self.ur10_l = QCheckBox("UR10_l"); self.ur10_r = QCheckBox("UR10_r"); self.ur10_l.setChecked(False); self.ur10_r.setChecked(True); ur_layout.addWidget(self.ur10_l); ur_layout.addWidget(self.ur10_r)
+        selection_layout.addLayout(robot_layout); selection_layout.addLayout(ur_layout); selection_group.setLayout(selection_layout); left_layout.addWidget(selection_group)
+        # Override
+        override_layout = QVBoxLayout(); override_label = QLabel("Override (%)"); self.override_slider = QSlider(); self.override_slider.setRange(0,100); self.override_slider.setValue(100); self.override_slider.setTickInterval(10); self.override_slider.setTickPosition(QSlider.TicksBelow); self.override_value_label = QLabel("100%"); self.ros_interface.init_override_velocity_slider(); override_layout.addWidget(override_label); override_layout.addWidget(self.override_slider); override_layout.addWidget(self.override_value_label); left_layout.addLayout(override_layout)
+        # Setup
+        setup_group = QGroupBox("Setup Functions"); setup_layout = QVBoxLayout();
         setup_buttons = {
             "Check Status": lambda: start_status_update(self),
             "Launch Drivers": lambda: launch_drivers(self),
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
-            #"Quit Drivers": lambda: quit_drivers(),
             "Open RVIZ": open_rviz,
             "Start Roscore": lambda: self.ros_interface.start_roscore(),
             "Start Mocap": lambda: self.ros_interface.start_mocap(),
             "Start Sync": lambda: self.ros_interface.start_sync(),
         }
-
-        for text, function in setup_buttons.items():
-            btn = QPushButton(text)
-            
-            # Speichert spezielle Buttons für Status-Updates
-            if text == "Start Roscore":
-                self.btn_roscore = btn
-            elif text == "Start Mocap":
-                self.btn_mocap = btn
-            elif text == "Start Sync":
-                self.btn_sync = btn
-
-            btn.clicked.connect(lambda checked, f=function: f())
-            btn.setStyleSheet("background-color: lightgray;")  # Standardfarbe
-            setup_layout.addWidget(btn)
-
-        self.workspace_input = QLineEdit()
-        default_path = self.get_relative_workspace_path()
-        self.workspace_input.setText(default_path)
-        self.workspace_input.setPlaceholderText("Enter workspace name")
-        setup_layout.addWidget(QLabel("Workspace Name:"))
-        setup_layout.addWidget(self.workspace_input)
-
-
-        setup_group.setLayout(setup_layout)
-        left_layout.addWidget(setup_group)
-        
-               
+        for text, fn in setup_buttons.items():
+            b = QPushButton(text);
+            if text == "Start Roscore": self.btn_roscore = b
+            elif text == "Start Mocap": self.btn_mocap = b
+            elif text == "Start Sync": self.btn_sync = b
+            b.clicked.connect(lambda _, f=fn: f()); b.setStyleSheet("background-color: lightgray;"); setup_layout.addWidget(b)
+        self.workspace_input = QLineEdit(); default_path = self.get_relative_workspace_path(); self.workspace_input.setText(default_path); self.workspace_input.setPlaceholderText("Enter workspace name"); setup_layout.addWidget(QLabel("Workspace Name:")); setup_layout.addWidget(self.workspace_input); setup_group.setLayout(setup_layout); left_layout.addWidget(setup_group)
         main_layout.addLayout(left_layout)
-        
-    
-        
-        right_layout = QVBoxLayout()
-
-
-        # Buttons für "Save Poses" und "Update Poses"
-        pose_button_layout = QVBoxLayout()
-        right_layout.addLayout(pose_button_layout)
-
-        # Erstelle die "Controller Functions" Gruppe und füge sie rechts hinzu
-        controller_group = QGroupBox("Controller Functions")
-        controller_layout = QVBoxLayout()
-        controller_buttons = {
+        # Right column
+        right_layout = QVBoxLayout(); controller_group = QGroupBox("Controller Functions"); controller_layout = QVBoxLayout(); controller_buttons = {
             "Enable all URs": lambda: enable_all_urs(self),
             "Turn on Arm Controllers": lambda: turn_on_arm_controllers(self),
             "Turn on Twist Controllers": lambda: turn_on_twist_controllers(self),
             "Move to Home Pose Left": lambda: move_to_home_pose(self, "UR10_l"),
             "Move to Home Pose Right": lambda: move_to_home_pose(self, "UR10_r"),
         }
-
-        for text, function in controller_buttons.items():
-            btn = QPushButton(text)
-            btn.clicked.connect(lambda checked, f=function: f())
-            controller_layout.addWidget(btn)
-
-        controller_group.setLayout(controller_layout)
-        
-        # Print Functions GroupBox
-        print_functions_group = QGroupBox("Print Functions")
-        print_functions_layout = QVBoxLayout()
-        print_function_buttons = {
+        for text, fn in controller_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); controller_layout.addWidget(btn)
+        controller_group.setLayout(controller_layout); right_layout.addWidget(controller_group)
+        print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
             "Parse MiR Path": lambda: parse_mir_path(self),
             "Parse UR Path": lambda: parse_ur_path(self),
             "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
@@ -198,139 +79,55 @@ class ROSGui(QWidget):
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
             "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
-            "Stop UR Motion": lambda: stop_ur_motion(self)
+            "Stop UR Motion": lambda: stop_ur_motion(self),
         }
-
-        for text, function in print_function_buttons.items():
-            btn = QPushButton(text)
-            btn.clicked.connect(lambda checked, f=function: f())
-            print_functions_layout.addWidget(btn)
-
-        # Print Functions UR:
-        ur_btn = QPushButton("UR Follow Trajectory")
-        ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings))
-
-        # 1) Add a settings button next to the UR Follow Trajectory button
-        ur_settings_btn = QPushButton("Settings")
-        ur_settings_btn.clicked.connect(self.open_ur_settings)
-        ur_settings_btn.setStyleSheet("background-color: lightgray;")
-         # horizontal layout for side-by-side placement
-        hbox = QHBoxLayout()
-        hbox.addWidget(ur_btn)
-        hbox.addWidget(ur_settings_btn)
-        print_functions_layout.addLayout(hbox)
-
-        # ── current‐index display + stop button ──
-        idx_box = QHBoxLayout()
-        idx_box.addWidget(QLabel("Index:"))
-        # self.idx_label = QLabel("000")
-        # idx_box.addWidget(self.idx_label)
-        self.idx_spin = QSpinBox()
-        self.idx_spin.setRange(0, 10000)
-        self.idx_spin.setValue(0)
-        # self.idx_spin.valueChanged.connect(
-        idx_box.addWidget(self.idx_spin)
-        
-        stop_idx_btn = QPushButton("Stop Index Advancer")
-        stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self))
-        idx_box.addWidget(stop_idx_btn)
-        print_functions_layout.addLayout(idx_box)
-
-        # Dynamixel Servo Target Controls (0-4095 with slider + editable spinbox + zero calibration)
-        servo_box = QGroupBox("Dynamixel Servo Targets")
-        servo_outer_layout = QVBoxLayout()
-
-        # --- Top row: live targets ---
-        targets_row = QHBoxLayout()
-
-        # Left servo controls
-        left_col = QVBoxLayout()
-        left_col.addWidget(QLabel("Left target"))
-        self.servo_left_slider = QSlider()
-        self.servo_left_slider.setOrientation(Qt.Horizontal)  # type: ignore[attr-defined]
-        self.servo_left_slider.setRange(0, 4095)
-        self.servo_left_slider.setTickInterval(256)
-        self.servo_left_slider.setTickPosition(QSlider.TicksBelow)
-        self.servo_left_spin = QSpinBox()
-        self.servo_left_spin.setRange(0, 4095)
-        self.servo_left_spin.setSingleStep(1)
-        self.servo_left_spin.setValue(0)
-        self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue)
-        self.servo_left_spin.valueChanged.connect(self.servo_left_slider.setValue)
-        left_col.addWidget(self.servo_left_slider)
-        left_col.addWidget(self.servo_left_spin)
-
-        # Right servo controls
-        right_col = QVBoxLayout()
-        right_col.addWidget(QLabel("Right target"))
-        self.servo_right_slider = QSlider()
-        self.servo_right_slider.setOrientation(Qt.Horizontal)  # type: ignore[attr-defined]
-        self.servo_right_slider.setRange(0, 4095)
-        self.servo_right_slider.setTickInterval(256)
-        self.servo_right_slider.setTickPosition(QSlider.TicksBelow)
-        self.servo_right_spin = QSpinBox()
-        self.servo_right_spin.setRange(0, 4095)
-        self.servo_right_spin.setSingleStep(1)
-        self.servo_right_spin.setValue(0)
-        self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue)
-        self.servo_right_spin.valueChanged.connect(self.servo_right_slider.setValue)
-        right_col.addWidget(self.servo_right_slider)
-        right_col.addWidget(self.servo_right_spin)
-
-        # Send current targets
-        send_col = QVBoxLayout()
-        send_btn = QPushButton("Send Targets")
-        send_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(
-            self.servo_left_spin.value(), self.servo_right_spin.value()))
-        send_col.addWidget(QLabel(" "))
-        send_col.addWidget(send_btn)
-
-        targets_row.addLayout(left_col)
-        targets_row.addLayout(right_col)
-        targets_row.addLayout(send_col)
-        servo_outer_layout.addLayout(targets_row)
-
-        # --- Second row: zero calibration ---
-        zero_row = QHBoxLayout()
-        zero_left_col = QVBoxLayout()
-        zero_left_col.addWidget(QLabel("Left zero"))
-        self.servo_left_zero_spin = QSpinBox()
-        self.servo_left_zero_spin.setRange(0, 4095)
-        self.servo_left_zero_spin.setSingleStep(1)
-        self.servo_left_zero_spin.setValue(0)
-        zero_left_col.addWidget(self.servo_left_zero_spin)
-
-        zero_right_col = QVBoxLayout()
-        zero_right_col.addWidget(QLabel("Right zero"))
-        self.servo_right_zero_spin = QSpinBox()
-        self.servo_right_zero_spin.setRange(0, 4095)
-        self.servo_right_zero_spin.setSingleStep(1)
-        self.servo_right_zero_spin.setValue(0)
-        zero_right_col.addWidget(self.servo_right_zero_spin)
-
-        zero_btn_col = QVBoxLayout()
-        send_zero_btn = QPushButton("Send Zero Position")
-        send_zero_btn.clicked.connect(lambda: self.ros_interface.publish_servo_targets(
-            self.servo_left_zero_spin.value(), self.servo_right_zero_spin.value()))
-        zero_btn_col.addWidget(QLabel(" "))
-        zero_btn_col.addWidget(send_zero_btn)
-
-        zero_row.addLayout(zero_left_col)
-        zero_row.addLayout(zero_right_col)
-        zero_row.addLayout(zero_btn_col)
-        servo_outer_layout.addLayout(zero_row)
-
-        servo_box.setLayout(servo_outer_layout)
-        print_functions_layout.addWidget(servo_box)
-
-        print_functions_group.setLayout(print_functions_layout)
-            
-        right_layout.addWidget(controller_group)
-        right_layout.addWidget(print_functions_group)
-
-        main_layout.addLayout(right_layout)  # Fügt das Layout auf der rechten Seite hinzu
-
+        for text, fn in print_function_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); print_functions_layout.addWidget(btn)
+        ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
+        idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
+        # Servo section
+        servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
+        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = QSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(0); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
+        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = QSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(0); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
+        send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
+        targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
+        zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
+        print_functions_group.setLayout(print_functions_layout); right_layout.addWidget(print_functions_group); main_layout.addLayout(right_layout)
         self.setLayout(main_layout)
+        # Timer
+        self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(5000)
+
+    def _percent_to_raw(self, percent: float, which: str) -> int:
+        c = self.servo_calib[which]
+        span = c['max'] - c['min']
+        if span == 0:
+            return int(c['min'])
+        raw = c['min'] + (percent / 100.0) * span
+        return max(0, min(4095, int(round(raw))))
+
+    def _send_percent_targets(self):
+        left_p = self.servo_left_spin.value()
+        right_p = self.servo_right_spin.value()
+        left_raw = self._percent_to_raw(left_p, 'left')
+        right_raw = self._percent_to_raw(right_p, 'right')
+        self.ros_interface.publish_servo_targets(left_raw, right_raw)
+
+    def _send_zero_positions(self):
+        # Use currently stored zero raw values (spin boxes display them)
+        self.ros_interface.publish_servo_targets(
+            int(self.servo_left_zero_spin.value()),
+            int(self.servo_right_zero_spin.value())
+        )
+
+    def open_servo_calibration(self):
+        dlg = ServoCalibrationDialog(self, self.servo_calib)
+        if dlg.exec_() == QDialog.Accepted:
+            self.servo_calib = dlg.get_values()
+            # update zero spin boxes
+            self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero'])
+            self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero'])
+            # Optionally reset sliders/spins to zero percent
+            # self.servo_left_slider.setValue(0); self.servo_left_spin.setValue(0)
+            # self.servo_right_slider.setValue(0); self.servo_right_spin.setValue(0)
     
 
     @pyqtSlot(int)
@@ -432,5 +229,64 @@ class URFollowSettingsDialog(QDialog):
         return {
             'idx_metric': self.dropdown_idx_metric.currentText(),
             'threshold': self.spin_threshold.value(),
+        }
+
+
+class ServoCalibrationDialog(QDialog):
+    def __init__(self, parent, calib):
+        super().__init__(parent)
+        self.setWindowTitle("Servo Calibration")
+        self._orig = calib
+        self._data = {
+            'left': calib['left'].copy(),
+            'right': calib['right'].copy()
+        }
+        form = QFormLayout()
+        # Left
+        self.left_min = QSpinBox(); self.left_min.setRange(0,4095); self.left_min.setValue(self._data['left']['min'])
+        self.left_zero = QSpinBox(); self.left_zero.setRange(0,4095); self.left_zero.setValue(self._data['left']['zero'])
+        self.left_max = QSpinBox(); self.left_max.setRange(0,4095); self.left_max.setValue(self._data['left']['max'])
+        form.addRow(QLabel("Left Min"), self.left_min)
+        form.addRow(QLabel("Left Zero"), self.left_zero)
+        form.addRow(QLabel("Left Max"), self.left_max)
+        # Right
+        self.right_min = QSpinBox(); self.right_min.setRange(0,4095); self.right_min.setValue(self._data['right']['min'])
+        self.right_zero = QSpinBox(); self.right_zero.setRange(0,4095); self.right_zero.setValue(self._data['right']['zero'])
+        self.right_max = QSpinBox(); self.right_max.setRange(0,4095); self.right_max.setValue(self._data['right']['max'])
+        form.addRow(QLabel("Right Min"), self.right_min)
+        form.addRow(QLabel("Right Zero"), self.right_zero)
+        form.addRow(QLabel("Right Max"), self.right_max)
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout()
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+    def _on_accept(self):
+        # Basic validation: min <= zero <= max
+        if not (self.left_min.value() <= self.left_zero.value() <= self.left_max.value()):
+            # silently clamp
+            z = min(max(self.left_zero.value(), self.left_min.value()), self.left_max.value())
+            self.left_zero.setValue(z)
+        if not (self.right_min.value() <= self.right_zero.value() <= self.right_max.value()):
+            z = min(max(self.right_zero.value(), self.right_min.value()), self.right_max.value())
+            self.right_zero.setValue(z)
+        self.accept()
+
+    def get_values(self):
+        return {
+            'left': {
+                'min': self.left_min.value(),
+                'zero': self.left_zero.value(),
+                'max': self.left_max.value(),
+            },
+            'right': {
+                'min': self.right_min.value(),
+                'zero': self.right_zero.value(),
+                'max': self.right_max.value(),
+            }
         }
 
