@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import rospy
@@ -9,6 +9,7 @@ from sensor_msgs import point_cloud2 as pc2
 import tf2_ros
 import tf2_py as tf2
 from tf.transformations import quaternion_matrix
+import threading
 
 try:
     # laser_geometry is optional; only needed for LaserScan input
@@ -34,6 +35,7 @@ class PointCloudAssembler(object):
         # Accumulator
         self._active = False
         self._points = []  # list of (x,y,z)
+        self._lock = threading.Lock()
 
         # Publisher (latched so consumers can get the last assembled cloud)
         self.pub = rospy.Publisher(self.output_topic, PointCloud2, queue_size=1, latch=True)
@@ -60,15 +62,19 @@ class PointCloudAssembler(object):
 
     # --- Services ---
     def _on_start(self, _req):
-        self._points = []
-        self._active = True
+        with self._lock:
+            self._points = []
+            self._active = True
         msg = 'Acquisition started; buffers cleared.'
         rospy.loginfo(msg)
         return TriggerResponse(success=True, message=msg)
 
     def _on_stop(self, _req):
+        # Stop first to prevent new appends, then take a snapshot under lock
         self._active = False
-        count = len(self._points)
+        with self._lock:
+            pts_snapshot = list(self._points)
+        count = len(pts_snapshot)
         if count == 0:
             msg = 'Acquisition stopped; no points collected.'
             rospy.logwarn(msg)
@@ -78,7 +84,7 @@ class PointCloudAssembler(object):
         header = Header()
         header.stamp = rospy.Time.now()
         header.frame_id = self.target_frame
-        cloud = pc2.create_cloud_xyz32(header, self._points)
+        cloud = pc2.create_cloud_xyz32(header, pts_snapshot)
         self.pub.publish(cloud)
         msg = 'Acquisition stopped; published %d points.' % count
         rospy.loginfo(msg)
@@ -165,14 +171,16 @@ class PointCloudAssembler(object):
     def _accumulate_cloud(self, cloud_msg):
         # Read XYZ points and append
         added = 0
-        for p in pc2.read_points(cloud_msg, field_names=("x", "y", "z"), skip_nans=True):
-            self._points.append((float(p[0]), float(p[1]), float(p[2])))
-            added += 1
-            if len(self._points) >= self.max_points:
-                rospy.logwarn('Reached max_points=%d; further points will be ignored until stop.' % self.max_points)
-                self._active = False
-                break
-        rospy.logdebug('Accumulated %d points (total=%d)', added, len(self._points))
+        with self._lock:
+            for p in pc2.read_points(cloud_msg, field_names=("x", "y", "z"), skip_nans=True):
+                self._points.append((float(p[0]), float(p[1]), float(p[2])))
+                added += 1
+                if len(self._points) >= self.max_points:
+                    rospy.logwarn('Reached max_points=%d; further points will be ignored until stop.' % self.max_points)
+                    self._active = False
+                    break
+            total = len(self._points)
+        rospy.logdebug('Accumulated %d points (total=%d)', added, total)
 
 
 def main():
