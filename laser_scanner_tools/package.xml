@@ -50,6 +50,17 @@
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
 
+  <!-- Runtime and build dependencies for the pointcloud assembler node -->
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_sensor_msgs</depend>
+  <depend>tf</depend>
+  <!-- Optional for LaserScan input type -->
+  <exec_depend>laser_geometry</exec_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
