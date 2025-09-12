@@ -28,17 +28,35 @@ You can override the default parameters using the launch file or command line sw
 
 Other tuning parameters include lookahead distance, distance threshold, and control gains:
 
-- `~lookahead_distance` (default: 0.25)
-- `~distance_threshold` (default: 0.25)
-- `~search_range` (default: 20)
-- ```~Kv``` (default: 1.0)
-- `~control_rate` (default: 100)
-- `~dT` (default: 0.2)
+### Basic Parameters
+- `~lookahead_distance` (default: 0.1): Base lookahead distance for pure pursuit
+- `~distance_threshold` (default: 0.02): Tangential distance threshold for waypoint completion  
+- `~search_range` (default: 5): Number of points to search for lookahead point
+- `~Kv` (default: 1.0): Linear velocity multiplier
+- `~control_rate` (default: 100): Control loop frequency in Hz
+- `~dT` (default: 0.5): Time step for velocity calculations
+
+### Advanced High-Speed Tracking Parameters (RL Version)
+- `~max_lookahead_distance` (default: 0.5): Maximum adaptive lookahead distance
+- `~lookahead_velocity_gain` (default: 0.1): Scaling factor for velocity-based lookahead adaptation
+- `~K_idx` (default: 0.05): Index error compensation gain (increased from 0.01 for better high-speed tracking)  
+- `~K_feedforward` (default: 0.2): Feedforward compensation gain for predictive control
+- `~K_distance` (default: 0.0): Distance error multiplier
+- `~K_orientation` (default: 0.5): Orientation error multiplier
 
 ## Nodes
+### mir_trajectory_follower_pure_pursuit_RL (Reinforcement Learning Enhanced)
+- **File:** [mir_trajectory_follower_pure_pursuit_RL.py](scripts/mir_trajectory_follower_pure_pursuit_RL.py)
+- **Description:** Advanced trajectory follower with reinforcement learning enhancements and high-speed tracking improvements. Features adaptive lookahead distance, enhanced lag compensation, and feedforward control for better performance at high speeds.
+- **Key Improvements:**
+  - **Adaptive Lookahead:** Dynamically adjusts lookahead distance based on current velocity (0.1m to 0.5m)
+  - **Enhanced Lag Compensation:** Non-linear index error compensation for significant tracking lags
+  - **Feedforward Control:** Predictive velocity compensation to anticipate trajectory requirements  
+  - **High-Speed Optimization:** Reduces lag between mir_target_pose and actual robot pose at high speeds
+
 ### mir_trajectory_follower_pure_pursuit
 - **File:** [mir_trajectory_follower_pure_pursuit.py](scripts/mir_trajectory_follower_pure_pursuit.py)
-- **Description:** Follows a trajectory using the Pure Pursuit algorithm. It processes incoming path data, identifies a lookahead point, computes curvature, and publishes velocity commands.
+- **Description:** Standard pure pursuit implementation. Follows a trajectory using the Pure Pursuit algorithm. It processes incoming path data, identifies a lookahead point, computes curvature, and publishes velocity commands.
 - **TF Broadcasting:** Publishes transforms for the current pose, target (lookahead) point, and current position for debugging.
 
 ### mir_trajectory_follower (Custom Path Follower)
