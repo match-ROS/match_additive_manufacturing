@@ -8,6 +8,43 @@ from tf import TransformBroadcaster
 from tf import transformations as tr
 from std_msgs.msg import Int32, Float32
 from copy import deepcopy
+import time
+
+def wrap_to_pi(a):
+    return math.atan2(math.sin(a), math.cos(a))
+
+class LowPass1st:
+    def __init__(self, cutoff_hz, dt, init_val=0.0):
+        self.set_params(cutoff_hz, dt)
+        self.y = init_val
+        self.initialized = False
+    def set_params(self, cutoff_hz, dt):
+        self.dt = dt
+        self.cut = max(1e-6, cutoff_hz)
+        self.alpha = 1.0 - math.exp(-2.0*math.pi*self.cut*self.dt)  # bilinear-freundlich, stabil
+    def reset(self, val=0.0):
+        self.y = val; self.initialized = False
+    def filt(self, x):
+        if not self.initialized:
+            self.y = x; self.initialized = True
+        self.y = self.y + self.alpha*(x - self.y)
+        return self.y
+
+class RateLimiter:
+    def __init__(self, max_rate_per_s, dt, init_val=0.0):
+        self.max_rate = max_rate_per_s
+        self.dt = dt
+        self.y = init_val
+        self.initialized = False
+    def reset(self, val=0.0):
+        self.y = val; self.initialized = False
+    def step(self, x):
+        if not self.initialized:
+            self.y = x; self.initialized = True
+            return self.y
+        max_step = self.max_rate * self.dt
+        self.y += max(-max_step, min(max_step, x - self.y))
+        return self.y
 
 class PurePursuitNode:
     def __init__(self):
@@ -16,8 +53,8 @@ class PurePursuitNode:
         # Config
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
-        self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.2)
-        self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.02)
+        self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.25)
+        self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
@@ -35,6 +72,31 @@ class PurePursuitNode:
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
         
+        # Smoothing-Parameter
+        self.cut_vel_lin   = rospy.get_param("~cut_vel_lin_hz", 10.0)     # Tiefpass linear
+        self.cut_vel_ang   = rospy.get_param("~cut_vel_ang_hz", 10.0)     # Tiefpass angular
+        self.cut_err_hz    = rospy.get_param("~cut_err_hz", 5.0)         # Tiefpass für Fehler
+        self.a_max         = rospy.get_param("~a_max", 0.8)              # m/s^2
+        self.alpha_max     = rospy.get_param("~alpha_max", 2.5)          # rad/s^2
+        self.v_max         = rospy.get_param("~v_max", 0.6)              # optionale Kappen
+        self.w_max         = rospy.get_param("~w_max", 1.8)
+
+        self.dt_ctrl = 1.0/float(self.control_rate)
+
+        # Filter (Ausgang)
+        self.lpf_v  = LowPass1st(self.cut_vel_lin, self.dt_ctrl, 0.0)
+        self.lpf_w  = LowPass1st(self.cut_vel_ang, self.dt_ctrl, 0.0)
+        self.rl_v   = RateLimiter(self.a_max,   self.dt_ctrl, 0.0)
+        self.rl_w   = RateLimiter(self.alpha_max, self.dt_ctrl, 0.0)
+
+        # Fehler-Filter (glättet springende Ziel-/Istwerte)
+        self.lpf_dist_err = LowPass1st(self.cut_err_hz, self.dt_ctrl, 0.0)
+        self.lpf_ang_err  = LowPass1st(self.cut_err_hz, self.dt_ctrl, 0.0)
+
+        # Für Eingangsinterpolation
+        self.last_pose_msg = None
+        self.last_pose_stamp = None
+
         # Publisher
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
         self.target_pose_pub = rospy.Publisher(self.target_pose_topic, PoseStamped, queue_size=1)
@@ -87,6 +149,19 @@ class PurePursuitNode:
 
     def follow_path(self):
 
+        # --- Eingangsinterpolation (First-Order Hold) ---
+        # Falls 12 Hz Eingang: pose zwischen Updates glätten (konst. Geschwindigkeit, konst. yaw-Rate)
+        if self.last_pose_msg is not None and self.current_pose is not None:
+            # Zeit seit letztem echten Pose-Update
+            dt_since = (rospy.Time.now() - self.last_pose_stamp).to_sec()
+            # Schätze Translationsgeschwindigkeit v aus letzter cmd_vel (optional: oder Pfadgeschwindigkeit)
+            # Hier einfache Nullannahme vermeidet Drift; Glättung kommt primär aus LPF/RateLimiter.
+            # Für bessere Ergebnisse: eigenen v-Schätzer führen.
+            interp_pose = deepcopy(self.last_pose_msg)
+            # Keine Positions-Extrapolation hier (um Drift zu vermeiden), nur Orientierung glätten via LPF unten.
+            self.current_pose = interp_pose
+
+
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
         self.calculate_path_velocities()
         while not rospy.is_shutdown() and self.is_active == False:
@@ -126,11 +201,11 @@ class PurePursuitNode:
             self.publish_actual_and_target_pose()
 
             # Beende die Pfadverfolgung, wenn der Zielpunkt erreicht ist
-            # if self.reached_target(self.path[-1].pose.position):
-            #     self.is_active = False
-            #     self.completion_pub.publish(Bool(data=True))
-            #     rospy.loginfo("Pfadverfolgung abgeschlossen.")
-            #     break
+            if self.reached_target(self.path[-1].pose.position):
+                self.is_active = False
+                self.completion_pub.publish(Bool(data=True))
+                rospy.loginfo("Pfadverfolgung abgeschlossen.")
+                break
             
 
 
@@ -179,24 +254,48 @@ class PurePursuitNode:
 
     def apply_control(self):
         # Berechne die Steuerbefehle
-        index_error = self.ur_trajectory_index - (self.current_mir_path_index-1) # -1 because of the current_mir_path_index is the next point
- 
-        distance_error = self.calculate_distance(self.current_pose.position, self.path[self.current_mir_path_index].pose.position)
-        orientation_error = self.calculate_orientation_error(self.current_pose, self.path[self.current_mir_path_index].pose)
+        index_error = self.ur_trajectory_index - (self.current_mir_path_index-1)
+
+        raw_dist_err = self.calculate_distance(
+            self.current_pose.position,
+            self.path[self.current_mir_path_index].pose.position
+        )
+
+        raw_ang_err = self.calculate_orientation_error(
+            self.current_pose,
+            self.path[self.current_mir_path_index].pose
+        )
+        raw_ang_err = wrap_to_pi(raw_ang_err)
+
+        # Tiefpass auf Fehler (glättet springende Ziele/Orientierungen)
+        distance_error    = self.lpf_dist_err.filt(raw_dist_err)
+        orientation_error = self.lpf_ang_err.filt(raw_ang_err)
 
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
         rospy.loginfo_throttle(1, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}")
         velocity = Twist()
-        target_vel = self.Kv * self.path_velocities_lin[self.current_mir_path_index] + self.K_distance * distance_error + self.K_idx * index_error
+        feedforward_v  = self.path_velocities_lin[self.current_mir_path_index]
+        feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]
 
-        velocity.linear.x = max(0.0, target_vel ) * self.override  # min 0.0 to avoid negative speeds
+        target_v = self.Kv*feedforward_v + self.K_distance*distance_error + self.K_idx*index_error
+        target_w = self.K_orientation*orientation_error + self.Kv*feedforward_w
 
-        velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * (self.path_velocities_ang[self.current_mir_path_index])
+        # Keine Rückwärtsfahrt (optional)
+        target_v = max(0.0, target_v) * self.override
 
-        print(f"Lin vel: {velocity.linear.x}, Ang vel: {velocity.angular.z}")
+        # Tiefpass -> RateLimiter -> Begrenzen
+        v_smooth = self.rl_v.step(self.lpf_v.filt(target_v))
+        w_smooth = self.rl_w.step(self.lpf_w.filt(target_w))
+
+        # Kappen
+        v_smooth = max(0.0, min(self.v_max, v_smooth))
+        w_smooth = max(-self.w_max, min(self.w_max, w_smooth))
+
+        velocity.linear.x  = v_smooth
+        velocity.angular.z = w_smooth
+
         self.cmd_vel_pub.publish(velocity)
-
 
 
     def broadcast_target_point(self, point):
@@ -224,8 +323,12 @@ class PurePursuitNode:
 
 
     def pose_callback(self, msg):
+        # Eingangs-Pose merken (wird in follow_path linear extrapoliert, FOH)
         self.current_pose = msg
-        # broadcast current pose
+        self.last_pose_msg = deepcopy(msg)
+        self.last_pose_stamp = rospy.Time.now()
+
+        # broadcast current pose (unverändert)
         now = rospy.Time.now()
         if now == self.time_stamp_old:
             return
@@ -237,6 +340,7 @@ class PurePursuitNode:
             "current_pose",
             "map"
         )
+
 
     def trajectory_index_callback(self, msg):
         self.ur_trajectory_index = msg.data
