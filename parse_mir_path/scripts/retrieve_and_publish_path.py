@@ -13,7 +13,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 start_index = 10
 
 print(f"Parent directory: {parent_dir}")
-sys.path.append(parent_dir+ "/component/")
+sys.path.append(parent_dir+ "/component/rectangleRoundedCorners")
 
 # Import mir_path to retrieve mirX and mirY
 from print_path import xMIR

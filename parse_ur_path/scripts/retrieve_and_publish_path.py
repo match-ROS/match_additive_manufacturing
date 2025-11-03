@@ -10,7 +10,7 @@ from additive_manufacturing_msgs.msg import Vector3Array
 
 # Add the parent directory to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(parent_dir+ "/component/")
+sys.path.append(parent_dir+ "/component/rectangleRoundedCorners")
 
 
 # Import mir_path to retrieve mirX and mirY
