@@ -64,7 +64,9 @@ class PurePursuitNode:
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
+        rospy.loginfo("Got path with {} points.".format(len(self.path)))
         self.ur_trajectory_index = rospy.wait_for_message(self.trajectory_index_topic, Int32).data
+        rospy.loginfo("Starting from trajectory index: {}".format(self.ur_trajectory_index))
         self.current_mir_path_index = self.ur_trajectory_index
         self.follow_path()
         
@@ -192,6 +194,7 @@ class PurePursuitNode:
 
         velocity.angular.z =  self.K_orientation * orientation_error + self.Kv * (self.path_velocities_ang[self.current_mir_path_index])
 
+        print(f"Lin vel: {velocity.linear.x}, Ang vel: {velocity.angular.z}")
         self.cmd_vel_pub.publish(velocity)
 
 
