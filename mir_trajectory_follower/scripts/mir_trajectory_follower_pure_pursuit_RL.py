@@ -13,22 +13,6 @@ import time
 def wrap_to_pi(a):
     return math.atan2(math.sin(a), math.cos(a))
 
-class LowPass1st:
-    def __init__(self, cutoff_hz, dt, init_val=0.0):
-        self.set_params(cutoff_hz, dt)
-        self.y = init_val
-        self.initialized = False
-    def set_params(self, cutoff_hz, dt):
-        self.dt = dt
-        self.cut = max(1e-6, cutoff_hz)
-        self.alpha = 1.0 - math.exp(-2.0*math.pi*self.cut*self.dt)  # bilinear-freundlich, stabil
-    def reset(self, val=0.0):
-        self.y = val; self.initialized = False
-    def filt(self, x):
-        if not self.initialized:
-            self.y = x; self.initialized = True
-        self.y = self.y + self.alpha*(x - self.y)
-        return self.y
 
 class RateLimiter:
     def __init__(self, max_rate_per_s, dt, init_val=0.0):
@@ -72,31 +56,9 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
-        
-        # Smoothing-Parameter
-        self.cut_vel_lin   = rospy.get_param("~cut_vel_lin_hz", 10.0)     # Tiefpass linear
-        self.cut_vel_ang   = rospy.get_param("~cut_vel_ang_hz", 10.0)     # Tiefpass angular
-        self.cut_err_hz    = rospy.get_param("~cut_err_hz", 5.0)         # Tiefpass für Fehler
-        self.a_max         = rospy.get_param("~a_max", 0.8)              # m/s^2
-        self.alpha_max     = rospy.get_param("~alpha_max", 2.5)          # rad/s^2
-        self.v_max         = rospy.get_param("~v_max", 0.6)              # optionale Kappen
-        self.w_max         = rospy.get_param("~w_max", 1.8)
+        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.9)
 
         self.dt_ctrl = 1.0/float(self.control_rate)
-
-        # Filter (Ausgang)
-        self.lpf_v  = LowPass1st(self.cut_vel_lin, self.dt_ctrl, 0.0)
-        self.lpf_w  = LowPass1st(self.cut_vel_ang, self.dt_ctrl, 0.0)
-        self.rl_v   = RateLimiter(self.a_max,   self.dt_ctrl, 0.0)
-        self.rl_w   = RateLimiter(self.alpha_max, self.dt_ctrl, 0.0)
-
-        # Fehler-Filter (glättet springende Ziel-/Istwerte)
-        self.lpf_dist_err = LowPass1st(self.cut_err_hz, self.dt_ctrl, 0.0)
-        self.lpf_ang_err  = LowPass1st(self.cut_err_hz, self.dt_ctrl, 0.0)
-
-        # Für Eingangsinterpolation
-        self.last_pose_msg = None
-        self.last_pose_stamp = None
 
         # Publisher
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
@@ -126,6 +88,7 @@ class PurePursuitNode:
         self.override = 1.0  # Default override value
         self.current_sub_step = 0
         self.mir_path_velocity = None
+        self.mir_velocity_old = Twist()
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -151,20 +114,6 @@ class PurePursuitNode:
         return abs(tangent_distance) < self.tangent_distance_threshold and abs(lateral_distance) < self.lateral_distance_threshold
 
     def follow_path(self):
-
-        # --- Eingangsinterpolation (First-Order Hold) ---
-        # Falls 12 Hz Eingang: pose zwischen Updates glätten (konst. Geschwindigkeit, konst. yaw-Rate)
-        # if self.last_pose_msg is not None and self.current_pose is not None:
-        #     # Zeit seit letztem echten Pose-Update
-        #     #dt_since = (rospy.Time.now() - self.last_pose_stamp).to_sec()
-        #     # Schätze Translationsgeschwindigkeit v aus letzter cmd_vel (optional: oder Pfadgeschwindigkeit)
-        #     # Hier einfache Nullannahme vermeidet Drift; Glättung kommt primär aus LPF/RateLimiter.
-        #     # Für bessere Ergebnisse: eigenen v-Schätzer führen.
-        #     interp_pose = deepcopy(self.last_pose_msg)
-        #     # Keine Positions-Extrapolation hier (um Drift zu vermeiden), nur Orientierung glätten via LPF unten.
-        self.current_pose = deepcopy(self.last_pose_msg)
-
-
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
         self.calculate_path_velocities()
         while not rospy.is_shutdown() and self.is_active == False:
@@ -210,8 +159,6 @@ class PurePursuitNode:
                 rospy.loginfo("Pfadverfolgung abgeschlossen.")
                 break
             
-
-
             rate.sleep()
 
 
@@ -259,7 +206,7 @@ class PurePursuitNode:
         # Berechne die Steuerbefehle
         index_error = self.ur_trajectory_index - (self.current_mir_path_index-1)
 
-        raw_dist_err = self.calculate_distance(
+        distance_error = self.calculate_distance(
             self.current_pose.position,
             self.path[self.current_mir_path_index].pose.position
         )
@@ -268,11 +215,7 @@ class PurePursuitNode:
             self.current_pose,
             self.path[self.current_mir_path_index].pose
         )
-        raw_ang_err = wrap_to_pi(raw_ang_err)
-
-        # Tiefpass auf Fehler (glättet springende Ziele/Orientierungen)
-        distance_error    = self.lpf_dist_err.filt(raw_dist_err)
-        orientation_error = self.lpf_ang_err.filt(raw_ang_err)
+        orientation_error = wrap_to_pi(raw_ang_err)
 
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
@@ -284,19 +227,15 @@ class PurePursuitNode:
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
         target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kv*feedforward_w
 
+        velocity.linear.x  = target_v * (1-self.velocity_filter_coeff) + self.mir_velocity_old.linear.x * self.velocity_filter_coeff
+        velocity.angular.z = target_w * (1-self.velocity_filter_coeff) + self.mir_velocity_old.angular.z * self.velocity_filter_coeff
+        self.mir_velocity_old = deepcopy(velocity)
+
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
 
-        # Tiefpass -> RateLimiter -> Begrenzen
-        v_smooth = self.rl_v.step(self.lpf_v.filt(target_v))
-        w_smooth = self.rl_w.step(self.lpf_w.filt(target_w))
-
-        # Kappen
-        v_smooth = max(0.0, min(self.v_max, v_smooth))
-        w_smooth = max(-self.w_max, min(self.w_max, w_smooth))
-
-        velocity.linear.x  = v_smooth
-        velocity.angular.z = w_smooth
+        velocity.linear.x  = target_v
+        velocity.angular.z = target_w
 
         self.cmd_vel_pub.publish(velocity)
 
@@ -326,10 +265,7 @@ class PurePursuitNode:
 
 
     def pose_callback(self, msg):
-        # Eingangs-Pose merken (wird in follow_path linear extrapoliert, FOH)
         self.current_pose = msg
-        self.last_pose_msg = deepcopy(msg)
-        self.last_pose_stamp = rospy.Time.now()
 
         # broadcast current pose (unverändert)
         now = rospy.Time.now()
