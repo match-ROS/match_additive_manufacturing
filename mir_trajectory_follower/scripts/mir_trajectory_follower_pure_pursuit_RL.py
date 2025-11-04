@@ -58,6 +58,7 @@ class PurePursuitNode:
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
         self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
+        self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -235,7 +236,7 @@ class PurePursuitNode:
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
         target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kv*feedforward_w
 
-
+        #print(f"Kv*feedforward_v: {self.Kv*feedforward_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, K_orientation*orientation_error: {self.K_orientation*orientation_error * self.current_sub_step_progress}")
 
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
@@ -269,6 +270,29 @@ class PurePursuitNode:
             self.path_velocities_lin.append(distance * (1.0/self.dT))  # Linear velocity
             self.path_velocities_ang.append(angular_diff * (1.0/self.dT))
 
+        lin = np.array(self.path_velocities_lin, dtype=float)
+        ang = np.array(self.path_velocities_ang, dtype=float)
+
+        # Fenster in Sekunden -> in Samples
+        win = max(1, int(round(self.smooth_window_sec / self.dT)))
+        # für symmetrischen MA ungerade wählen
+        if win % 2 == 0:
+            win += 1
+
+        lin_s = self.zero_phase_moving_average(lin, win)
+        ang_s = self.zero_phase_moving_average(ang, win)
+
+        self.path_velocities_lin = lin_s.tolist()
+        self.path_velocities_ang = ang_s.tolist()
+
+
+    def zero_phase_moving_average(self,x, window_size):
+        if window_size <= 1:
+            return np.asarray(x, dtype=float)
+        kernel = np.ones(window_size, dtype=float) / window_size
+        y = np.convolve(x, kernel, mode='same')          # forward
+        y = np.convolve(y[::-1], kernel, mode='same')[::-1]  # backward
+        return y
 
     def pose_callback(self, msg):
         self.current_pose = msg
