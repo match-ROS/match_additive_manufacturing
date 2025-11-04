@@ -21,6 +21,9 @@ from print_path import yMIR
 from print_path import nL
 from print_path import xVecMIRx
 from print_path import xVecMIRy
+from print_path import vxMIR
+from print_path import vyMIR
+
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
@@ -59,10 +62,13 @@ def publish_paths():
     # Publishers for the original and transformed paths
     original_pub = rospy.Publisher('/mir_path_original', Path, queue_size=10)
     transformed_pub = rospy.Publisher('/mir_path_transformed', Path, queue_size=10)
+    velocity_pub = rospy.Publisher('/mir_path_velocity', Path, queue_size=10)
     
     # Retrieve the original path
     x_coords = xMIR.xMIR() 
     y_coords = yMIR.yMIR()
+    vx_coords = vxMIR.vxMIR()
+    vy_coords = vyMIR.vyMIR()
     orientation_vector_x = xVecMIRx.xVecMIRx()
     orientation_vector_y = xVecMIRy.xVecMIRy()
     layer_number = nL.nL()
@@ -78,10 +84,12 @@ def publish_paths():
     # Prepare Path messages
     original_path = Path()
     transformed_path = Path()
+    velocity_path = Path()
     
     # Set frame IDs for paths
     original_path.header.frame_id = "map"  # Use an appropriate frame
     transformed_path.header.frame_id = "map"
+    velocity_path.header.frame_id = "map"
     
     # Fill original Path message
     for i in range(start_index, len(x_coords)-1):
@@ -102,6 +110,15 @@ def publish_paths():
         pose_stamped.header.stamp = rospy.Time.now()
         pose_stamped.header.frame_id = "map"
         original_path.poses.append(pose_stamped)
+
+        # Fill velocity Path message
+        vel_stamped = PoseStamped()
+        vel_stamped.pose.position.x = vx_coords[i]
+        vel_stamped.pose.position.y = vy_coords[i]
+        vel_stamped.pose.position.z = 0.0  # Velocity in z is zero
+        vel_stamped.header.stamp = rospy.Time.now()
+        vel_stamped.header.frame_id = "map"
+        velocity_path.poses.append(vel_stamped)
 
     # find the center of a bounding box placed around the path
     x_min = min(x_coords)
@@ -124,10 +141,12 @@ def publish_paths():
         # Update headers' timestamps
         original_path.header.stamp = rospy.Time.now()
         transformed_path.header.stamp = rospy.Time.now()
+        velocity_path.header.stamp = rospy.Time.now()
         
         # Publish the original and transformed paths
         original_pub.publish(original_path)
         transformed_pub.publish(transformed_path)
+        velocity_pub.publish(velocity_path)
         rate.sleep()
 
 def set_metadata():

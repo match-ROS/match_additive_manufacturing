@@ -13,7 +13,7 @@ def increment_path_index():
     pub = rospy.Publisher(path_index_topic, Int32, queue_size=10)
 
     # Set the rate at which to publish messages
-    rate = rospy.Rate(2)  # 10 Hz
+    rate = rospy.Rate(1/0.3)  # 3.33 Hz
 
     # Initialize the path index
     path_index = initial_path_index

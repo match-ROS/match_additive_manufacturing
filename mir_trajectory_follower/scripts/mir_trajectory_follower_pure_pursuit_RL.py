@@ -62,11 +62,12 @@ class PurePursuitNode:
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
+        self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
         self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
         self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
         self.layer_progress_topic = rospy.get_param("~layer_progress_topic", "/layer_progress")
         self.control_rate = rospy.get_param("~control_rate", 100)
-        self.dT = rospy.get_param("~dT", 0.5)
+        self.dT = rospy.get_param("~dT", 0.3)  # Time between trajectory points in seconds
         self.target_pose_topic = rospy.get_param("~target_pose_topic", "/mir_target_pose")
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
@@ -107,6 +108,7 @@ class PurePursuitNode:
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
         rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
         rospy.Subscriber(self.override_topic, Float32, self.override_callback)
+        rospy.Subscriber(self.mir_path_velocity_topic, Path, self.velocity_path_callback)
         
         # Start und Status
         self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
@@ -123,6 +125,7 @@ class PurePursuitNode:
         self.current_layer = 0
         self.override = 1.0  # Default override value
         self.current_sub_step = 0
+        self.mir_path_velocity = None
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -151,15 +154,15 @@ class PurePursuitNode:
 
         # --- Eingangsinterpolation (First-Order Hold) ---
         # Falls 12 Hz Eingang: pose zwischen Updates glätten (konst. Geschwindigkeit, konst. yaw-Rate)
-        if self.last_pose_msg is not None and self.current_pose is not None:
-            # Zeit seit letztem echten Pose-Update
-            dt_since = (rospy.Time.now() - self.last_pose_stamp).to_sec()
-            # Schätze Translationsgeschwindigkeit v aus letzter cmd_vel (optional: oder Pfadgeschwindigkeit)
-            # Hier einfache Nullannahme vermeidet Drift; Glättung kommt primär aus LPF/RateLimiter.
-            # Für bessere Ergebnisse: eigenen v-Schätzer führen.
-            interp_pose = deepcopy(self.last_pose_msg)
-            # Keine Positions-Extrapolation hier (um Drift zu vermeiden), nur Orientierung glätten via LPF unten.
-            self.current_pose = interp_pose
+        # if self.last_pose_msg is not None and self.current_pose is not None:
+        #     # Zeit seit letztem echten Pose-Update
+        #     #dt_since = (rospy.Time.now() - self.last_pose_stamp).to_sec()
+        #     # Schätze Translationsgeschwindigkeit v aus letzter cmd_vel (optional: oder Pfadgeschwindigkeit)
+        #     # Hier einfache Nullannahme vermeidet Drift; Glättung kommt primär aus LPF/RateLimiter.
+        #     # Für bessere Ergebnisse: eigenen v-Schätzer führen.
+        #     interp_pose = deepcopy(self.last_pose_msg)
+        #     # Keine Positions-Extrapolation hier (um Drift zu vermeiden), nur Orientierung glätten via LPF unten.
+        self.current_pose = deepcopy(self.last_pose_msg)
 
 
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
@@ -215,7 +218,7 @@ class PurePursuitNode:
     def calculate_sub_step_progress(self):
         # compute number of control cycles per path point
         cycles_per_point = int(self.dT * self.control_rate)
-        self.current_sub_step_progress = min(1.0, self.current_sub_step / cycles_per_point)  # Ensure progress does not exceed 1.0
+        self.current_sub_step_progress = min(1.0, self.current_sub_step / cycles_per_point)  # Ensure progress does not exceed 1.0       
         self.current_sub_step += 1
         
 
@@ -278,8 +281,8 @@ class PurePursuitNode:
         feedforward_v  = self.path_velocities_lin[self.current_mir_path_index]
         feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]
 
-        target_v = self.Kv*feedforward_v + self.K_distance*distance_error + self.K_idx*index_error
-        target_w = self.K_orientation*orientation_error + self.Kv*feedforward_w
+        target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
+        target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kv*feedforward_w
 
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
@@ -374,6 +377,10 @@ class PurePursuitNode:
     def override_callback(self, msg):
         # Override the current velocity with the received value
         self.override = msg.data
+
+    def velocity_path_callback(self, msg):
+        self.mir_path_velocity = msg
+
 
     def publish_actual_and_target_pose(self):
         actual_pose = PoseStamped()
