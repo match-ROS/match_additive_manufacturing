@@ -9,6 +9,7 @@ from tf import transformations as tr
 from std_msgs.msg import Int32, Float32
 from copy import deepcopy
 import time
+import numpy as np
 
 def wrap_to_pi(a):
     return math.atan2(math.sin(a), math.cos(a))
@@ -56,7 +57,7 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
-        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.9)
+        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -89,6 +90,7 @@ class PurePursuitNode:
         self.current_sub_step = 0
         self.mir_path_velocity = None
         self.mir_velocity_old = Twist()
+        self.filtered_velocity = Twist()
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -169,6 +171,12 @@ class PurePursuitNode:
         self.current_sub_step += 1
         
 
+    def filter_velocity(self, raw_velocity):
+        # Implement a simple low-pass filter for velocity
+        self.filtered_velocity.linear.x = raw_velocity.linear.x * (1 - self.velocity_filter_coeff) + self.filtered_velocity.linear.x * self.velocity_filter_coeff
+        self.filtered_velocity.angular.z = raw_velocity.angular.z * (1 - self.velocity_filter_coeff) + self.filtered_velocity.angular.z * self.velocity_filter_coeff
+        return self.filtered_velocity
+
     def find_lookahead_point(self):
         # Suche im Pfadausschnitt
         search_range = self.path[self.current_mir_path_index:self.current_mir_path_index + self.search_range]
@@ -227,15 +235,13 @@ class PurePursuitNode:
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
         target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kv*feedforward_w
 
-        velocity.linear.x  = target_v * (1-self.velocity_filter_coeff) + self.mir_velocity_old.linear.x * self.velocity_filter_coeff
-        velocity.angular.z = target_w * (1-self.velocity_filter_coeff) + self.mir_velocity_old.angular.z * self.velocity_filter_coeff
-        self.mir_velocity_old = deepcopy(velocity)
+
 
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
 
-        velocity.linear.x  = target_v
-        velocity.angular.z = target_w
+        self.filter_velocity(Twist(linear=Twist().linear.__class__(x=target_v), angular=Twist().angular.__class__(z=target_w)))
+        velocity.linear.x, velocity.angular.z = self.filtered_velocity.linear.x, self.filtered_velocity.angular.z
 
         self.cmd_vel_pub.publish(velocity)
 
