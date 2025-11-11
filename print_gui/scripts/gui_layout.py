@@ -5,6 +5,7 @@ from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, 
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
 from ros_interface import ROSInterface
 import os
+import math
 
 
 class EnterSpinBox(QSpinBox):
@@ -21,6 +22,7 @@ class EnterSpinBox(QSpinBox):
 
 class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
+    medians = pyqtSignal(float, float)
     
     def __init__(self):
         super().__init__()
@@ -29,6 +31,7 @@ class ROSGui(QWidget):
         self.servo_calib = {'left': {'min': 0, 'zero': 0, 'max': 4095}, 'right': {'min': 0, 'zero': 0, 'max': 4095}}
         # ROS + window
         self.path_idx.connect(self._update_spinbox)
+        self.medians.connect(self._update_medians)
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
@@ -52,6 +55,17 @@ class ROSGui(QWidget):
         selection_layout.addLayout(robot_layout); selection_layout.addLayout(ur_layout); selection_group.setLayout(selection_layout); left_layout.addWidget(selection_group)
         # Override
         override_layout = QVBoxLayout(); override_label = QLabel("Override (%)"); self.override_slider = QSlider(); self.override_slider.setRange(0,100); self.override_slider.setValue(100); self.override_slider.setTickInterval(10); self.override_slider.setTickPosition(QSlider.TicksBelow); self.override_value_label = QLabel("100%"); self.ros_interface.init_override_velocity_slider(); override_layout.addWidget(override_label); override_layout.addWidget(self.override_slider); override_layout.addWidget(self.override_value_label); left_layout.addLayout(override_layout)
+        # Keyence profile medians
+        keyence_group = QGroupBox("Keyence Profile Medians")
+        keyence_layout = QHBoxLayout()
+        self.median_base_label = QLabel("base: —")
+        self.median_map_label = QLabel("map: —")
+        for w in (self.median_base_label, self.median_map_label):
+            w.setStyleSheet("border: 1px solid #999; padding: 4px;")
+        keyence_layout.addWidget(self.median_base_label)
+        keyence_layout.addWidget(self.median_map_label)
+        keyence_group.setLayout(keyence_layout)
+        left_layout.addWidget(keyence_group)
         # Setup
         setup_group = QGroupBox("Setup Functions"); setup_layout = QVBoxLayout();
         setup_buttons = {
@@ -146,6 +160,14 @@ class ROSGui(QWidget):
     def _update_spinbox(self, idx):
         # guaranteed to run in Qt (GUI) thread
         self.idx_spin.setValue(idx)
+    
+    @pyqtSlot(float, float)
+    def _update_medians(self, med_base: float, med_map: float):
+        # guaranteed to run in Qt (GUI) thread
+        def fmt(v: float) -> str:
+            return "—" if (v != v) or math.isinf(v) else f"{v:.3f} m"
+        self.median_base_label.setText(f"base: {fmt(med_base)}")
+        self.median_map_label.setText(f"map: {fmt(med_map)}")
         
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
