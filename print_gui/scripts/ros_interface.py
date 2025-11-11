@@ -6,10 +6,6 @@ from geometry_msgs.msg import PoseStamped
 from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer
 import rospy
-import numpy as np
-import tf2_ros
-from sensor_msgs.msg import PointCloud2
-from sensor_msgs import point_cloud2
 import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
 from std_msgs.msg import Float32, Int32, Int16
@@ -33,69 +29,35 @@ class ROSInterface:
         # Subscriptions and publishers used by the GUI
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
         self._init_dynamixel_publishers()
-        # TF buffer/listener and Keyence profiles subscriber
-        try:
-            self._tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(secs=10))
-            self._tf_listener = tf2_ros.TransformListener(self._tf_buffer)
-        except Exception as e:
-            rospy.logwarn(f"Failed to create TF listener: {e}")
+        # Receive medians from robot-side node (published by profiles_median_node on the mur)
+        self._last_med_base = float('nan')
+        self._last_med_map = float('nan')
 
-        def _quat_to_R(x, y, z, w):
-            xx, yy, zz = x * x, y * y, z * z
-            xy, xz, yz = x * y, x * z, y * z
-            wx, wy, wz = w * x, w * y, w * z
-            return np.array([
-                [1 - 2 * (yy + zz), 2 * (xy - wz),     2 * (xz + wy)],
-                [2 * (xy + wz),     1 - 2 * (xx + zz), 2 * (yz - wx)],
-                [2 * (xz - wy),     2 * (yz + wx),     1 - 2 * (xx + yy)],
-            ], dtype=np.float64)
-
-        def median_in_frame(pts_xyz: np.ndarray, src_frame: str, stamp, target_frame: str):
-            if pts_xyz.size == 0:
-                return float('nan')
+        def _median_base_cb(msg: Float32):
             try:
-                tf = self._tf_buffer.lookup_transform(target_frame, src_frame, stamp, rospy.Duration(secs=0, nsecs=200_000_000))
-            except Exception as ex:
-                rospy.logwarn_throttle(5.0, f"profiles: TF {src_frame} -> {target_frame} unavailable: {ex}")
-                return float('nan')
-            t = tf.transform.translation
-            r = tf.transform.rotation
-            R = _quat_to_R(r.x, r.y, r.z, r.w)
-            # Only z row needed: z' = R[2,:] @ p + tz
-            z_vals = (R[2, 0] * pts_xyz[:, 0]) + (R[2, 1] * pts_xyz[:, 1]) + (R[2, 2] * pts_xyz[:, 2]) + t.z
-            if z_vals.size == 0:
-                return float('nan')
-            return float(np.median(z_vals))
-
-        def profiles_cb(msg: PointCloud2):
+                self._last_med_base = float(msg.data)
+            except Exception:
+                self._last_med_base = float('nan')
             try:
-                pts = np.asarray(list(point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)), dtype=np.float64)
-            except Exception as ex:
-                rospy.logwarn_throttle(5.0, f"profiles: failed to read points: {ex}")
-                return
-            if pts.size == 0:
-                return
-            # Optional decimation for very large clouds
-            if pts.shape[0] > 100000:
-                pts = pts[::5, :]
+                self.gui.medians.emit(self._last_med_base, self._last_med_map)
+            except Exception:
+                pass
 
-            selected = self.gui.get_selected_robots()
-            robot = selected[0] if selected else "mur620c"
-            base_frame = f"{robot}/UR10_r/base"
-
-            med_base = median_in_frame(pts, msg.header.frame_id, msg.header.stamp, base_frame)
-            med_map = median_in_frame(pts, msg.header.frame_id, msg.header.stamp, "map")
-
-            # Emit into GUI thread via Qt signal defined on the GUI
+        def _median_map_cb(msg: Float32):
             try:
-                self.gui.medians.emit(float(med_base), float(med_map))
+                self._last_med_map = float(msg.data)
+            except Exception:
+                self._last_med_map = float('nan')
+            try:
+                self.gui.medians.emit(self._last_med_base, self._last_med_map)
             except Exception:
                 pass
 
         try:
-            self._profiles_sub = rospy.Subscriber('/profiles', PointCloud2, profiles_cb, queue_size=1)
+            rospy.Subscriber('/profiles/median_base', Float32, _median_base_cb, queue_size=1)
+            rospy.Subscriber('/profiles/median_map', Float32, _median_map_cb, queue_size=1)
         except Exception as e:
-            rospy.logwarn(f"Failed to subscribe to /profiles: {e}")
+            rospy.logwarn(f"Failed to subscribe to median topics: {e}")
         
     def init_override_velocity_slider(self):
         self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
