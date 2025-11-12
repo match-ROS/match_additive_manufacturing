@@ -21,7 +21,7 @@ class DirectionController:
         self.trajectory_velocity=0
         self.velocity_override=1.0 # in percent
         self.current_pose = None
-        self.ff_only = rospy.get_param("ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
+        self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         
         self.path = rospy.wait_for_message("path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)

@@ -507,7 +507,7 @@ def stop_ur_motion(self):
     """Stops any running UR motion by killing the process."""
 
     # stop ur_direction_controller, orthogonal_error_correction, move_ur_to_start_pose, ur_vel_induced_by_mir
-    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir'"
+    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner'"
     print(f"Stopping UR motion with command: {command}")
     subprocess.Popen(command, shell=True)
 
