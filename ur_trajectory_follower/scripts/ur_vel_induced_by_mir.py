@@ -17,6 +17,7 @@ class UrMobileRobotCompensation():
                 # use parameters instead of hardcoded values
                 self.base_mir_frame_id = rospy.get_param("~base_mir_frame_id", base_mir)
                 self.base_ur_frame_id = rospy.get_param("~base_ur_frame_id", base_ur)
+                self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
                 self.use_odom = rospy.get_param("~use_odom", True)
                 if self.use_odom:
                     rospy.loginfo("Using odom for mir velocity")
@@ -24,6 +25,7 @@ class UrMobileRobotCompensation():
                 self.ur_pose = Pose()
                 self.mir_pose = Pose()
                 self.mir_vel = Twist()
+                self.mir_vel_old = Twist()
                 self.listener = TransformListener()
 
                 self.mir_ur_transform = Transform()
@@ -42,7 +44,6 @@ class UrMobileRobotCompensation():
                 self.last_mir_cmd = rospy.Time.now()
                 self.last_ur_pose = rospy.Time.now()
                 self.safe_pub_time_thread = rospy.Timer(rospy.Duration(0.1), self.safe_pub_cmd_time)
-                # self.safe_pub_time_thread.start()
 
 
         def safe_pub_cmd_time(self, event):
@@ -52,6 +53,7 @@ class UrMobileRobotCompensation():
                 or (rospy.Time.now() - self.last_ur_pose > rospy.Duration(0.1))):
                 ur_cmd_vel_local = Twist()
                 self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local)
+                rospy.logwarn_throttle(5, "No mir or ur command received for 0.1s, publishing zero velocity to ur_cmd_vel_local")
             
         
         def ur_pose_callback(self, data = PoseStamped()):
@@ -61,18 +63,22 @@ class UrMobileRobotCompensation():
             # data = self.listener.transformPose(self.base_mir_frame_id, data)
             # data.header.stamp = t #restore original timestamp
             self.ur_pose = data.pose
+            self.last_ur_pose = rospy.Time.now()
         
         def mir_odom_callback(self, msg = Odometry()):
             # if using ground truth as odom: false base_frame (map). use ground_truth_rotated
             self.mir_vel = msg.twist.twist
             self.pub_induced_vel_compensation()
+            self.last_mir_cmd = rospy.Time.now()
 
         def mir_cmd_vel_callback(self, msg = Twist()):
             self.mir_vel = msg
             self.pub_induced_vel_compensation()
+            self.last_mir_cmd = rospy.Time.now()
             
         def mir_pose_callback(self, msg = Pose()):
             self.mir_pose = msg
+            self.last_mir_cmd = rospy.Time.now()
 
 
         def get_ee_vel_induced_by_mir(self, mir_vel_local: np.ndarray = np.zeros(3)):
@@ -106,12 +112,34 @@ class UrMobileRobotCompensation():
             self.mir_ur_transform.rotation.z = q[2]
             self.mir_ur_transform.rotation.w = q[3]
 
+        def smooth_output(self, twist: Twist):
+            """Smooth the output command using exponential moving average."""
+            smoothed_twist = Twist()
+            smoothed_twist.linear.x = (self.output_smoothing_coeff * self.mir_vel_old.linear.x +
+                                       (1 - self.output_smoothing_coeff) * twist.linear.x)
+            smoothed_twist.linear.y = (self.output_smoothing_coeff * self.mir_vel_old.linear.y +
+                                       (1 - self.output_smoothing_coeff) * twist.linear.y)
+            smoothed_twist.linear.z = (self.output_smoothing_coeff * self.mir_vel_old.linear.z +
+                                       (1 - self.output_smoothing_coeff) * twist.linear.z)
+            smoothed_twist.angular.x = (self.output_smoothing_coeff * self.mir_vel_old.angular.x +
+                                       (1 - self.output_smoothing_coeff) * twist.angular.x)
+            smoothed_twist.angular.y = (self.output_smoothing_coeff * self.mir_vel_old.angular.y +
+                                       (1 - self.output_smoothing_coeff) * twist.angular.y)
+            smoothed_twist.angular.z = (self.output_smoothing_coeff * self.mir_vel_old.angular.z +
+                                       (1 - self.output_smoothing_coeff) * twist.angular.z)
+            self.mir_vel_old = smoothed_twist
+            return smoothed_twist
+
+
         def pub_induced_vel_compensation(self):
             vel=-self.get_ee_vel_induced_by_mir((self.mir_vel.linear.x, self.mir_vel.linear.y, self.mir_vel.angular.z))
             ur_cmd_vel_local = Twist()
             ur_cmd_vel_local.linear.x, ur_cmd_vel_local.linear.y, ur_cmd_vel_local.linear.z, ur_cmd_vel_local.angular.x, ur_cmd_vel_local.angular.y, ur_cmd_vel_local.angular.z = vel
 
-            self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local)
+            ur_cmd_vel_local_smooth = self.smooth_output(ur_cmd_vel_local)
+            print(ur_cmd_vel_local_smooth)
+
+            self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local_smooth)
 
 if __name__ == "__main__":
     rospy.init_node("ur_vel_induced_by_mir")

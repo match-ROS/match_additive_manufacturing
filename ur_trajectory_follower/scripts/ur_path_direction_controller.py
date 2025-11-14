@@ -13,10 +13,12 @@ class DirectionController:
         self.kp_z = rospy.get_param("~kp_z", 1.0)
         self.ki_z = rospy.get_param("~ki_z", 0.0)
         self.kd_z = rospy.get_param("~kd_z", 0.0)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
         self.integral_z = 0
         self.prev_error_z = 0
 
         self.path = Path()
+        self.command_old_twist = Twist()
         self.current_index = 1  # Start at the first waypoint in the path
         self.trajectory_velocity=0
         self.velocity_override=1.0 # in percent
@@ -88,6 +90,20 @@ class DirectionController:
         direction_xy_norm = direction_xy / norm_xy
         return direction_xy_norm, direction[2]
 
+    def smooth_output(self, control_command: Twist):
+        """Smooth the output command using exponential moving average."""
+        smoothed_command = Twist()
+        smoothed_command.linear.x = (self.output_smoothing_coeff * self.command_old_twist.linear.x +
+                                     (1 - self.output_smoothing_coeff) * control_command.linear.x)
+        smoothed_command.linear.y = (self.output_smoothing_coeff * self.command_old_twist.linear.y +
+                                     (1 - self.output_smoothing_coeff) * control_command.linear.y)
+        smoothed_command.linear.z = (self.output_smoothing_coeff * self.command_old_twist.linear.z +
+                                     (1 - self.output_smoothing_coeff) * control_command.linear.z)
+        self.command_old_twist = smoothed_command
+
+        return smoothed_command
+
+
     def calculate_twist(self):
         """Control the direction of the robot to follow the path."""
         if not self.ff_only and self.current_pose is None:
@@ -108,8 +124,9 @@ class DirectionController:
         control_command.linear.x = v_xy[0]
         control_command.linear.y = v_xy[1]
         control_command.linear.z = v_z
+        control_command_smoothed = self.smooth_output(control_command)
 
-        self.pub_ur_velocity_world.publish(control_command)
+        self.pub_ur_velocity_world.publish(control_command_smoothed)
 
 if __name__ == "__main__":
     rospy.init_node("ur_direction_controller")

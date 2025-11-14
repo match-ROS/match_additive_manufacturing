@@ -63,7 +63,7 @@ class PurePursuitNode:
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
         self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.0)  # Maximaler Orientierungsfehler in Radiant
-        self.max_index_error = rospy.get_param("~max_index_error", 10) # Maximaler Indexfehler
+        self.max_index_error = rospy.get_param("~max_index_error", 20) # Maximaler Indexfehler
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 

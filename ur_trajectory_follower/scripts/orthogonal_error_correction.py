@@ -10,6 +10,8 @@ class OrthogonalErrorCorrection:
         self.current_pose: PoseStamped = None
         self.goal_pose: PoseStamped = None
         self.normal: Vector3 = None
+        self.twist_old = Twist()
+        self.smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.90)
         
         self.twist_pub = rospy.Publisher('~orthogonal_twist', Twist, queue_size=10)
         
@@ -33,6 +35,18 @@ class OrthogonalErrorCorrection:
         self.normal = msg
         self.publish_twist()
 
+    def smooth_output(self, twist: Twist):
+        """Smooth the output command using exponential moving average."""
+        smoothed_twist = Twist()
+        smoothed_twist.linear.x = (self.smoothing_coeff * self.twist_old.linear.x +
+                                   (1 - self.smoothing_coeff) * twist.linear.x)
+        smoothed_twist.linear.y = (self.smoothing_coeff * self.twist_old.linear.y +
+                                   (1 - self.smoothing_coeff) * twist.linear.y)
+        smoothed_twist.linear.z = (self.smoothing_coeff * self.twist_old.linear.z +
+                                   (1 - self.smoothing_coeff) * twist.linear.z)
+        self.twist_old = smoothed_twist
+        return smoothed_twist
+
     def calculate_twist(self):
         twist = Twist()
         
@@ -49,8 +63,11 @@ class OrthogonalErrorCorrection:
             twist.linear.x = error_normal * self.normal.x
             twist.linear.y = error_normal * self.normal.y
             twist.linear.z = error_normal * self.normal.z
+            twist_smoothed = self.smooth_output(twist)
+        else:
+            twist_smoothed = Twist()  # zero twist if data is missing
 
-        return twist
+        return twist_smoothed
 
     def run(self):
         rospy.spin()

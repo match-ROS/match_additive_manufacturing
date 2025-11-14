@@ -26,6 +26,7 @@ class PathIndexAdvancer:
         self.virtual_line_threshold = rospy.get_param("~virtual_line_threshold", 0.02)
         self.prev_idx_dist = rospy.get_param("~prev_idx_dist", 1) # distance to previous waypoint for virtual line
         self.next_idx_dist = rospy.get_param("~next_idx_dist", 1) # distance to next waypoint for virtual line
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.90)
         
 
         # Publishers: next waypoint index and next waypoint pose
