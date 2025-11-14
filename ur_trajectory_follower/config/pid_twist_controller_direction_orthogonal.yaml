@@ -3,8 +3,8 @@ stamped: true
 
 # PID parameters for linear components
 # only x and y are calculated by the orthogonal controller.
-Kp_linear_x: 0.8 #0.8
-Ki_linear_x: 0.08 # 0.08
+Kp_linear_x: 2.5 #0.8
+Ki_linear_x: 0.04 # 0.08
 Kd_linear_x: 0.1 # 0.1
 
 Kp_linear_y: 0.8 #0.8
