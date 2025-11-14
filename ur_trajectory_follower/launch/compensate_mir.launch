@@ -3,7 +3,7 @@
     <arg name="prefix_ur" default="UR10_r/"/>
 
     <arg name="ur_pose_topic" default="/$(arg robot_name)/$(arg prefix_ur)tcp_pose"/>
-    <arg name="mir_cmd_vel_topic" default="/$(arg robot_name)/mobile_base_controller/cmd_vel"/>
+    <arg name="mir_cmd_vel_topic" default="/$(arg robot_name)/cmd_vel"/>
     <arg name="mir_odom_topic" default="/$(arg robot_name)/mobile_base_controller/odom"/>
     <!-- <arg name="mir_odom_topic" default="/$(arg robot_name)/ground_truth"/> -->
     <arg name="ur_cmd_vel_local_topic" default="/ur_twist_mir_compensation"/>
@@ -14,7 +14,7 @@
         <!-- Custom parameters -->
         <param name="base_mir_frame_id" value="$(arg base_mir_frame_id)" />
         <param name="base_ur_frame_id" value="$(arg base_ur_frame_id)" />
-        <param name="use_odom" value="true" />
+        <param name="use_odom" value="false" />
         
         <!-- Topic remapping -->
         <remap from="~ur_pose" to="$(arg ur_pose_topic)" />

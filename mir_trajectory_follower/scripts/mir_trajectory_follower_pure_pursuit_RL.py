@@ -42,7 +42,7 @@ class PurePursuitNode:
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
@@ -59,6 +59,11 @@ class PurePursuitNode:
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
         self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
+
+        # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
+        self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
+        self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.0)  # Maximaler Orientierungsfehler in Radiant
+        self.max_index_error = rospy.get_param("~max_index_error", 10) # Maximaler Indexfehler
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -219,6 +224,7 @@ class PurePursuitNode:
             self.current_pose.position,
             self.path[self.current_mir_path_index].pose.position
         )
+        print(f"Distance error: {distance_error}")
 
         raw_ang_err = self.calculate_orientation_error(
             self.current_pose,
@@ -244,8 +250,28 @@ class PurePursuitNode:
         self.filter_velocity(Twist(linear=Twist().linear.__class__(x=target_v), angular=Twist().angular.__class__(z=target_w)))
         velocity.linear.x, velocity.angular.z = self.filtered_velocity.linear.x, self.filtered_velocity.angular.z
 
+        # Überprüfe Fehlergrenzen
+        result = self.check_error_thresholds(distance_error, orientation_error, index_error)
+        if not result:
+            rospy.logwarn("Error thresholds exceeded. Stopping path following.")
+            velocity.linear.x = 0.0
+            velocity.angular.z = 0.0
+            self.is_active = False
+
         self.cmd_vel_pub.publish(velocity)
 
+
+    def check_error_thresholds(self, distance_error, orientation_error, index_error):
+        if abs(distance_error) > self.max_distance_error:
+            rospy.logwarn(f"Distance error {distance_error} exceeds maximum threshold {self.max_distance_error}. Stopping path following.")
+            return False
+        if abs(orientation_error) > self.max_orientation_error:
+            rospy.logwarn(f"Orientation error {orientation_error} exceeds maximum threshold {self.max_orientation_error}. Stopping path following.")
+            return False
+        if abs(index_error) > self.max_index_error:
+            rospy.logwarn(f"Index error {index_error} exceeds maximum threshold {self.max_index_error}. Stopping path following.")
+            return False
+        return True
 
     def broadcast_target_point(self, point):
         self.broadcaster.sendTransform(
@@ -321,7 +347,7 @@ class PurePursuitNode:
         mir_yaw = self.get_yaw_from_pose(self.current_pose)
         target_direction = math.atan2(target_pose.y - current_pose.y, target_pose.x - current_pose.x)
         angle_diff = target_direction - mir_yaw
-        angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalize angle
+        print(f"Angle diff: {angle_diff}")
 
         # If the angle difference is between -pi/2 and pi/2, mir is facing towards the target (in front)
         # Otherwise, it's behind

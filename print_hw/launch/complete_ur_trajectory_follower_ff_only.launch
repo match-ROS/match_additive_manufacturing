@@ -52,7 +52,7 @@
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
-        <arg name="ff_only" value="true" />
+        <arg name="ff_only" value="false" />
         <remap from="/ur_twist_world_offset" to="/ur_error_world" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
