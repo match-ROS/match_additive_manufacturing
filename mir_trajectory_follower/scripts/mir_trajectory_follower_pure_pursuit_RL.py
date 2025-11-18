@@ -63,7 +63,7 @@ class PurePursuitNode:
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
         self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.0)  # Maximaler Orientierungsfehler in Radiant
-        self.max_index_error = rospy.get_param("~max_index_error", 20) # Maximaler Indexfehler
+        self.max_index_error = rospy.get_param("~max_index_error", 30) # Maximaler Indexfehler
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -142,7 +142,7 @@ class PurePursuitNode:
                 if self.current_mir_path_index >= len(self.path):
                     self.is_active = False
                     self.completion_pub.publish(Bool(data=True))
-                    rospy.loginfo("Pfadverfolgung abgeschlossen.")
+                    rospy.loginfo("Pfadverfolgung abgeschlossen 1.")
                     break
 
             # Berechne den Lookahead-Punkt
@@ -159,13 +159,6 @@ class PurePursuitNode:
             # update layer progress
             self.publish_layer_progress()
             self.publish_actual_and_target_pose()
-
-            # Beende die Pfadverfolgung, wenn der Zielpunkt erreicht ist
-            if self.reached_target(self.path[-1].pose.position):
-                self.is_active = False
-                self.completion_pub.publish(Bool(data=True))
-                rospy.loginfo("Pfadverfolgung abgeschlossen.")
-                break
             
             rate.sleep()
 
@@ -224,7 +217,6 @@ class PurePursuitNode:
             self.current_pose.position,
             self.path[self.current_mir_path_index].pose.position
         )
-        print(f"Distance error: {distance_error}")
 
         raw_ang_err = self.calculate_orientation_error(
             self.current_pose,
@@ -347,14 +339,14 @@ class PurePursuitNode:
         mir_yaw = self.get_yaw_from_pose(self.current_pose)
         target_direction = math.atan2(target_pose.y - current_pose.y, target_pose.x - current_pose.x)
         angle_diff = target_direction - mir_yaw
-        print(f"Angle diff: {angle_diff}")
+        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
 
         # If the angle difference is between -pi/2 and pi/2, mir is facing towards the target (in front)
         # Otherwise, it's behind
         if -math.pi/2 <= angle_diff <= math.pi/2:
-            direction = 1
-        else:
             direction = -1
+        else:
+            direction = 1
         # Calculate the distance
         distance = math.sqrt((target_pose.x - current_pose.x) ** 2 + (target_pose.y - current_pose.y) ** 2)
 
