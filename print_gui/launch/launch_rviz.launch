@@ -1,5 +1,5 @@
 <launch>
     
-    <node type="rviz" name="rviz_handling" pkg="rviz" args="-d $(find print_gui)/rviz/print_HW.rviz" /> 
+    <node type="rviz" name="$(anon rviz_handling)" pkg="rviz" args="-d $(find print_gui)/rviz/print_HW.rviz"/> 
 
   </launch>
