@@ -137,7 +137,6 @@ class UrMobileRobotCompensation():
             ur_cmd_vel_local.linear.x, ur_cmd_vel_local.linear.y, ur_cmd_vel_local.linear.z, ur_cmd_vel_local.angular.x, ur_cmd_vel_local.angular.y, ur_cmd_vel_local.angular.z = vel
 
             ur_cmd_vel_local_smooth = self.smooth_output(ur_cmd_vel_local)
-            print(ur_cmd_vel_local_smooth)
 
             self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local_smooth)
 
