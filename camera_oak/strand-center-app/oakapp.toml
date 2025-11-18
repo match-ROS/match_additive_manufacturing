@@ -1,0 +1,9 @@
+identifier = "com.example.strand_center"
+entrypoint = ["bash", "-c", "python3 /app/main.py"]
+
+prepare_container = [
+  { type = "COPY", source = "requirements.txt", target = "requirements.txt" },
+  { type = "RUN", command = "apt-get update" },
+  { type = "RUN", command = "apt-get install -y python3-pip" },
+  { type = "RUN", command = "pip3 install -r /app/requirements.txt --break-system-packages" },
+]
