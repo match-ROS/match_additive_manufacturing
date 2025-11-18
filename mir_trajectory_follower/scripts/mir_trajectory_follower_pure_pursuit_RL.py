@@ -44,7 +44,7 @@ class PurePursuitNode:
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
-        self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.03)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
@@ -57,7 +57,7 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
-        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
+        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.92)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen

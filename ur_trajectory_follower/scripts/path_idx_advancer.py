@@ -99,7 +99,7 @@ class PathIndexAdvancer:
         """
         rospy.logwarn(f"Publishing current goal at index {self.current_index}")
         # Publish the waypoint index
-        self.index_pub.publish(self.current_index)
+        #self.index_pub.publish(self.current_index)
 
         # Publish the goal pose
         self.goal_pose_pub.publish(self.path.poses[self.current_index])
@@ -162,6 +162,12 @@ class PathIndexAdvancer:
         px_curr = self.path.poses[self.current_index].pose.position
         px_next = self.path.poses[next_idx].pose.position
 
+        # check for z height change
+        z_height_curr = px_curr.z
+        z_height_prev = px_prev.z
+        if abs(z_height_curr - z_height_prev) > 1e-3:
+            return True  # if z height changed significantly, consider it crossed - go to next waypoint
+
         # Convert them to vectors
         p_prev = (px_prev.x, px_prev.y)
         p_curr = (px_curr.x, px_curr.y)
@@ -186,6 +192,8 @@ class PathIndexAdvancer:
         by = d1[1] + d2[1]
         mag_b = math.hypot(bx, by)
         if mag_b < 1e-9:
+            print("Degenerate bisector (opposite directions).")
+            #return True
             return self.check_radius_condition(x,y)  # d1 + d2 is near zero => they are opposite directions. instead check radius
 
         b = (bx/mag_b, by/mag_b)  # unit bisector
