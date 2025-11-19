@@ -262,30 +262,41 @@ class ROSInterface:
 
 
     def _rosout_cb(self, msg: Log):
-            """
-            Callback for /rosout (rosgraph_msgs/Log).
-            Forwards a compact text line to the Qt GUI via signal.
-            """
-            try:
-                # Map level to readable string (if constants exist)
-                level_map = {
-                    getattr(Log, "DEBUG", 1): "DEBUG",
-                    getattr(Log, "INFO", 2): "INFO",
-                    getattr(Log, "WARN", 4): "WARN",
-                    getattr(Log, "ERROR", 8): "ERROR",
-                    getattr(Log, "FATAL", 16): "FATAL",
-                }
-                level = level_map.get(msg.level, str(msg.level))
-                node_name = getattr(msg, "name", "?")
-                text = getattr(msg, "msg", "")
+        """
+        Callback for /rosout (rosgraph_msgs/Log).
+        Forwards a compact text line to the Qt GUI via signal.
+        """
+        try:
+            text = getattr(msg, "msg", "")
 
-                line = f"[{level}] {node_name}: {text}"
+            # --- Blacklist bestimmter Meldungen ---
+            blacklist = [
+                "The complete state of the robot is not yet known",
+                "Battery:",
+                # hier ggf. weitere Phrasen ergänzen
+            ]
+            for phrase in blacklist:
+                if phrase in text:
+                    return  # einfach ignorieren
 
-                # Forward into Qt via signal; this is thread-safe because of Qt signals
-                if hasattr(self.gui, "ros_log_signal"):
-                    self.gui.ros_log_signal.emit(line)
-            except Exception as e:
-                rospy.logwarn(f"Error while forwarding /rosout message: {e}")
+            # Map level to readable string (if constants exist)
+            level_map = {
+                getattr(Log, "DEBUG", 1): "DEBUG",
+                getattr(Log, "INFO", 2): "INFO",
+                getattr(Log, "WARN", 4): "WARN",
+                getattr(Log, "ERROR", 8): "ERROR",
+                getattr(Log, "FATAL", 16): "FATAL",
+            }
+            level = level_map.get(msg.level, str(msg.level))
+            node_name = getattr(msg, "name", "?")
+
+            line = f"[{level}] {node_name}: {text}"
+
+            if hasattr(self.gui, "ros_log_signal"):
+                self.gui.ros_log_signal.emit(line)
+        except Exception as e:
+            rospy.logwarn(f"Error while forwarding /rosout message: {e}")
+
 
 
 def launch_ros(gui, package, launch_file):

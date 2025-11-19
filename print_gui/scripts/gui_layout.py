@@ -6,6 +6,7 @@ from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, par
 from ros_interface import ROSInterface
 import os
 import math
+import html
 
 
 class EnterSpinBox(QSpinBox):
@@ -194,18 +195,40 @@ class ROSGui(QWidget):
 
     @pyqtSlot(str)
     def _append_ros_log(self, line: str):
-        """Append one ROS log line to the GUI console (keep last 10)."""
+        """Append one ROS log line to the GUI console (keep last 10, with colors)."""
         if not hasattr(self, "_ros_log_buffer"):
             self._ros_log_buffer = []
 
         self._ros_log_buffer.append(line)
-        # nur die letzten 10 Einträge halten
-        self._ros_log_buffer = self._ros_log_buffer[-20:]
+        self._ros_log_buffer = self._ros_log_buffer[-10:]
 
-        self.ros_log_text.setPlainText("\n".join(self._ros_log_buffer))
-        # immer nach unten scrollen
+        html_lines = []
+        for l in self._ros_log_buffer:
+            # HTML-escapen, damit Sonderzeichen nicht als Tags interpretiert werden
+            escaped = html.escape(l)
+
+            # [WARN] gelb einfärben
+            if "[WARN]" in l:
+                escaped = escaped.replace(
+                    "[WARN]",
+                    '<span style="color:#d9a400; font-weight:bold;">[WARN]</span>'
+                )
+
+            # [ERROR] rot einfärben
+            if "[ERROR]" in l:
+                escaped = escaped.replace(
+                    "[ERROR]",
+                    '<span style="color:#c00000; font-weight:bold;">[ERROR]</span>'
+                )
+
+            html_lines.append(escaped)
+
+        self.ros_log_text.setHtml("<br>".join(html_lines))
+
         sb = self.ros_log_text.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+
         
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
