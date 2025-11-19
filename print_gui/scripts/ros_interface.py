@@ -188,6 +188,35 @@ class ROSInterface:
                 f"{command}; exec bash"
             ])
 
+    def launch_strand_center_app(self):
+        """Launch the DepthAI strand-center app on the selected robots over SSH."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping strand-center launch.")
+            return
+
+        workspace = self.gui.get_workspace_name()
+        script_rel = "src/match_additive_manufacturing/camera_oak/strand-center-app/main.py"
+
+        for robot in selected_robots:
+            remote_script = f"~/{workspace}/{script_rel}"
+            command = (
+                f"ssh -t -t {robot} '"
+                "source ~/.bashrc; "
+                "export ROS_MASTER_URI=http://roscore:11311/; "
+                "source /opt/ros/noetic/setup.bash; "
+                f"source ~/{workspace}/devel/setup.bash; "
+                f"python3 {remote_script}; "
+                "exec bash'"
+            )
+
+            subprocess.Popen([
+                "terminator",
+                f"--title=StrandCenter {robot}",
+                "-x",
+                f"{command}; exec bash"
+            ])
+
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
         """Start the Dynamixel servo driver on the selected robots over SSH (new terminal per robot)."""
