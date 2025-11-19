@@ -10,6 +10,7 @@ import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
 from std_msgs.msg import Float32, Int32, Int16
 from sensor_msgs.msg import BatteryState
+from rosgraph_msgs.msg import Log
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -58,6 +59,12 @@ class ROSInterface:
             rospy.Subscriber('/profiles/median_map', Float32, _median_map_cb, queue_size=1)
         except Exception as e:
             rospy.logwarn(f"Failed to subscribe to median topics: {e}")
+
+        # Subscribe to /rosout to forward log messages into the GUI
+        try:
+            rospy.Subscriber('/rosout', Log, self._rosout_cb, queue_size=50)
+        except Exception as e:
+            rospy.logwarn(f"Failed to subscribe to /rosout: {e}")
         
     def init_override_velocity_slider(self):
         self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
@@ -252,6 +259,33 @@ class ROSInterface:
             rospy.loginfo(f"Published servo targets L={left_int}, R={right_int}")
         except Exception as e:
             rospy.logerr(f"Failed to publish servo targets: {e}")
+
+
+    def _rosout_cb(self, msg: Log):
+            """
+            Callback for /rosout (rosgraph_msgs/Log).
+            Forwards a compact text line to the Qt GUI via signal.
+            """
+            try:
+                # Map level to readable string (if constants exist)
+                level_map = {
+                    getattr(Log, "DEBUG", 1): "DEBUG",
+                    getattr(Log, "INFO", 2): "INFO",
+                    getattr(Log, "WARN", 4): "WARN",
+                    getattr(Log, "ERROR", 8): "ERROR",
+                    getattr(Log, "FATAL", 16): "FATAL",
+                }
+                level = level_map.get(msg.level, str(msg.level))
+                node_name = getattr(msg, "name", "?")
+                text = getattr(msg, "msg", "")
+
+                line = f"[{level}] {node_name}: {text}"
+
+                # Forward into Qt via signal; this is thread-safe because of Qt signals
+                if hasattr(self.gui, "ros_log_signal"):
+                    self.gui.ros_log_signal.emit(line)
+            except Exception as e:
+                rospy.logwarn(f"Error while forwarding /rosout message: {e}")
 
 
 def launch_ros(gui, package, launch_file):

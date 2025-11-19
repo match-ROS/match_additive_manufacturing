@@ -23,6 +23,7 @@ class EnterSpinBox(QSpinBox):
 class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
     medians = pyqtSignal(float, float)
+    ros_log_signal = pyqtSignal(str)
     
     def __init__(self):
         super().__init__()
@@ -117,7 +118,29 @@ class ROSGui(QWidget):
         send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
         targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
-        print_functions_group.setLayout(print_functions_layout); right_layout.addWidget(print_functions_group); main_layout.addLayout(right_layout)
+        print_functions_group.setLayout(print_functions_layout)
+        right_layout.addWidget(print_functions_group)
+        main_layout.addLayout(right_layout)
+
+        # --- ROS log console on the far right ---
+        log_group = QGroupBox("ROS Messages")
+        log_layout = QVBoxLayout()
+
+        self.ros_log_text = QTextEdit()
+        self.ros_log_text.setReadOnly(True)
+        self.ros_log_text.setLineWrapMode(QTextEdit.NoWrap)
+
+        log_layout.addWidget(self.ros_log_text)
+        log_group.setLayout(log_layout)
+
+        main_layout.addWidget(log_group)
+
+        self.setLayout(main_layout)
+
+        # connect ROS log signal after widgets exist
+        self._ros_log_buffer = []
+        self.ros_log_signal.connect(self._append_ros_log)     
+        
         self.setLayout(main_layout)
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(5000)
@@ -168,6 +191,21 @@ class ROSGui(QWidget):
             return "—" if (v != v) or math.isinf(v) else f"{v:.3f} m"
         self.median_base_label.setText(f"base: {fmt(med_base)}")
         self.median_map_label.setText(f"map: {fmt(med_map)}")
+
+    @pyqtSlot(str)
+    def _append_ros_log(self, line: str):
+        """Append one ROS log line to the GUI console (keep last 10)."""
+        if not hasattr(self, "_ros_log_buffer"):
+            self._ros_log_buffer = []
+
+        self._ros_log_buffer.append(line)
+        # nur die letzten 10 Einträge halten
+        self._ros_log_buffer = self._ros_log_buffer[-20:]
+
+        self.ros_log_text.setPlainText("\n".join(self._ros_log_buffer))
+        # immer nach unten scrollen
+        sb = self.ros_log_text.verticalScrollBar()
+        sb.setValue(sb.maximum())
         
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
