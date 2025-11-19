@@ -59,6 +59,8 @@ class PurePursuitNode:
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
         self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.92)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
+        self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
+        self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.0)  # Maximale Winkelgeschwindigkeit
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
@@ -238,6 +240,10 @@ class PurePursuitNode:
 
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
+
+        # Begrenzung der Geschwindigkeiten
+        target_v = max(-self.linear_velocity_limit, min(self.linear_velocity_limit, target_v))
+        target_w = max(-self.angular_velocity_limit, min(self.angular_velocity_limit, target_w))
 
         self.filter_velocity(Twist(linear=Twist().linear.__class__(x=target_v), angular=Twist().angular.__class__(z=target_w)))
         velocity.linear.x, velocity.angular.z = self.filtered_velocity.linear.x, self.filtered_velocity.angular.z
