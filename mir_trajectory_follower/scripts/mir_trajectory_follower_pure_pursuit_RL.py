@@ -251,7 +251,7 @@ class PurePursuitNode:
 
         # broadcast target point
         self.broadcast_target_point(self.path[self.current_mir_path_index].pose.position)
-        rospy.loginfo_throttle(1, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}")
+        rospy.loginfo_throttle(3, f"Current index: {self.current_mir_path_index}, Target index: {self.ur_trajectory_index}, Index error: {index_error}, Distance error: {distance_error}, Orientation error: {orientation_error}")
         velocity = Twist()
         feedforward_v  = self.path_velocities_lin[self.current_mir_path_index]
         feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]

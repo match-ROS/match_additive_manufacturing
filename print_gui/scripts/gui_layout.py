@@ -132,15 +132,41 @@ class ROSGui(QWidget):
         self.ros_log_text.setLineWrapMode(QTextEdit.NoWrap)
 
         log_layout.addWidget(self.ros_log_text)
-        log_group.setLayout(log_layout)
 
+        # --- Log level filter checkboxes ---
+        filter_layout = QHBoxLayout()
+        self.chk_log_error = QCheckBox("Error")
+        self.chk_log_warn = QCheckBox("Warning")
+        self.chk_log_info = QCheckBox("Info")
+        self.chk_log_debug = QCheckBox("Debug")
+
+        # Default: Error/Warn/Info an, Debug aus
+        self.chk_log_error.setChecked(True)
+        self.chk_log_warn.setChecked(True)
+        self.chk_log_info.setChecked(True)
+        self.chk_log_debug.setChecked(False)
+
+        # Bei Änderung der Auswahl die Ansicht neu aufbauen
+        for cb in (self.chk_log_error, self.chk_log_warn,
+                   self.chk_log_info, self.chk_log_debug):
+            cb.stateChanged.connect(lambda _=None: self._rebuild_ros_log_view())
+
+        filter_layout.addWidget(self.chk_log_error)
+        filter_layout.addWidget(self.chk_log_warn)
+        filter_layout.addWidget(self.chk_log_info)
+        filter_layout.addWidget(self.chk_log_debug)
+
+        log_layout.addLayout(filter_layout)
+
+        log_group.setLayout(log_layout)
         main_layout.addWidget(log_group)
 
         self.setLayout(main_layout)
 
         # connect ROS log signal after widgets exist
         self._ros_log_buffer = []
-        self.ros_log_signal.connect(self._append_ros_log)     
+        self.ros_log_signal.connect(self._append_ros_log)
+
         
         self.setLayout(main_layout)
         # Timer
@@ -193,6 +219,20 @@ class ROSGui(QWidget):
         self.median_base_label.setText(f"base: {fmt(med_base)}")
         self.median_map_label.setText(f"map: {fmt(med_map)}")
 
+    def _ros_log_level_enabled(self, level: str) -> bool:
+        level = level.upper()
+        if level == "ERROR":
+            return self.chk_log_error.isChecked()
+        if level == "WARN" or level == "WARNING":
+            return self.chk_log_warn.isChecked()
+        if level == "INFO":
+            return self.chk_log_info.isChecked()
+        if level == "DEBUG":
+            return self.chk_log_debug.isChecked()
+        # Unbekannte Level: zeig sie, falls Info aktiviert ist
+        return self.chk_log_info.isChecked()
+
+
     @pyqtSlot(str)
     def _append_ros_log(self, line: str):
         """Append one ROS log line to the GUI console (keep last 40, with colors)."""
@@ -201,6 +241,8 @@ class ROSGui(QWidget):
 
         self._ros_log_buffer.append(line)
         self._ros_log_buffer = self._ros_log_buffer[-400:]
+
+        self._rebuild_ros_log_view()
 
         html_lines = []
         for l in self._ros_log_buffer:
@@ -228,6 +270,40 @@ class ROSGui(QWidget):
         sb = self.ros_log_text.verticalScrollBar()
         sb.setValue(sb.maximum())
 
+    def _rebuild_ros_log_view(self):
+        """Rebuild the log text widget from the buffer, applying filters + colors."""
+        html_lines = []
+
+        for l in self._ros_log_buffer:
+            # Level aus dem Prefix [LEVEL] parsen
+            level = "INFO"
+            if l.startswith("[") and "]" in l:
+                level = l[1:l.index("]")]
+            if not self._ros_log_level_enabled(level):
+                continue
+
+            escaped = html.escape(l)
+
+            # [WARN] gelb
+            if "[WARN]" in l:
+                escaped = escaped.replace(
+                    "[WARN]",
+                    '<span style="color:#d9a400; font-weight:bold;">[WARN]</span>'
+                )
+
+            # [ERROR] rot
+            if "[ERROR]" in l:
+                escaped = escaped.replace(
+                    "[ERROR]",
+                    '<span style="color:#c00000; font-weight:bold;">[ERROR]</span>'
+                )
+
+            html_lines.append(escaped)
+
+        self.ros_log_text.setHtml("<br>".join(html_lines))
+
+        sb = self.ros_log_text.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
         
     def open_ur_settings(self):
