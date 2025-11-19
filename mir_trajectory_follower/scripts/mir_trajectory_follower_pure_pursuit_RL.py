@@ -43,6 +43,7 @@ class PurePursuitNode:
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 0.5)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
+        self.Ky = rospy.get_param("~Ky", 0.1)  # Lateral error multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.03)  # Index error multiplier
@@ -127,10 +128,10 @@ class PurePursuitNode:
         # compute lateral and tangential distance
         orientation = self.get_yaw_from_pose(self.current_pose)
         direction = math.atan2(target_position.y - current_position.y, target_position.x - current_position.x)
-        lateral_distance = distance * math.sin(direction - orientation)
+        self.lateral_distance = distance * math.sin(direction - orientation)
         tangent_distance = distance * math.cos(direction - orientation)
 
-        return abs(tangent_distance) < self.tangent_distance_threshold and abs(lateral_distance) < self.lateral_distance_threshold
+        return abs(tangent_distance) < self.tangent_distance_threshold and abs(self.lateral_distance) < self.lateral_distance_threshold
 
     def follow_path(self):
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
@@ -256,7 +257,7 @@ class PurePursuitNode:
         feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]
 
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
-        target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kw*feedforward_w
+        target_w = math.sin(self.K_orientation*orientation_error) * self.current_sub_step_progress + self.Kw*feedforward_w + self.Ky * self.lateral_distance * np.sign(target_v)
 
         #print(f"Kv*feedforward_v: {self.Kv*feedforward_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, K_orientation*orientation_error: {self.K_orientation*orientation_error * self.current_sub_step_progress}")
 
