@@ -273,6 +273,7 @@ class ROSInterface:
             blacklist = [
                 "The complete state of the robot is not yet known",
                 "Battery:",
+                "Unable to transform object from frame",
                 # hier ggf. weitere Phrasen ergänzen
             ]
             for phrase in blacklist:

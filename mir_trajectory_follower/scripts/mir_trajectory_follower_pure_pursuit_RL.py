@@ -2,7 +2,7 @@
 import rospy
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Twist, Pose
-from std_msgs.msg import Empty, Bool
+from std_msgs.msg import Empty, Bool, Int32, Float32, Float32MultiArray
 import math
 from tf import TransformBroadcaster
 from tf import transformations as tr
@@ -41,7 +41,8 @@ class PurePursuitNode:
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.25)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
+        self.Kv = rospy.get_param("~Kv", 0.5)  # Linear speed multiplier
+        self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.03)  # Index error multiplier
@@ -57,10 +58,11 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
-        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.92)
+        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
         self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
-        self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.0)  # Maximale Winkelgeschwindigkeit
+        self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.2)  # Maximale Winkelgeschwindigkeit
+        self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
@@ -99,6 +101,13 @@ class PurePursuitNode:
         self.mir_path_velocity = None
         self.mir_velocity_old = Twist()
         self.filtered_velocity = Twist()
+        self.timestamps = None
+        self.dT_list = None
+
+        # Timestamps passend zum Pfad einlesen
+        ts_msg = rospy.wait_for_message(self.mir_path_timestamps_topic, Float32MultiArray)
+        self.timestamps = list(ts_msg.data)
+        rospy.loginfo("Got timestamp vector with {} entries.".format(len(self.timestamps)))
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -166,9 +175,16 @@ class PurePursuitNode:
 
 
     def calculate_sub_step_progress(self):
+        # index-spezifisches dT verwenden (falls vorhanden)
+        if self.dT_list is not None and len(self.dT_list) > 0:
+            idx = min(self.current_mir_path_index, len(self.dT_list) - 1)
+            dT_local = max(1e-3, self.dT_list[idx])
+        else:
+            dT_local = self.dT
+
         # compute number of control cycles per path point
-        cycles_per_point = int(self.dT * self.control_rate)
-        self.current_sub_step_progress = min(1.0, self.current_sub_step / cycles_per_point)  # Ensure progress does not exceed 1.0       
+        cycles_per_point = max(1, int(round(dT_local * self.control_rate)))
+        self.current_sub_step_progress = min(1.0, float(self.current_sub_step) / cycles_per_point)
         self.current_sub_step += 1
         
 
@@ -202,14 +218,20 @@ class PurePursuitNode:
         return None
 
     def calculate_orientation_error(self, current_pose, target_pose):
-        # Berechne den Winkel zwischen der aktuellen Pose und der Zielpose
-        current_yaw = self.get_yaw_from_pose(current_pose)
-        target_yaw = self.get_yaw_from_pose(target_pose)
+        # Berechne den Winkel zwischen der aktuellen Pose und der Zielpose in quaternion
+        # compute relative quaternion (target * conj(current)) and extract yaw
+        q_curr = [current_pose.orientation.x,
+                  current_pose.orientation.y,
+                  current_pose.orientation.z,
+                  current_pose.orientation.w]
+        q_tgt = [target_pose.orientation.x,
+                 target_pose.orientation.y,
+                 target_pose.orientation.z,
+                 target_pose.orientation.w]
 
-        # Normalisiere den Winkelunterschied
-        angle_diff = target_yaw - current_yaw
-        #angle_diff = math.atan2(math.sin(angle_diff), math.cos(angle_diff))  # Normalisiere den Winkel
-        return angle_diff  # Rückgabe des normalisierten Winkelunterschieds
+        q_rel = tr.quaternion_multiply(q_tgt, tr.quaternion_conjugate(q_curr))
+        _, _, yaw = tr.euler_from_quaternion(q_rel)
+        return yaw
 
     def apply_control(self):
         # Berechne die Steuerbefehle
@@ -234,7 +256,7 @@ class PurePursuitNode:
         feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]
 
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
-        target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kv*feedforward_w
+        target_w = self.K_orientation*orientation_error * self.current_sub_step_progress + self.Kw*feedforward_w
 
         #print(f"Kv*feedforward_v: {self.Kv*feedforward_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, K_orientation*orientation_error: {self.K_orientation*orientation_error * self.current_sub_step_progress}")
 
@@ -251,7 +273,7 @@ class PurePursuitNode:
         # Überprüfe Fehlergrenzen
         result = self.check_error_thresholds(distance_error, orientation_error, index_error)
         if not result:
-            rospy.logwarn("Error thresholds exceeded. Stopping path following.")
+            rospy.logwarn_throttle(5,"Error thresholds exceeded. Stopping path following.")
             velocity.linear.x = 0.0
             velocity.angular.z = 0.0
             self.is_active = False
@@ -261,13 +283,13 @@ class PurePursuitNode:
 
     def check_error_thresholds(self, distance_error, orientation_error, index_error):
         if abs(distance_error) > self.max_distance_error:
-            rospy.logwarn(f"Distance error {distance_error} exceeds maximum threshold {self.max_distance_error}. Stopping path following.")
+            rospy.logwarn_throttle(5,f"Distance error {distance_error} exceeds maximum threshold {self.max_distance_error}. Stopping path following.")
             return False
         if abs(orientation_error) > self.max_orientation_error:
-            rospy.logwarn(f"Orientation error {orientation_error} exceeds maximum threshold {self.max_orientation_error}. Stopping path following.")
+            rospy.logwarn_throttle(5,f"Orientation error {orientation_error} exceeds maximum threshold {self.max_orientation_error}. Stopping path following.")
             return False
         if abs(index_error) > self.max_index_error:
-            rospy.logwarn(f"Index error {index_error} exceeds maximum threshold {self.max_index_error}. Stopping path following.")
+            rospy.logwarn_throttle(5,f"Index error {index_error} exceeds maximum threshold {self.max_index_error}. Stopping path following.")
             return False
         return True
 
@@ -281,6 +303,22 @@ class PurePursuitNode:
         )
 
     def calculate_path_velocities(self):
+        # Falls keine Timestamps vorhanden sind, auf konstantes dT zurückfallen
+        if self.timestamps is None or len(self.timestamps) < 2:
+            rospy.logwarn("No or insufficient timestamps received. Using constant dT = {}".format(self.dT))
+            self.dT_list = [self.dT] * len(self.path)
+        else:
+            # dT-Liste aus Timestamps berechnen
+            self.dT_list = [self.dT]  # erstes Element als Fallback
+            for i in range(len(self.path) - 1):
+                if i + 1 < len(self.timestamps):
+                    dt = self.timestamps[i + 1] - self.timestamps[i]
+                else:
+                    dt = self.dT_list[-1]
+                # numerisch absichern
+                dt = max(1e-3, float(dt))
+                self.dT_list.append(dt)
+
         self.path_velocities_lin = [0.0]
         self.path_velocities_ang = [0.0]
 
@@ -288,18 +326,22 @@ class PurePursuitNode:
             p1 = self.path[i].pose.position
             p2 = self.path[i + 1].pose.position
             distance = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+
             angular_diff_unwrapped = self.get_yaw_from_pose(self.path[i + 1].pose) - self.get_yaw_from_pose(self.path[i].pose)
-            angular_diff = math.atan2(math.sin(angular_diff_unwrapped), math.cos(angular_diff_unwrapped))  # Normalize angle
-            
-            self.path_velocities_lin.append(distance * (1.0/self.dT))  # Linear velocity
-            self.path_velocities_ang.append(angular_diff * (1.0/self.dT))
+            angular_diff = math.atan2(math.sin(angular_diff_unwrapped), math.cos(angular_diff_unwrapped))
+
+            # dT für Segment i -> i+1 (wir hängen v bei Punkt i+1 an)
+            dt_seg = self.dT_list[i + 1]
+
+            self.path_velocities_lin.append(distance / dt_seg)
+            self.path_velocities_ang.append(angular_diff / dt_seg)
 
         lin = np.array(self.path_velocities_lin, dtype=float)
         ang = np.array(self.path_velocities_ang, dtype=float)
 
-        # Fenster in Sekunden -> in Samples
-        win = max(1, int(round(self.smooth_window_sec / self.dT)))
-        # für symmetrischen MA ungerade wählen
+        # mittleres dT für Fenstergröße
+        dt_mean = float(sum(self.dT_list)) / max(1, len(self.dT_list))
+        win = max(1, int(round(self.smooth_window_sec / dt_mean)))
         if win % 2 == 0:
             win += 1
 
@@ -308,6 +350,7 @@ class PurePursuitNode:
 
         self.path_velocities_lin = lin_s.tolist()
         self.path_velocities_ang = ang_s.tolist()
+
 
 
     def zero_phase_moving_average(self,x, window_size):

@@ -32,7 +32,9 @@ class MoveToFirstPathPoint:
         self.twist_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
 
         # Subscriber to 'mir_path' topic
-        self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
+        #self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
+        path = rospy.wait_for_message(self.path_topic, Path)
+        self.path_callback(path)
         self.robot_pose_sub = rospy.Subscriber(self.robot_pose_topic, Pose, self.robot_pose_callback)
 
     def calculate_orientation(self, start, target):

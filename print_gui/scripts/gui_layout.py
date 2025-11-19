@@ -37,7 +37,7 @@ class ROSGui(QWidget):
         self.ros_interface = ROSInterface(self)
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
-        self.setGeometry(100, 100, 1000, 600)
+        self.setGeometry(100, 100, 3200, 1700)
         main_layout = QHBoxLayout()
         # Left column
         left_layout = QVBoxLayout()
@@ -195,12 +195,12 @@ class ROSGui(QWidget):
 
     @pyqtSlot(str)
     def _append_ros_log(self, line: str):
-        """Append one ROS log line to the GUI console (keep last 10, with colors)."""
+        """Append one ROS log line to the GUI console (keep last 40, with colors)."""
         if not hasattr(self, "_ros_log_buffer"):
             self._ros_log_buffer = []
 
         self._ros_log_buffer.append(line)
-        self._ros_log_buffer = self._ros_log_buffer[-10:]
+        self._ros_log_buffer = self._ros_log_buffer[-400:]
 
         html_lines = []
         for l in self._ros_log_buffer:
