@@ -6,6 +6,8 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 import tf.transformations as tf
 import math
+from std_msgs.msg import Float32MultiArray
+
 
 
 # Add the parent directory to the Python path
@@ -23,6 +25,7 @@ from print_path import xVecMIRx
 from print_path import xVecMIRy
 from print_path import vxMIR
 from print_path import vyMIR
+from print_path import t
 
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
@@ -63,6 +66,8 @@ def publish_paths():
     original_pub = rospy.Publisher('/mir_path_original', Path, queue_size=10)
     transformed_pub = rospy.Publisher('/mir_path_transformed', Path, queue_size=10)
     velocity_pub = rospy.Publisher('/mir_path_velocity', Path, queue_size=10)
+    timestamps_pub = rospy.Publisher('/mir_path_timestamps', Float32MultiArray, queue_size=10)
+
     
     # Retrieve the original path
     x_coords = xMIR.xMIR() 
@@ -72,6 +77,7 @@ def publish_paths():
     orientation_vector_x = xVecMIRx.xVecMIRx()
     orientation_vector_y = xVecMIRy.xVecMIRy()
     layer_number = nL.nL()
+    t_coords = t.t()
     
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
@@ -129,7 +135,8 @@ def publish_paths():
     center_y = (y_min + y_max) / 2
     print(f"Center of the bounding box: ({center_x}, {center_y})")
 
-
+    timestamps_msg = Float32MultiArray()
+    timestamps_msg.data = list(t_coords)
     
     # Transform and fill transformed Path message
     transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
@@ -147,6 +154,7 @@ def publish_paths():
         original_pub.publish(original_path)
         transformed_pub.publish(transformed_path)
         velocity_pub.publish(velocity_path)
+        timestamps_pub.publish(timestamps_msg)
         rate.sleep()
 
 def set_metadata():
