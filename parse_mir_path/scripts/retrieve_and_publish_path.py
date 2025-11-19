@@ -143,7 +143,7 @@ def publish_paths():
     
     set_metadata()
 
-    rate = rospy.Rate(0.5)  # Publish at 1 Hz
+    rate = rospy.Rate(0.2)  # Publish at 1 Hz
     while not rospy.is_shutdown():
         # Update headers' timestamps
         original_path.header.stamp = rospy.Time.now()

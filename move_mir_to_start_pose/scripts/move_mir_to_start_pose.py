@@ -27,6 +27,7 @@ class MoveToFirstPathPoint:
         rospy.loginfo("Waiting for move_base action server...")
         self.move_base_client.wait_for_server()
         rospy.loginfo("Connected to move_base action server.")
+        rospy.wait_for_message(self.robot_pose_topic, Pose)
 
         # Start publisher for 'cmd_vel' topic
         self.twist_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
@@ -36,6 +37,8 @@ class MoveToFirstPathPoint:
         path = rospy.wait_for_message(self.path_topic, Path)
         self.path_callback(path)
         self.robot_pose_sub = rospy.Subscriber(self.robot_pose_topic, Pose, self.robot_pose_callback)
+        # wait for robot pose to be received
+        
 
     def calculate_orientation(self, start, target):
         """Calculate the orientation quaternion pointing from start to target."""

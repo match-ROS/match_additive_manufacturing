@@ -41,12 +41,12 @@ class PurePursuitNode:
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.25)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
-        self.Kv = rospy.get_param("~Kv", 0.5)  # Linear speed multiplier
+        self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
-        self.Ky = rospy.get_param("~Ky", 0.1)  # Lateral error multiplier
+        self.Ky = rospy.get_param("~Ky", 0.2)  # Lateral error multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
-        self.K_idx = rospy.get_param("~K_idx", 0.03)  # Index error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
@@ -68,7 +68,7 @@ class PurePursuitNode:
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
         self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.0)  # Maximaler Orientierungsfehler in Radiant
-        self.max_index_error = rospy.get_param("~max_index_error", 30) # Maximaler Indexfehler
+        self.max_index_error = rospy.get_param("~max_index_error", 40) # Maximaler Indexfehler
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -260,13 +260,15 @@ class PurePursuitNode:
         target_w = math.sin(self.K_orientation*orientation_error) * self.current_sub_step_progress + self.Kw*feedforward_w + self.Ky * self.lateral_distance * np.sign(target_v)
 
         #print(f"Kv*feedforward_v: {self.Kv*feedforward_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, K_orientation*orientation_error: {self.K_orientation*orientation_error * self.current_sub_step_progress}")
-
+        #print(f"target_v: {target_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, lateral_distance: {self.lateral_distance}, target_w: {target_w}")
         # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
 
         # Begrenzung der Geschwindigkeiten
         target_v = max(-self.linear_velocity_limit, min(self.linear_velocity_limit, target_v))
         target_w = max(-self.angular_velocity_limit, min(self.angular_velocity_limit, target_w))
+
+        print(f"Computed velocities - Linear: {target_v}, Angular: {target_w}")
 
         self.filter_velocity(Twist(linear=Twist().linear.__class__(x=target_v), angular=Twist().angular.__class__(z=target_w)))
         velocity.linear.x, velocity.angular.z = self.filtered_velocity.linear.x, self.filtered_velocity.angular.z

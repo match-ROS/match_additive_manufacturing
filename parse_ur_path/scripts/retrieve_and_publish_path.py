@@ -164,7 +164,7 @@ class PathTransfomer:
         self.create_paths()
         self.compute_normals()
         
-        rate = rospy.Rate(0.5)  # Publish at 1 Hz
+        rate = rospy.Rate(0.2)  # Publish at 1 Hz
         while not rospy.is_shutdown():
             self.publish()
         rate.sleep()
