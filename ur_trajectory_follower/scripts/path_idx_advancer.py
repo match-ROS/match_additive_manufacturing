@@ -99,7 +99,7 @@ class PathIndexAdvancer:
         """
         rospy.logwarn(f"Publishing current goal at index {self.current_index}")
         # Publish the waypoint index
-        #self.index_pub.publish(self.current_index)
+        self.index_pub.publish(self.current_index)
 
         # Publish the goal pose
         self.goal_pose_pub.publish(self.path.poses[self.current_index])

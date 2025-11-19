@@ -16,6 +16,7 @@ from tf import transformations as tr
 from sensor_msgs.msg import JointState
 from controller_manager_msgs.srv import ListControllers
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest, LoadController, LoadControllerRequest
+from math import pi
 
 class MoveManipulatorToTarget:
     def __init__(self):
@@ -145,6 +146,7 @@ class MoveManipulatorToTarget:
         relative_pose[3] = math.pi
         relative_pose[4] = 0.0
         relative_pose[5] = -mir_orientation + path_orientation[2] 
+        relative_pose[5] = np.arctan2(np.sin(relative_pose[5]), np.cos(relative_pose[5]))  # normalize angle to [-pi, pi]
         
         # Set the target pose for MoveIt
         self.move_group.set_pose_target(relative_pose, end_effector_link=self.manipulator_tcp_link)
@@ -154,6 +156,8 @@ class MoveManipulatorToTarget:
         local_target_pose.pose.position.x = relative_position[0]
         local_target_pose.pose.position.y = relative_position[1]
         local_target_pose.pose.position.z = relative_position[2]
+        quat = tr.quaternion_from_euler(relative_pose[3], relative_pose[4], relative_pose[5])
+        local_target_pose.pose.orientation = Quaternion(*quat)
         self.local_target_pose_pub.publish(local_target_pose)
 
         constraints = Constraints()
@@ -213,6 +217,52 @@ class MoveManipulatorToTarget:
                 # Execute the motion
                 self.move_group.execute(plan_trajectory, wait=True)
                 rospy.loginfo("Motion executed successfully.")
+
+                # After executing the planned motion, ensure the last joint angle is within [-pi, pi].
+                try:
+                    joint_state = rospy.wait_for_message(self.robot_name + '/joint_states', JointState, timeout=2.0)
+                    name_to_pos = dict(zip(joint_state.name, joint_state.position))
+                    active_joints = self.move_group.get_active_joints()
+                    if not active_joints:
+                        rospy.logwarn("Could not get active joints from MoveGroup.")
+                    else:
+                        last_joint_name = active_joints[-1]
+                        if last_joint_name in name_to_pos:
+                            q6 = name_to_pos[last_joint_name]
+                            # normalize q6 into [-pi, pi] by adding/subtracting 2*pi as needed
+                            adjusted_q6 = q6
+                            while adjusted_q6 > math.pi:
+                                adjusted_q6 -= 2.0 * math.pi
+                            while adjusted_q6 < -math.pi:
+                                adjusted_q6 += 2.0 * math.pi
+
+                            if abs(adjusted_q6 - q6) > 1e-6:
+                                rospy.loginfo(f"Adjusting {last_joint_name} from {q6:.3f} to {adjusted_q6:.3f} by adding/subtracting 2*pi.")
+                                # Build joint target dict using current positions, only change last joint
+                                joint_target = {}
+                                for j in active_joints:
+                                    if j in name_to_pos:
+                                        joint_target[j] = name_to_pos[j]
+                                joint_target[last_joint_name] = adjusted_q6
+
+                                # Set target and plan+execute the small correction
+                                self.move_group.set_joint_value_target(joint_target)
+                                corr_plan = self.move_group.plan()
+                                if isinstance(corr_plan, tuple):
+                                    corr_success = corr_plan[0]
+                                    corr_traj = corr_plan[1]
+                                    if corr_success:
+                                        self.move_group.execute(corr_traj, wait=True)
+                                        rospy.loginfo("Applied wrist6 wrap correction.")
+                                    else:
+                                        rospy.logwarn("Correction planning failed for wrist6 wrap.")
+                                else:
+                                    rospy.logwarn("Unexpected correction plan structure received.")
+                        else:
+                            rospy.logwarn(f"Last joint '{last_joint_name}' not present in joint_states.")
+                except rospy.ROSException:
+                    rospy.logwarn("Timed out waiting for joint_states to verify/adjust last joint.")
+
                 rospy.signal_shutdown("Motion executed successfully.")
             else:
                 rospy.logwarn(f"Motion planning failed.")
