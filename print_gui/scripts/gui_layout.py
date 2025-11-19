@@ -76,6 +76,7 @@ class ROSGui(QWidget):
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
+            "Launch Strand Center Camera": lambda: self.ros_interface.launch_strand_center_app(),
             "Open RVIZ": open_rviz,
             "Start Roscore": lambda: self.ros_interface.start_roscore(),
             "Start Mocap": lambda: self.ros_interface.start_mocap(),
