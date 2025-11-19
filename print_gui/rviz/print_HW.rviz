@@ -13,8 +13,9 @@ Panels:
         - /PrintGoal1
         - /MiRTarget1
         - /MiRTarget2
+        - /CalibratedEE1
       Splitter Ratio: 0.5
-    Tree Height: 515
+    Tree Height: 664
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -1112,6 +1113,242 @@ Visualization Manager:
       Topic: /mir_actual_pose
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: CalibratedEE
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /mur620c/UR10_r/ur_calibrated_pose
+      Unreliable: false
+      Value: true
+    - Class: rviz/TF
+      Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        karton:
+          Value: true
+        map:
+          Value: true
+        mocap:
+          Value: true
+        mur620c:
+          Value: true
+        mur620c/UR10_l/base:
+          Value: true
+        mur620c/UR10_l/base_ideal:
+          Value: true
+        mur620c/UR10_l/base_link:
+          Value: true
+        mur620c/UR10_l/base_link_inertia:
+          Value: true
+        mur620c/UR10_l/flange:
+          Value: true
+        mur620c/UR10_l/gripper:
+          Value: true
+        mur620c/UR10_l/tool0:
+          Value: true
+        mur620c/UR10_l/wrist_3_link:
+          Value: true
+        mur620c/UR10_r/base:
+          Value: true
+        mur620c/UR10_r/base_ideal:
+          Value: true
+        mur620c/UR10_r/base_link:
+          Value: true
+        mur620c/UR10_r/base_link_inertia:
+          Value: true
+        mur620c/UR10_r/calibrated_ee_pose:
+          Value: true
+        mur620c/UR10_r/flange:
+          Value: true
+        mur620c/UR10_r/forearm_link:
+          Value: true
+        mur620c/UR10_r/gripper:
+          Value: true
+        mur620c/UR10_r/shoulder_link:
+          Value: true
+        mur620c/UR10_r/tool0:
+          Value: true
+        mur620c/UR10_r/upper_arm_link:
+          Value: true
+        mur620c/UR10_r/wrist_1_link:
+          Value: true
+        mur620c/UR10_r/wrist_2_link:
+          Value: true
+        mur620c/UR10_r/wrist_3_link:
+          Value: true
+        mur620c/back_laser_link:
+          Value: true
+        mur620c/base_footprint:
+          Value: true
+        mur620c/base_link:
+          Value: true
+        mur620c/bl_caster_rotation_link:
+          Value: true
+        mur620c/bl_caster_wheel_link:
+          Value: true
+        mur620c/br_caster_rotation_link:
+          Value: true
+        mur620c/br_caster_wheel_link:
+          Value: true
+        mur620c/camera_bottom_screw_frame:
+          Value: true
+        mur620c/camera_color_frame:
+          Value: true
+        mur620c/camera_color_optical_frame:
+          Value: true
+        mur620c/camera_depth_frame:
+          Value: true
+        mur620c/camera_depth_optical_frame:
+          Value: true
+        mur620c/camera_infra1_frame:
+          Value: true
+        mur620c/camera_infra1_optical_frame:
+          Value: true
+        mur620c/camera_infra2_frame:
+          Value: true
+        mur620c/camera_infra2_optical_frame:
+          Value: true
+        mur620c/camera_link:
+          Value: true
+        mur620c/fl_caster_rotation_link:
+          Value: true
+        mur620c/fl_caster_wheel_link:
+          Value: true
+        mur620c/fr_caster_rotation_link:
+          Value: true
+        mur620c/fr_caster_wheel_link:
+          Value: true
+        mur620c/front_laser_link:
+          Value: true
+        mur620c/imu_frame:
+          Value: true
+        mur620c/imu_link:
+          Value: true
+        mur620c/left_lift_bottom:
+          Value: true
+        mur620c/left_lift_top:
+          Value: true
+        mur620c/left_wheel_link:
+          Value: true
+        mur620c/right_lift_bottom:
+          Value: true
+        mur620c/right_lift_top:
+          Value: true
+        mur620c/right_wheel_link:
+          Value: true
+        mur620c/surface:
+          Value: true
+        mur620c/top_module:
+          Value: true
+        mur620c/us_1_frame:
+          Value: true
+        mur620c/us_2_frame:
+          Value: true
+      Marker Alpha: 1
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          mocap:
+            karton:
+              {}
+            mur620c:
+              {}
+        mur620c/UR10_l/wrist_3_link:
+          mur620c/UR10_l/flange:
+            mur620c/UR10_l/tool0:
+              mur620c/UR10_l/gripper:
+                {}
+        mur620c/base_footprint:
+          mur620c/base_link:
+            mur620c/back_laser_link:
+              {}
+            mur620c/bl_caster_rotation_link:
+              mur620c/bl_caster_wheel_link:
+                {}
+            mur620c/br_caster_rotation_link:
+              mur620c/br_caster_wheel_link:
+                {}
+            mur620c/camera_bottom_screw_frame:
+              mur620c/camera_link:
+                mur620c/camera_color_frame:
+                  mur620c/camera_color_optical_frame:
+                    {}
+                mur620c/camera_depth_frame:
+                  mur620c/camera_depth_optical_frame:
+                    {}
+                mur620c/camera_infra1_frame:
+                  mur620c/camera_infra1_optical_frame:
+                    {}
+                mur620c/camera_infra2_frame:
+                  mur620c/camera_infra2_optical_frame:
+                    {}
+            mur620c/fl_caster_rotation_link:
+              mur620c/fl_caster_wheel_link:
+                {}
+            mur620c/fr_caster_rotation_link:
+              mur620c/fr_caster_wheel_link:
+                {}
+            mur620c/front_laser_link:
+              {}
+            mur620c/imu_link:
+              mur620c/imu_frame:
+                {}
+            mur620c/left_wheel_link:
+              {}
+            mur620c/right_wheel_link:
+              {}
+            mur620c/surface:
+              {}
+            mur620c/top_module:
+              mur620c/left_lift_bottom:
+                {}
+              mur620c/right_lift_bottom:
+                mur620c/right_lift_top:
+                  mur620c/UR10_r/base_ideal:
+                    mur620c/UR10_r/base_link:
+                      mur620c/UR10_r/base:
+                        mur620c/UR10_r/calibrated_ee_pose:
+                          {}
+                      mur620c/UR10_r/base_link_inertia:
+                        mur620c/UR10_r/shoulder_link:
+                          mur620c/UR10_r/upper_arm_link:
+                            mur620c/UR10_r/forearm_link:
+                              mur620c/UR10_r/wrist_1_link:
+                                mur620c/UR10_r/wrist_2_link:
+                                  mur620c/UR10_r/wrist_3_link:
+                                    mur620c/UR10_r/flange:
+                                      mur620c/UR10_r/tool0:
+                                        mur620c/UR10_r/gripper:
+                                          {}
+            mur620c/us_1_frame:
+              {}
+            mur620c/us_2_frame:
+              {}
+        mur620c/left_lift_top:
+          mur620c/UR10_l/base_ideal:
+            mur620c/UR10_l/base_link:
+              mur620c/UR10_l/base:
+                {}
+              mur620c/UR10_l/base_link_inertia:
+                {}
+      Update Interval: 0
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -1139,7 +1376,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
+      Angle: 0.2350001335144043
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -1149,22 +1386,22 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 343.63330078125
+      Scale: 434.5278625488281
       Target Frame: <Fixed Frame>
-      X: 48.842220306396484
-      Y: 43.69377136230469
+      X: 49.408042907714844
+      Y: 42.98520278930664
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1403
+  Height: 2806
   Hide Left Dock: false
   Hide Right Dock: false
   MotionPlanning:
     collapsed: false
   MotionPlanning - Trajectory Slider:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000039b000004b9fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003d000002ca000000c900fffffffa000000010100000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000000ffffffff0000009d00fffffffb000000100044006900730070006c00610079007301000000000000039b0000015600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb000000280020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e0067010000030d000001e90000017d00fffffffb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000001600000016000000010000015d000004b9fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003d000004b9000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e1000001970000000300000a0000000062fc0100000002fb0000000800540069006d0065010000000000000a00000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000004fc000004b900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000039b000009e8fc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b000000b200fffffffb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc00000070000003940000018600fffffffa000000010100000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000000ffffffff0000010800fffffffb000000100044006900730070006c00610079007301000000000000039b000001f400fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb000000280020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e0067010000041000000648000002ca00fffffffb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000002800000028000000010000015d000009e8fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a005600690065007700730100000070000009e80000013800fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000140000000062fc0100000002fb0000000800540069006d0065010000000000001400000005e300fffffffb0000000800540069006d0065010000000000000450000000000000000000000ef0000009e800000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -1173,6 +1410,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: false
-  Width: 2560
+  Width: 5120
   X: 5120
   Y: 0
