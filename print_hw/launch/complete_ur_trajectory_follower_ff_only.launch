@@ -36,9 +36,9 @@
     </include>
     <!-- run node to transform tcp_pose to base_ideal for compensation etc: -->
     <node name="tcp_in_base_ideal_publisher" pkg="additive_manufacturing_helpers" type="static_trafo_pose_pub.py" output="screen">
-        <param name="source_frame" value="$(arg robot_name)/$(arg prefix_ur)base_link" />
+        <param name="source_frame" value="$(arg robot_name)/$(arg prefix_ur)base_link_inertia" />
         <param name="target_frame" value="$(arg robot_name)/$(arg prefix_ur)base_ideal" />
-        <param name="input_topic" value="$(arg robot_name)/$(arg prefix_ur)tcp_pose" />
+        <param name="input_topic" value="$(arg robot_name)/$(arg prefix_ur)ur_calibrated_pose" />
     </node>
 
     <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
