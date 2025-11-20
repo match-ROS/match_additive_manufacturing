@@ -26,7 +26,6 @@ class DirectionYawController:
         self.current_pose: Optional[PoseStamped] = None
         self.command_old_twist = Twist()
         self.current_index = 1
-        self.trajectory_velocity = 0.0
         self.velocity_override = 1.0
 
         # Topics (defaults follow the user's request but remain configurable)
@@ -52,7 +51,6 @@ class DirectionYawController:
             return
         self.path = path_msg
         self.current_index = min(max(self.current_index, 1), len(self.path.poses) - 1)
-        self.get_traj_velocity()
 
     def path_index_callback(self, index_msg: Int32):
         if self.path is None or len(self.path.poses) < 2:
@@ -61,7 +59,6 @@ class DirectionYawController:
         if new_index == self.current_index:
             return
         self.current_index = new_index
-        self.get_traj_velocity()
         if self.current_pose is not None:
             self.calculate_twist()
 
@@ -70,34 +67,12 @@ class DirectionYawController:
         if self.path is None or len(self.path.poses) < 2:
             rospy.logwarn_throttle(5.0, "No valid path received yet.")
             return
-        self.get_traj_velocity()
         self.calculate_twist()
 
     def velocity_override_callback(self, velocity_msg: Float32):
-        self.velocity_override = velocity_msg.data
+        self.velocity_override = max(0.0, min(velocity_msg.data, 1.0))
 
     # ----------------------- Helper methods ----------------------
-    @staticmethod
-    def distance_xy(pos_a, pos_b) -> float:
-        return math.hypot(pos_b.x - pos_a.x, pos_b.y - pos_a.y)
-
-    def get_traj_velocity(self):
-        if self.path is None or self.current_index <= 0:
-            return
-
-        try:
-            last_waypoint = self.path.poses[self.current_index - 1]
-            next_waypoint = self.path.poses[self.current_index]
-        except IndexError:
-            return
-
-        distance = self.distance_xy(last_waypoint.pose.position, next_waypoint.pose.position)
-        dt = (next_waypoint.header.stamp - last_waypoint.header.stamp).to_sec()
-        if dt > 0:
-            self.trajectory_velocity = distance / dt
-        else:
-            rospy.logwarn_throttle(5.0, "Non-positive dt encountered in trajectory velocity calculation.")
-            self.trajectory_velocity = 0.0
 
     def get_direction(self):
         if self.path is None:
@@ -160,7 +135,6 @@ class DirectionYawController:
 
         direction_xy_norm = self.get_direction()
         direction_norm = np.linalg.norm(direction_xy_norm)
-        v_xy = direction_xy_norm * self.trajectory_velocity * self.velocity_override
 
         # Yaw PID
         desired_yaw = (
@@ -170,17 +144,19 @@ class DirectionYawController:
         )
         current_yaw = self.quaternion_to_yaw(self.current_pose.pose.orientation)
         yaw_error = self.wrap_to_pi(desired_yaw - current_yaw)
-        omega_z = (
-            yaw_error * self.kp_yaw
-            + self.integral_yaw * self.ki_yaw
-            + (yaw_error - self.prev_error_yaw) * self.kd_yaw
-        )
-        self.integral_yaw += yaw_error
+
+        velocity_scale = self.velocity_override
+        proportional = yaw_error * self.kp_yaw
+        derivative = (yaw_error - self.prev_error_yaw) * self.kd_yaw
+        integral_term = self.integral_yaw * self.ki_yaw
+        omega_z = (proportional + integral_term + derivative) * velocity_scale
+
+        self.integral_yaw += yaw_error * velocity_scale
         self.prev_error_yaw = yaw_error
 
         control_command = Twist()
-        control_command.linear.x = v_xy[0]
-        control_command.linear.y = v_xy[1]
+        control_command.linear.x = 0.0
+        control_command.linear.y = 0.0
         control_command.linear.z = 0.0
         control_command.angular.z = omega_z
 
