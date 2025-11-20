@@ -1,0 +1,31 @@
+<launch>
+    <!-- Parameters -->
+    <arg name="kp_yaw" default="1.5"/>
+    <arg name="ki_yaw" default="0.0"/>
+    <arg name="kd_yaw" default="0.0"/>
+
+    <arg name="output_smoothing_coeff" default="0.9"/>
+    <arg name="ff_only" default="false"/>
+
+    <!-- Topics -->
+    <arg name="path_topic" default="/path"/>
+    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="path_index_topic" default="/path_index"/>
+    <arg name="velocity_override_topic" default="/velocity_override"/>
+    <arg name="twist_topic" default="/ur_twist_world"/>
+
+    <node name="ur_direction_yaw_controller" pkg="ur_trajectory_follower" type="ur_path_direction_yaw_controller.py" output="screen">
+        <param name="kp_yaw" value="$(arg kp_yaw)"/>
+        <param name="ki_yaw" value="$(arg ki_yaw)"/>
+        <param name="kd_yaw" value="$(arg kd_yaw)"/>
+
+        <param name="output_smoothing_coeff" value="$(arg output_smoothing_coeff)"/>
+        <param name="ff_only" value="$(arg ff_only)"/>
+
+        <param name="path_topic" value="$(arg path_topic)"/>
+        <param name="current_pose_topic" value="$(arg current_pose_topic)"/>
+        <param name="path_index_topic" value="$(arg path_index_topic)"/>
+        <param name="velocity_override_topic" value="$(arg velocity_override_topic)"/>
+        <param name="twist_topic" value="$(arg twist_topic)"/>
+    </node>
+</launch>

@@ -81,7 +81,7 @@ class PathIndexAdvancer:
 
         # 1. Check metric
         if self.check_condition(robot_x, robot_y):
-            rospy.loginfo("Advancing waypoint index")
+            #rospy.loginfo("Advancing waypoint index")
             self.advance_waypoint_index()
 
             # Publish updated index and goal
@@ -97,7 +97,7 @@ class PathIndexAdvancer:
         """
         Publishes the current waypoint index and the corresponding goal pose.
         """
-        rospy.logwarn(f"Publishing current goal at index {self.current_index}")
+        rospy.logwarn_throttle(1,f"Publishing current goal at index {self.current_index}")
         # Publish the waypoint index
         self.index_pub.publish(self.current_index)
 

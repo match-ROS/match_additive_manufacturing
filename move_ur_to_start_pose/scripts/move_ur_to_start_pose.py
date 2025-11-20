@@ -34,6 +34,7 @@ class MoveManipulatorToTarget:
 
         param_path = f'/{self.robot_name}/{self.UR_prefix}/ur_calibrated_pose_pub_node/tcp_offset'
         self.tcp_offset = rospy.get_param(param_path, [0.0,0.0,0.0,0.0,0.0,0.0])
+        self.spray_distance = rospy.get_param('~spray_distance', 0.15)  # distance from TCP to spray point along z-axis
         # remove [] if present
         if isinstance(self.tcp_offset, str):
             self.tcp_offset = self.tcp_offset.strip('[]').split(',')
@@ -108,7 +109,7 @@ class MoveManipulatorToTarget:
         # Get the first TCP pose from the path
         target_tcp_pose = path_msg.poses[self.initial_path_index]
         # the target pose is the pose of the path, we need to compute the actual tcp pose
-        target_tcp_pose.pose.position.z += self.tcp_offset[2]  # add z offset
+        target_tcp_pose.pose.position.z += self.tcp_offset[2] + self.spray_distance  # add z offset
         
         # Get the current pose of the manipulator base in the map frame
         try:
@@ -150,7 +151,7 @@ class MoveManipulatorToTarget:
         relative_pose[2] = relative_position[2]
         relative_pose[3] = math.pi
         relative_pose[4] = 0.0
-        relative_pose[5] = -mir_orientation + path_orientation[2] + self.tcp_offset[5]  # add tcp offset in rotation around z 
+        relative_pose[5] = -mir_orientation + path_orientation[2] + self.tcp_offset[5] + pi*0.75 # add tcp offset in rotation around z 
         relative_pose[5] = np.arctan2(np.sin(relative_pose[5]), np.cos(relative_pose[5]))  # normalize angle to [-pi, pi]
         
         # Set the target pose for MoveIt

@@ -66,9 +66,9 @@ class PurePursuitNode:
         self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
-        self.max_distance_error = rospy.get_param("~max_distance_error", 0.5)  # Maximaler Abstandsfehler
-        self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.0)  # Maximaler Orientierungsfehler in Radiant
-        self.max_index_error = rospy.get_param("~max_index_error", 40) # Maximaler Indexfehler
+        self.max_distance_error = rospy.get_param("~max_distance_error", 1.0)  # Maximaler Abstandsfehler
+        self.max_orientation_error = rospy.get_param("~max_orientation_error", 1.5)  # Maximaler Orientierungsfehler in Radiant
+        self.max_index_error = rospy.get_param("~max_index_error", 50) # Maximaler Indexfehler
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
@@ -268,18 +268,21 @@ class PurePursuitNode:
         target_v = max(-self.linear_velocity_limit, min(self.linear_velocity_limit, target_v))
         target_w = max(-self.angular_velocity_limit, min(self.angular_velocity_limit, target_w))
 
-        print(f"Computed velocities - Linear: {target_v}, Angular: {target_w}")
 
         self.filter_velocity(Twist(linear=Twist().linear.__class__(x=target_v), angular=Twist().angular.__class__(z=target_w)))
         velocity.linear.x, velocity.angular.z = self.filtered_velocity.linear.x, self.filtered_velocity.angular.z
 
+        #print(f"Publishing cmd_vel: linear.x={velocity.linear.x}, angular.z={velocity.angular.z}")
+
         # Überprüfe Fehlergrenzen
         result = self.check_error_thresholds(distance_error, orientation_error, index_error)
         if not result:
-            rospy.logwarn_throttle(5,"Error thresholds exceeded. Stopping path following.")
+            rospy.logwarn_throttle(1,"Error thresholds exceeded. Stopping path following.")
             velocity.linear.x = 0.0
             velocity.angular.z = 0.0
             self.is_active = False
+
+        #print(f"Publishing cmd_vel: linear.x={velocity.linear.x}, angular.z={velocity.angular.z}")
 
         self.cmd_vel_pub.publish(velocity)
 

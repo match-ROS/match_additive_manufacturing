@@ -276,11 +276,12 @@ class ROSGui(QWidget):
         if not hasattr(self, "_ros_log_buffer"):
             self._ros_log_buffer = []
 
-        # Nur die letzten 10 behalten
+        # Buffer enthält Tuples
         self._ros_log_buffer.append((level, node, text))
-        self._ros_log_buffer = self._ros_log_buffer[-400:]
+        self._ros_log_buffer = self._ros_log_buffer[-10:]
 
         self._rebuild_ros_log_view()
+
 
     def _rebuild_ros_log_view(self):
         """Rebuild the log text widget from the buffer, applying filters + colors."""
@@ -290,13 +291,11 @@ class ROSGui(QWidget):
             if not self._ros_log_level_enabled(level):
                 continue
 
-            # Roh-String bauen: [LEVEL] node: text
             line = f"[{level}] {node}: {text}"
-
             escaped = html.escape(line)
 
             lvl = level.upper()
-            if lvl == "WARN" or lvl == "WARNING":
+            if lvl in ("WARN", "WARNING"):
                 escaped = escaped.replace(
                     "[WARN]",
                     '<span style="color:#d9a400; font-weight:bold;">[WARN]</span>'
@@ -312,6 +311,7 @@ class ROSGui(QWidget):
         self.ros_log_text.setHtml("<br>".join(html_lines))
         sb = self.ros_log_text.verticalScrollBar()
         sb.setValue(sb.maximum())
+
 
     def _clear_ros_log(self):
         """Clear all buffered log messages and the view."""

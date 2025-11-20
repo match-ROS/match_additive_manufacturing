@@ -2,6 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import PoseStamped, Twist, Vector3
+from copy import deepcopy
 
 
 
@@ -11,7 +12,7 @@ class OrthogonalErrorCorrection:
         self.goal_pose: PoseStamped = None
         self.normal: Vector3 = None
         self.twist_old = Twist()
-        self.smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.90)
+        self.smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.99)
         
         self.twist_pub = rospy.Publisher('~orthogonal_twist', Twist, queue_size=10)
         
@@ -44,7 +45,7 @@ class OrthogonalErrorCorrection:
                                    (1 - self.smoothing_coeff) * twist.linear.y)
         smoothed_twist.linear.z = (self.smoothing_coeff * self.twist_old.linear.z +
                                    (1 - self.smoothing_coeff) * twist.linear.z)
-        self.twist_old = smoothed_twist
+        self.twist_old = deepcopy(smoothed_twist)
         return smoothed_twist
 
     def calculate_twist(self):

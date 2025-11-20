@@ -18,7 +18,7 @@ class MoveToFirstPathPoint:
         self.path_topic = rospy.get_param('~path_topic', '/mir_path')
         self.initial_path_index = rospy.get_param('~initial_path_index', 0)
         self.robot_pose_topic = rospy.get_param('~robot_pose_topic', f'/{self.robot_name}/mir_pose_simple')
-        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'/{self.robot_name}/cmd_vel')
+        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'/{self.robot_name}/global_regulated_cmd_vel')
 
         # Action client for 'move_base'
         self.move_base_client = actionlib.SimpleActionClient(self.robot_name + '/move_base', MoveBaseAction)
