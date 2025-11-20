@@ -178,7 +178,7 @@ class ROSInterface:
 
         for robot in selected_robots:
             workspace = workspace_name
-            command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch laser_scanner_tools keyence_scanner.launch; exec bash'"
+            command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch laser_scanner_tools keyence_scanner_ljx8000.launch; exec bash'"
 
             # Open a new terminal with SSH session + driver launch + keep open
             subprocess.Popen([
