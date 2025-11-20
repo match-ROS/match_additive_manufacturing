@@ -32,9 +32,14 @@ class MoveManipulatorToTarget:
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
         self.UR_prefix = rospy.get_param('~UR_prefix', 'UR10_r')
 
-        self.tcp_nozzle_distance = rospy.get_param('~tcp_nozzle_distance', 0.59)
-        self.spray_distance = rospy.get_param('~spray_distance', 0.2)
-        
+        param_path = f'/{self.robot_name}/{self.UR_prefix}/ur_calibrated_pose_pub_node/tcp_offset'
+        self.tcp_offset = rospy.get_param(param_path, [0.0,0.0,0.0,0.0,0.0,0.0])
+        # remove [] if present
+        if isinstance(self.tcp_offset, str):
+            self.tcp_offset = self.tcp_offset.strip('[]').split(',')
+        # convert to float
+        self.tcp_offset = [float(i) for i in self.tcp_offset]
+
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
         self.move_group = MoveGroupCommander(self.planning_group, ns=self.robot_name, robot_description=self.robot_name+"/robot_description")
@@ -103,7 +108,7 @@ class MoveManipulatorToTarget:
         # Get the first TCP pose from the path
         target_tcp_pose = path_msg.poses[self.initial_path_index]
         # the target pose is the pose of the path, we need to compute the actual tcp pose
-        target_tcp_pose.pose.position.z += self.tcp_nozzle_distance + self.spray_distance
+        target_tcp_pose.pose.position.z += self.tcp_offset[2]  # add z offset
         
         # Get the current pose of the manipulator base in the map frame
         try:
@@ -145,7 +150,7 @@ class MoveManipulatorToTarget:
         relative_pose[2] = relative_position[2]
         relative_pose[3] = math.pi
         relative_pose[4] = 0.0
-        relative_pose[5] = -mir_orientation + path_orientation[2] 
+        relative_pose[5] = -mir_orientation + path_orientation[2] + self.tcp_offset[5]  # add tcp offset in rotation around z 
         relative_pose[5] = np.arctan2(np.sin(relative_pose[5]), np.cos(relative_pose[5]))  # normalize angle to [-pi, pi]
         
         # Set the target pose for MoveIt
