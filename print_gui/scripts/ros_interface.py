@@ -451,7 +451,7 @@ def launch_drivers(gui):
         else:
             launch_suffix += " launch_ur_r:=false"
         
-        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch"+launch_suffix+"; exec bash'"
+        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch"+launch_suffix+" tcp_offset:=\"[0,0,0.63409,0,0,0]\"; exec bash'"
 
         # Open a new terminal with SSH session + driver launch + keep open
         subprocess.Popen([
