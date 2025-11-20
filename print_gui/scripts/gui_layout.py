@@ -120,6 +120,38 @@ class ROSGui(QWidget):
         send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
         targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
+
+        nozzle_group = QGroupBox("Nozzle position")
+        nozzle_layout = QHBoxLayout()
+        nozzle_layout.addWidget(QLabel("TCP offset (m):"))
+        self.tcp_offset_spins = []
+        tcp_labels = ['x', 'y', 'z']
+        tcp_defaults = [0.0, 0.0, 0.63409]
+        for axis, default in zip(tcp_labels, tcp_defaults):
+            col = QVBoxLayout()
+            col.addWidget(QLabel(axis.upper()))
+            spin = QDoubleSpinBox()
+            spin.setRange(-2.0, 2.0)
+            spin.setDecimals(5)
+            spin.setSingleStep(0.001)
+            spin.setValue(default)
+            spin.setSuffix(" m")
+            col.addWidget(spin)
+            nozzle_layout.addLayout(col)
+            self.tcp_offset_spins.append(spin)
+        # orientation around z (phi)
+        phi_col = QVBoxLayout()
+        phi_col.addWidget(QLabel("φ (deg)"))
+        self.tcp_phi_spin = QDoubleSpinBox()
+        self.tcp_phi_spin.setRange(-180.0, 180.0)
+        self.tcp_phi_spin.setDecimals(3)
+        self.tcp_phi_spin.setSingleStep(0.5)
+        self.tcp_phi_spin.setValue(0.0)
+        self.tcp_phi_spin.setSuffix(" °")
+        phi_col.addWidget(self.tcp_phi_spin)
+        nozzle_layout.addLayout(phi_col)
+        nozzle_group.setLayout(nozzle_layout)
+        print_functions_layout.addWidget(nozzle_group)
         print_functions_group.setLayout(print_functions_layout)
         right_layout.addWidget(print_functions_group)
         main_layout.addLayout(right_layout)
@@ -336,6 +368,21 @@ class ROSGui(QWidget):
 
     def get_override_value(self):
         return self.override_slider.value()
+
+    def get_tcp_offset_xyz(self):
+        if not hasattr(self, 'tcp_offset_spins'):
+            return [0.0, 0.0, 0.0]
+        return [spin.value() for spin in self.tcp_offset_spins]
+
+    def get_tcp_offset_sixd(self):
+        xyz = self.get_tcp_offset_xyz()
+        phi = self.get_tcp_phi_radians()
+        return xyz + [0.0, 0.0, phi]
+
+    def get_tcp_phi_radians(self):
+        if not hasattr(self, 'tcp_phi_spin'):
+            return 0.0
+        return math.radians(self.tcp_phi_spin.value())
 
 class URFollowSettingsDialog(QDialog):
     def __init__(self, parent=None, initial_settings=None):

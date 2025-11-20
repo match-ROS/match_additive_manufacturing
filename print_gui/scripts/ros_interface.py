@@ -435,11 +435,14 @@ def launch_drivers(gui):
     selected_robots = gui.get_selected_robots()
     workspace_name = gui.get_workspace_name()
 
+    if not selected_robots:
+        print("No robots selected. Skipping driver launch.")
+        return
+
     for robot in selected_robots:
         workspace = workspace_name
-        # command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch; exec bash'"
         selected_urs = gui.get_selected_urs()
-        launch_suffix=""
+        launch_suffix = ""
         if "UR10_l" in selected_urs:
             launch_suffix += " launch_ur_l:=true"
         else:
@@ -448,14 +451,28 @@ def launch_drivers(gui):
             launch_suffix += " launch_ur_r:=true"
         else:
             launch_suffix += " launch_ur_r:=false"
-        
-        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mur_launch_hardware {robot}.launch"+launch_suffix+" tcp_offset:=\"[0,0,0.63409,0,0,0]\"; exec bash'"
 
-        # Open a new terminal with SSH session + driver launch + keep open
+        try:
+            offset_values = gui.get_tcp_offset_sixd()
+        except AttributeError:
+            offset_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        tcp_offset_literal = "[" + ",".join(f"{value:.6f}" for value in offset_values) + "]"
+
+        command = (
+            f"ssh -t -t {robot} '"
+            "source ~/.bashrc; "
+            "export ROS_MASTER_URI=http://roscore:11311/; "
+            "source /opt/ros/noetic/setup.bash; "
+            f"source ~/{workspace}/devel/setup.bash; "
+            f"roslaunch mur_launch_hardware {robot}.launch{launch_suffix} "
+            f"tcp_offset:=\\\"{tcp_offset_literal}\\\"; "
+            "exec bash'"
+        )
+
         subprocess.Popen([
             "terminator",
-            f"--title=Driver {robot}",      # Set the window title to "Mur Driver" :contentReference[oaicite:0]{index=0}
-            "-x",                       # Execute the following command inside the terminal :contentReference[oaicite:1]{index=1}
+            f"--title=Driver {robot}",
+            "-x",
             f"{command}; exec bash"
         ])
 
