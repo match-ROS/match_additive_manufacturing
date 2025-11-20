@@ -24,7 +24,7 @@ class EnterSpinBox(QSpinBox):
 class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
     medians = pyqtSignal(float, float)
-    ros_log_signal = pyqtSignal(str)
+    ros_log_signal = pyqtSignal(str, str, str)  # level, node, text
     
     def __init__(self):
         super().__init__()
@@ -147,18 +147,22 @@ class ROSGui(QWidget):
         self.chk_log_info.setChecked(True)
         self.chk_log_debug.setChecked(False)
 
-        # Bei Änderung der Auswahl die Ansicht neu aufbauen
+        # Clear-Button
+        self.btn_log_clear = QPushButton("Clear")
+        self.btn_log_clear.clicked.connect(self._clear_ros_log)
+
+        # Filter-Checkboxen triggern Ansicht neu
         for cb in (self.chk_log_error, self.chk_log_warn,
                    self.chk_log_info, self.chk_log_debug):
-            cb.stateChanged.connect(lambda _=None: self._rebuild_ros_log_view())
+            cb.stateChanged.connect(self._rebuild_ros_log_view)
 
         filter_layout.addWidget(self.chk_log_error)
         filter_layout.addWidget(self.chk_log_warn)
         filter_layout.addWidget(self.chk_log_info)
         filter_layout.addWidget(self.chk_log_debug)
+        filter_layout.addWidget(self.btn_log_clear)
 
         log_layout.addLayout(filter_layout)
-
         log_group.setLayout(log_layout)
         main_layout.addWidget(log_group)
 
@@ -224,76 +228,48 @@ class ROSGui(QWidget):
         level = level.upper()
         if level == "ERROR":
             return self.chk_log_error.isChecked()
-        if level == "WARN" or level == "WARNING":
+        if level in ("WARN", "WARNING"):
             return self.chk_log_warn.isChecked()
         if level == "INFO":
             return self.chk_log_info.isChecked()
         if level == "DEBUG":
             return self.chk_log_debug.isChecked()
-        # Unbekannte Level: zeig sie, falls Info aktiviert ist
+        # Unbekannt – behandel wie INFO
         return self.chk_log_info.isChecked()
 
 
-    @pyqtSlot(str)
-    def _append_ros_log(self, line: str):
-        """Append one ROS log line to the GUI console (keep last 40, with colors)."""
+    @pyqtSlot(str, str, str)
+    def _append_ros_log(self, level: str, node: str, text: str):
+        """Append one ROS log entry to the buffer and refresh view."""
         if not hasattr(self, "_ros_log_buffer"):
             self._ros_log_buffer = []
 
-        self._ros_log_buffer.append(line)
+        # Nur die letzten 10 behalten
+        self._ros_log_buffer.append((level, node, text))
         self._ros_log_buffer = self._ros_log_buffer[-400:]
 
         self._rebuild_ros_log_view()
-
-        html_lines = []
-        for l in self._ros_log_buffer:
-            # HTML-escapen, damit Sonderzeichen nicht als Tags interpretiert werden
-            escaped = html.escape(l)
-
-            # [WARN] gelb einfärben
-            if "[WARN]" in l:
-                escaped = escaped.replace(
-                    "[WARN]",
-                    '<span style="color:#d9a400; font-weight:bold;">[WARN]</span>'
-                )
-
-            # [ERROR] rot einfärben
-            if "[ERROR]" in l:
-                escaped = escaped.replace(
-                    "[ERROR]",
-                    '<span style="color:#c00000; font-weight:bold;">[ERROR]</span>'
-                )
-
-            html_lines.append(escaped)
-
-        self.ros_log_text.setHtml("<br>".join(html_lines))
-
-        sb = self.ros_log_text.verticalScrollBar()
-        sb.setValue(sb.maximum())
 
     def _rebuild_ros_log_view(self):
         """Rebuild the log text widget from the buffer, applying filters + colors."""
         html_lines = []
 
-        for l in self._ros_log_buffer:
-            # Level aus dem Prefix [LEVEL] parsen
-            level = "INFO"
-            if l.startswith("[") and "]" in l:
-                level = l[1:l.index("]")]
+        for level, node, text in self._ros_log_buffer:
             if not self._ros_log_level_enabled(level):
                 continue
 
-            escaped = html.escape(l)
+            # Roh-String bauen: [LEVEL] node: text
+            line = f"[{level}] {node}: {text}"
 
-            # [WARN] gelb
-            if "[WARN]" in l:
+            escaped = html.escape(line)
+
+            lvl = level.upper()
+            if lvl == "WARN" or lvl == "WARNING":
                 escaped = escaped.replace(
                     "[WARN]",
                     '<span style="color:#d9a400; font-weight:bold;">[WARN]</span>'
                 )
-
-            # [ERROR] rot
-            if "[ERROR]" in l:
+            elif lvl == "ERROR":
                 escaped = escaped.replace(
                     "[ERROR]",
                     '<span style="color:#c00000; font-weight:bold;">[ERROR]</span>'
@@ -302,10 +278,13 @@ class ROSGui(QWidget):
             html_lines.append(escaped)
 
         self.ros_log_text.setHtml("<br>".join(html_lines))
-
         sb = self.ros_log_text.verticalScrollBar()
         sb.setValue(sb.maximum())
 
+    def _clear_ros_log(self):
+        """Clear all buffered log messages and the view."""
+        self._ros_log_buffer = []
+        self.ros_log_text.clear()
         
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)

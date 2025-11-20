@@ -320,10 +320,8 @@ class ROSInterface:
             level = level_map.get(msg.level, str(msg.level))
             node_name = getattr(msg, "name", "?")
 
-            line = f"[{level}] {node_name}: {text}"
-
             if hasattr(self.gui, "ros_log_signal"):
-                self.gui.ros_log_signal.emit(line)
+                self.gui.ros_log_signal.emit(level, node_name, text)
         except Exception as e:
             rospy.logwarn(f"Error while forwarding /rosout message: {e}")
 
