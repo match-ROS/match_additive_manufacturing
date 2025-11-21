@@ -18,7 +18,7 @@
     </include>
 
     <node name="twist_combiner_world" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
-        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world']</rosparam>
+        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world', '/ur_rotation_twist_world']</rosparam>
         <remap from="combined_twist" to="/ur_twist_world"/>
     </node>
 
@@ -54,6 +54,13 @@
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
         <arg name="ff_only" value="false" />
         <remap from="/ur_twist_world_offset" to="/ur_error_world" />
+    </include>
+    <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
+        <arg name="path_topic" value="/ur_path_transformed" />
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="path_index_topic" value="/path_index" />
+        <arg name="velocity_override_topic" value="/velocity_override" />
+        <arg name="twist_topic" value="/ur_rotation_twist_world" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />

@@ -7,12 +7,14 @@
     <arg name="output_smoothing_coeff" default="0.9"/>
     <arg name="ff_only" default="false"/>
 
+
     <!-- Topics -->
-    <arg name="path_topic" default="/path"/>
-    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="path_topic" default="/ur_path_transformed"/>
+    <arg name="current_pose_topic" default="/mur620c/UR10_r/global_tcp_pose"/>
     <arg name="path_index_topic" default="/path_index"/>
     <arg name="velocity_override_topic" default="/velocity_override"/>
-    <arg name="twist_topic" default="/ur_twist_world"/>
+    <arg name="twist_topic" default="/ur_rotation_twist_world"/>
+    
 
     <node name="ur_yaw_controller" pkg="ur_trajectory_follower" type="ur_path_yaw_controller.py" output="screen">
         <param name="kp_yaw" value="$(arg kp_yaw)"/>
