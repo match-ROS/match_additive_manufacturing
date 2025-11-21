@@ -18,6 +18,7 @@ class DirectionYawController:
 
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.9)
         self.ff_only = rospy.get_param("~ff_only", False)
+        self.calculate_path_direction = rospy.get_param("~calculate_path_direction", False)
 
         self.integral_yaw = 0.0
         self.prev_error_yaw = 0.0
@@ -53,9 +54,10 @@ class DirectionYawController:
         self.current_index = min(max(self.current_index, 1), len(self.path.poses) - 1)
 
     def path_index_callback(self, index_msg: Int32):
-        if self.path is None or len(self.path.poses) < 2:
+        path = self.path
+        if path is None or len(path.poses) < 2:
             return
-        new_index = max(1, min(index_msg.data, len(self.path.poses) - 1))
+        new_index = max(1, min(index_msg.data, len(path.poses) - 1))
         if new_index == self.current_index:
             return
         self.current_index = new_index
@@ -64,7 +66,8 @@ class DirectionYawController:
 
     def pose_callback(self, pose_msg: PoseStamped):
         self.current_pose = pose_msg
-        if self.path is None or len(self.path.poses) < 2:
+        path = self.path
+        if path is None or len(path.poses) < 2:
             rospy.logwarn_throttle(5.0, "No valid path received yet.")
             return
         self.calculate_twist()
@@ -75,12 +78,13 @@ class DirectionYawController:
     # ----------------------- Helper methods ----------------------
 
     def get_direction(self):
-        if self.path is None:
+        path = self.path
+        if path is None:
             return np.zeros(2)
 
-        goal_pose = self.path.poses[self.current_index]
+        goal_pose = path.poses[self.current_index]
         if self.ff_only:
-            from_pose = self.path.poses[max(self.current_index - 1, 0)]
+            from_pose = path.poses[max(self.current_index - 1, 0)]
         else:
             from_pose = self.current_pose if self.current_pose is not None else goal_pose
 
@@ -129,19 +133,22 @@ class DirectionYawController:
         if self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return
-        if self.path is None or len(self.path.poses) < 2:
+        path = self.path
+        if path is None or len(path.poses) < 2:
             rospy.logwarn_throttle(5.0, "No valid path to follow.")
             return
 
-        direction_xy_norm = self.get_direction()
-        direction_norm = np.linalg.norm(direction_xy_norm)
+        goal_pose = path.poses[self.current_index]
+        desired_yaw = self.quaternion_to_yaw(goal_pose.pose.orientation)
+
+        direction_xy_norm = None
+        if self.calculate_path_direction:
+            direction_xy_norm = self.get_direction()
+            direction_norm = np.linalg.norm(direction_xy_norm)
+            if direction_norm > 1e-6:
+                desired_yaw = math.atan2(direction_xy_norm[1], direction_xy_norm[0])
 
         # Yaw PID
-        desired_yaw = (
-            math.atan2(direction_xy_norm[1], direction_xy_norm[0])
-            if direction_norm > 1e-6
-            else self.quaternion_to_yaw(self.current_pose.pose.orientation)
-        )
         current_yaw = self.quaternion_to_yaw(self.current_pose.pose.orientation)
         yaw_error = self.wrap_to_pi(desired_yaw - current_yaw)
 
@@ -165,7 +172,7 @@ class DirectionYawController:
 
 
 def main():
-    rospy.init_node("ur_direction_yaw_controller")
+    rospy.init_node("ur_path_yaw_controller")
     DirectionYawController()
     rospy.spin()
 
