@@ -18,7 +18,7 @@ class MoveToFirstPathPoint:
         self.path_topic = rospy.get_param('~path_topic', '/mir_path')
         self.initial_path_index = rospy.get_param('~initial_path_index', 0)
         self.robot_pose_topic = rospy.get_param('~robot_pose_topic', f'/{self.robot_name}/mir_pose_simple')
-        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'/{self.robot_name}/global_regulated_cmd_vel')
+        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'/{self.robot_name}/cmd_vel')
 
         # Action client for 'move_base'
         self.move_base_client = actionlib.SimpleActionClient(self.robot_name + '/move_base', MoveBaseAction)
@@ -28,7 +28,7 @@ class MoveToFirstPathPoint:
         self.move_base_client.wait_for_server()
         rospy.loginfo("Connected to move_base action server.")
         rospy.wait_for_message(self.robot_pose_topic, Pose)
-
+        self.robot_pose_sub = rospy.Subscriber(self.robot_pose_topic, Pose, self.robot_pose_callback)
         # Start publisher for 'cmd_vel' topic
         self.twist_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
 
@@ -36,7 +36,7 @@ class MoveToFirstPathPoint:
         #self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
         path = rospy.wait_for_message(self.path_topic, Path)
         self.path_callback(path)
-        self.robot_pose_sub = rospy.Subscriber(self.robot_pose_topic, Pose, self.robot_pose_callback)
+        
         # wait for robot pose to be received
         
 
@@ -69,8 +69,18 @@ class MoveToFirstPathPoint:
         goal.target_pose.pose.orientation = self.orientation
 
         self.move_base_client.send_goal(goal)
-        # Optional: Wait for the result (blocking call)
-        success = self.move_base_client.wait_for_result()
+
+        while not rospy.is_shutdown():
+            state = self.move_base_client.get_state()
+            if state == actionlib.GoalStatus.SUCCEEDED:
+                success = True
+                break
+            elif state in [actionlib.GoalStatus.ABORTED, actionlib.GoalStatus.REJECTED, actionlib.GoalStatus.PREEMPTED]:
+                success = False
+                break
+            rospy.sleep(0.1)
+
+
         if success:
             self.turn_robot_towards_path()
             rospy.loginfo("Successfully reached the first pose!")

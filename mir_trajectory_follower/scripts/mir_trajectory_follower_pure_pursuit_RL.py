@@ -44,8 +44,8 @@ class PurePursuitNode:
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
         self.Ky = rospy.get_param("~Ky", 0.2)  # Lateral error multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.4)  # Distance error multiplier
-        self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.2)  # Distance error multiplier
+        self.K_orientation = rospy.get_param("~K_orientation", 0.2)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
