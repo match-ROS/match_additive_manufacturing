@@ -568,10 +568,12 @@ def mir_follow_trajectory(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to follow the trajectory.")
         return
-    
-    command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mir_trajectory_follower mir_trajectory_follower.launch; exec bash'"
-    print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+
+    workspace = gui.get_workspace_name()
+    for robot in selected_robots:
+        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot} ; exec bash'"
+        print(f"Executing: {command}")
+        subprocess.Popen(command, shell=True)
 
 def increment_path_index(gui):
     """Increments the path index for the MIR robot."""
@@ -598,7 +600,7 @@ def stop_ur_motion(self):
     """Stops any running UR motion by killing the process."""
 
     # stop ur_direction_controller, orthogonal_error_correction, move_ur_to_start_pose, ur_vel_induced_by_mir
-    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner'"
+    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller'"
     print(f"Stopping UR motion with command: {command}")
     subprocess.Popen(command, shell=True)
 

@@ -12,7 +12,7 @@ from std_msgs.msg import Float32, Int32
 class DirectionYawController:
     def __init__(self):
         # Yaw control gains
-        self.kp_yaw = rospy.get_param("~kp_yaw", 1.5)
+        self.kp_yaw = rospy.get_param("~kp_yaw", 0.5)
         self.ki_yaw = rospy.get_param("~ki_yaw", 0.0)
         self.kd_yaw = rospy.get_param("~kd_yaw", 0.0)
 
