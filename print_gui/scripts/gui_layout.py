@@ -146,7 +146,7 @@ class ROSGui(QWidget):
         self.tcp_phi_spin.setRange(-180.0, 180.0)
         self.tcp_phi_spin.setDecimals(3)
         self.tcp_phi_spin.setSingleStep(0.5)
-        self.tcp_phi_spin.setValue(0.0)
+        self.tcp_phi_spin.setValue(88.0)
         self.tcp_phi_spin.setSuffix(" °")
         phi_col.addWidget(self.tcp_phi_spin)
         nozzle_layout.addLayout(phi_col)

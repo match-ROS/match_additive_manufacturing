@@ -568,7 +568,8 @@ def mir_follow_trajectory(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to follow the trajectory.")
         return
-    command = f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={selected_robots[0]}"
+    
+    command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mir_trajectory_follower mir_trajectory_follower.launch; exec bash'"
     print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)
 

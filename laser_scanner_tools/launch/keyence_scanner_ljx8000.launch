@@ -11,7 +11,7 @@
   <!-- load robot description of scanner -->
 
   <node pkg="tf2_ros" type="static_transform_publisher" name="tool_nozzle_transform" args="0.0 0.0 0.63409 0 0.0 0.0 $(arg tool_frame) nozzle_frame" output="screen"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="gripper_sensor_transform" args="0.228 0 0.0 0 1.57079632679 3.1415 $(arg parent_frame) sensor_optical_frame" output="screen"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="gripper_sensor_transform" args="0.228 0.0 0.0 0.0 -1.57079632679 0.0 $(arg parent_frame) sensor_optical_frame" output="screen"/>
   <node pkg="tf2_ros" type="static_transform_publisher" name="sensor_transform" args="0 0 0.0 -2.1 0 0 sensor_optical_frame sensor_frame" output="screen"/>
   <node pkg="tf2_ros" type="static_transform_publisher" name="world_transform" args="0 0 0 0 0 0 map world" output="screen"/>
   <!-- <node pkg="rviz" type="rviz" name="rviz" args="-s '' -d $(find keyence_scanner)/config/v7200.rviz" output="screen" required="true"/> -->
