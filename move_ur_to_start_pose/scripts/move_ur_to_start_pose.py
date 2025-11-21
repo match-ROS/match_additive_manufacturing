@@ -207,68 +207,72 @@ class MoveManipulatorToTarget:
             plan_trajectory = plan_result[1]  # The trajectory is usually the second item
 
             if success:
+                plan_to_execute = plan_trajectory
+                corrected_joint_target = None
+                joint_goal_from_plan = None
+                joint_traj = plan_trajectory.joint_trajectory if plan_trajectory else None
+
+                if joint_traj and joint_traj.points:
+                    final_positions = joint_traj.points[-1].positions
+                    joint_goal_from_plan = dict(zip(joint_traj.joint_names, final_positions))
+                else:
+                    rospy.logwarn("Received an empty joint trajectory from planner.")
+
+                active_joints = self.move_group.get_active_joints()
+                if joint_goal_from_plan and active_joints:
+                    last_joint_name = active_joints[-1]
+                    if last_joint_name in joint_goal_from_plan:
+                        q6 = joint_goal_from_plan[last_joint_name]
+                        adjusted_q6 = q6
+                        while adjusted_q6 > math.pi:
+                            adjusted_q6 -= 2.0 * math.pi
+                        while adjusted_q6 < -math.pi:
+                            adjusted_q6 += 2.0 * math.pi
+
+                        if abs(adjusted_q6 - q6) > 1e-6:
+                            rospy.loginfo(f"Replanning to keep {last_joint_name} within [-pi, pi]: {q6:.3f} -> {adjusted_q6:.3f}.")
+                            joint_goal_from_plan[last_joint_name] = adjusted_q6
+                            corrected_joint_target = joint_goal_from_plan
+                    else:
+                        rospy.logwarn(f"Last joint '{last_joint_name}' not present in joint goal from plan.")
+                elif not active_joints:
+                    rospy.logwarn("Could not get active joints from MoveGroup.")
+
+                if corrected_joint_target:
+                    self.move_group.set_joint_value_target(corrected_joint_target)
+                    corrected_plan_result = self.move_group.plan()
+                    if isinstance(corrected_plan_result, tuple):
+                        corrected_success = corrected_plan_result[0]
+                        corrected_traj = corrected_plan_result[1]
+                        if corrected_success:
+                            plan_to_execute = corrected_traj
+                            rospy.loginfo("Executing corrected trajectory with wrapped wrist angle.")
+                        else:
+                            rospy.logwarn("Replanning with corrected wrist joint failed, executing original trajectory.")
+                    else:
+                        rospy.logwarn("Unexpected corrected plan structure received, executing original trajectory.")
+
                 # Publish the plan to the display path topic
                 display_trajectory_publisher = rospy.Publisher('/display_planned_path', DisplayTrajectory, queue_size=10)
                 display_trajectory = DisplayTrajectory()
-                
-                #display_trajectory.trajectory_start = self.move_group.get_current_state()
-                joint_state = rospy.wait_for_message(self.robot_name+'/joint_states', JointState)
-                robot_state = RobotState()
-                robot_state.joint_state = joint_state
-                display_trajectory.trajectory_start = robot_state
+                joint_state = rospy.wait_for_message(f"{self.robot_name}/joint_states", JointState)
+                if joint_state is None:
+                    rospy.logwarn("Failed to read joint_states for display trajectory; skipping visualization publish.")
+                else:
+                    robot_state = RobotState()
+                    robot_state.joint_state = joint_state
+                    display_trajectory.trajectory_start = robot_state
 
-                display_trajectory.trajectory.append(plan_trajectory)
+                if plan_to_execute is None:
+                    rospy.logerr("Plan to execute missing despite successful planning. Aborting execution.")
+                    return
+
+                display_trajectory.trajectory = [plan_to_execute]
                 display_trajectory_publisher.publish(display_trajectory)
 
                 # Execute the motion
-                self.move_group.execute(plan_trajectory, wait=True)
+                self.move_group.execute(plan_to_execute, wait=True)
                 rospy.loginfo("Motion executed successfully.")
-
-                # After executing the planned motion, ensure the last joint angle is within [-pi, pi].
-                try:
-                    joint_state = rospy.wait_for_message(self.robot_name + '/joint_states', JointState, timeout=2.0)
-                    name_to_pos = dict(zip(joint_state.name, joint_state.position))
-                    active_joints = self.move_group.get_active_joints()
-                    if not active_joints:
-                        rospy.logwarn("Could not get active joints from MoveGroup.")
-                    else:
-                        last_joint_name = active_joints[-1]
-                        if last_joint_name in name_to_pos:
-                            q6 = name_to_pos[last_joint_name]
-                            # normalize q6 into [-pi, pi] by adding/subtracting 2*pi as needed
-                            adjusted_q6 = q6
-                            while adjusted_q6 > math.pi:
-                                adjusted_q6 -= 2.0 * math.pi
-                            while adjusted_q6 < -math.pi:
-                                adjusted_q6 += 2.0 * math.pi
-
-                            if abs(adjusted_q6 - q6) > 1e-6:
-                                rospy.loginfo(f"Adjusting {last_joint_name} from {q6:.3f} to {adjusted_q6:.3f} by adding/subtracting 2*pi.")
-                                # Build joint target dict using current positions, only change last joint
-                                joint_target = {}
-                                for j in active_joints:
-                                    if j in name_to_pos:
-                                        joint_target[j] = name_to_pos[j]
-                                joint_target[last_joint_name] = adjusted_q6
-
-                                # Set target and plan+execute the small correction
-                                self.move_group.set_joint_value_target(joint_target)
-                                corr_plan = self.move_group.plan()
-                                if isinstance(corr_plan, tuple):
-                                    corr_success = corr_plan[0]
-                                    corr_traj = corr_plan[1]
-                                    if corr_success:
-                                        self.move_group.execute(corr_traj, wait=True)
-                                        rospy.loginfo("Applied wrist6 wrap correction.")
-                                    else:
-                                        rospy.logwarn("Correction planning failed for wrist6 wrap.")
-                                else:
-                                    rospy.logwarn("Unexpected correction plan structure received.")
-                        else:
-                            rospy.logwarn(f"Last joint '{last_joint_name}' not present in joint_states.")
-                except rospy.ROSException:
-                    rospy.logwarn("Timed out waiting for joint_states to verify/adjust last joint.")
-
                 rospy.signal_shutdown("Motion executed successfully.")
             else:
                 rospy.logwarn(f"Motion planning failed.")
