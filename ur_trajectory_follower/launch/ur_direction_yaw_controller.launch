@@ -14,7 +14,7 @@
     <arg name="velocity_override_topic" default="/velocity_override"/>
     <arg name="twist_topic" default="/ur_twist_world"/>
 
-    <node name="ur_direction_yaw_controller" pkg="ur_trajectory_follower" type="ur_path_direction_yaw_controller.py" output="screen">
+    <node name="ur_yaw_controller" pkg="ur_trajectory_follower" type="ur_path_yaw_controller.py" output="screen">
         <param name="kp_yaw" value="$(arg kp_yaw)"/>
         <param name="ki_yaw" value="$(arg ki_yaw)"/>
         <param name="kd_yaw" value="$(arg kd_yaw)"/>
