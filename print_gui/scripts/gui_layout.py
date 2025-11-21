@@ -278,7 +278,7 @@ class ROSGui(QWidget):
 
         # Buffer enthält Tuples
         self._ros_log_buffer.append((level, node, text))
-        self._ros_log_buffer = self._ros_log_buffer[-10:]
+        self._ros_log_buffer = self._ros_log_buffer[-400:]
 
         self._rebuild_ros_log_view()
 
