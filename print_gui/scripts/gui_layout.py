@@ -256,7 +256,7 @@ class ROSGui(QWidget):
         
         self.setLayout(main_layout)
         # Timer
-        self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(5000)
+        self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(8000)
 
     def _percent_to_raw(self, percent: float, which: str) -> int:
         c = self.servo_calib[which]
