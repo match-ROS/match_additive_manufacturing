@@ -2,6 +2,7 @@ import os
 import subprocess
 import yaml
 import threading
+from typing import Optional
 import rospy
 from geometry_msgs.msg import PoseStamped
 from PyQt5.QtWidgets import QTableWidgetItem
@@ -35,7 +36,7 @@ def _build_debug_env(gui, base_env=None):
     return env
 
 
-def _remote_debug_prefix(gui, workspace: str = None) -> str:
+def _remote_debug_prefix(gui, workspace: Optional[str] = None) -> str:
     workspace = (workspace or "").strip()
     if not (_is_debug_enabled(gui) and workspace):
         return ""
@@ -46,6 +47,60 @@ def _remote_debug_prefix(gui, workspace: str = None) -> str:
 def _popen_with_debug(command, gui, shell=False, **kwargs):
     env = _build_debug_env(gui, kwargs.pop("env", None))
     return subprocess.Popen(command, shell=shell, env=env, **kwargs)
+
+
+def _run_remote_commands(
+    gui,
+    description: str,
+    commands,
+    *,
+    use_workspace_debug: bool = False,
+    target_robots=None,
+):
+    """Run commands over SSH for each target robot."""
+
+    selected_robots = target_robots if target_robots is not None else gui.get_selected_robots()
+    if isinstance(selected_robots, str):
+        selected_robots = [selected_robots]
+    if not selected_robots:
+        print(f"No robots selected. Skipping {description}.")
+        return
+
+    cmd_list = list(commands)
+    if not cmd_list:
+        print(f"No commands provided for {description}.")
+        return
+
+    workspace = (gui.get_workspace_name() or "").strip()
+    debug_prefix = _remote_debug_prefix(gui, workspace) if use_workspace_debug else ""
+    env_prefix = [
+        "source ~/.bashrc",
+        "export ROS_MASTER_URI=http://roscore:11311/",
+        "source /opt/ros/noetic/setup.bash",
+    ]
+    if workspace:
+        env_prefix.append(f"source ~/{workspace}/devel/setup.bash")
+
+    for robot in selected_robots:
+        per_robot_cmds = []
+        for cmd in cmd_list:
+            resolved_cmd = cmd(robot) if callable(cmd) else cmd
+            if not isinstance(resolved_cmd, str):
+                raise ValueError("Commands must resolve to strings")
+            resolved_cmd = resolved_cmd.strip()
+            if debug_prefix:
+                resolved_cmd = f"{debug_prefix}{resolved_cmd}"
+            per_robot_cmds.append(resolved_cmd)
+
+        remote_cmd = "; ".join(env_prefix + per_robot_cmds)
+        ssh_cmd = ["ssh", "-t", "-t", robot, remote_cmd]
+        print(f"{description} on {robot} with command: {remote_cmd}")
+        _popen_with_debug(ssh_cmd, gui)
+
+
+def _format_ros_list_arg(values):
+    """Format Python list as double-quoted string literal for roslaunch args."""
+    return '"' + str(values).replace("'", '"') + '"'
 
 class ROSInterface:
     def __init__(self, gui):
@@ -105,7 +160,7 @@ class ROSInterface:
         cmd = ["terminator", f"--title={title}", "-x", f"{command}; exec bash"]
         return self._launch_process(cmd)
 
-    def _debug_prefix_for_workspace(self, workspace: str = None) -> str:
+    def _debug_prefix_for_workspace(self, workspace: Optional[str] = None) -> str:
         workspace = workspace or self.gui.get_workspace_name()
         return _remote_debug_prefix(self.gui, workspace)
 
@@ -228,34 +283,32 @@ class ROSInterface:
     def launch_keyence_scanner(self):
         """Launches the Keyence scanner on the robots PC."""
         selected_robots = self.gui.get_selected_robots()
-        workspace_name = self.gui.get_workspace_name()
+        if not selected_robots:
+            print("No robot selected. Skipping Keyence scanner launch.")
+            return
 
-        for robot in selected_robots:
-            workspace = workspace_name
-            debug_prefix = self._debug_prefix_for_workspace(workspace)
-            command = (
-                f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
-                "source /opt/ros/noetic/setup.bash; "
-                f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch laser_scanner_tools "
-                "keyence_scanner_ljx8000.launch; exec bash'"
-            )
-            self._launch_in_terminal(f"Driver {robot}", command)
+        _run_remote_commands(
+            self.gui,
+            "Launching Keyence scanner",
+            ["roslaunch laser_scanner_tools keyence_scanner_ljx8000.launch"],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
 
     def launch_laser_orthogonal_controller(self):
         """Launches the Keyence scanner on the robots PC."""
         selected_robots = self.gui.get_selected_robots()
-        workspace_name = self.gui.get_workspace_name()
+        if not selected_robots:
+            print("No robot selected. Skipping orthogonal controller launch.")
+            return
 
-        for robot in selected_robots:
-            workspace = workspace_name
-            debug_prefix = self._debug_prefix_for_workspace(workspace)
-            command = (
-                f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
-                "source /opt/ros/noetic/setup.bash; "
-                f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch laser_scanner_tools "
-                "profile_orthogonal_controller.launch; exec bash'"
-            )
-            self._launch_in_terminal(f"Driver {robot}", command)
+        _run_remote_commands(
+            self.gui,
+            "Launching orthogonal controller",
+            ["roslaunch laser_scanner_tools profile_orthogonal_controller.launch"],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
 
     def launch_strand_center_app(self):
         """Launch the DepthAI strand-center app on the selected robots over SSH."""
@@ -447,12 +500,22 @@ def turn_on_arm_controllers(gui):
         print("No robots or URs selected. Skipping launch.")
         return
 
-    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
-    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+    ur_prefixes_str = _format_ros_list_arg(selected_urs)
 
-    command = f"roslaunch print_gui turn_on_all_arm_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
-    print(f"Executing: {command}")
-    _popen_with_debug(command, gui, shell=True)
+    for robot in selected_robots:
+        robot_list_str = _format_ros_list_arg([robot])
+        _run_remote_commands(
+            gui,
+            f"Turning on arm controllers",
+            [
+                (
+                    f"roslaunch print_gui turn_on_all_arm_controllers.launch "
+                    f"robot_names:={robot_list_str} UR_prefixes:={ur_prefixes_str}"
+                )
+            ],
+            use_workspace_debug=True,
+            target_robots=[robot],
+        )
 
 def turn_on_twist_controllers(gui):
     """Turns on all twist controllers for the selected robots."""
@@ -463,12 +526,22 @@ def turn_on_twist_controllers(gui):
         print("No robots or URs selected. Skipping launch.")
         return
 
-    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
-    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+    ur_prefixes_str = _format_ros_list_arg(selected_urs)
 
-    command = f"roslaunch print_gui turn_on_all_twist_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
-    print(f"Executing: {command}")
-    _popen_with_debug(command, gui, shell=True)
+    for robot in selected_robots:
+        robot_list_str = _format_ros_list_arg([robot])
+        _run_remote_commands(
+            gui,
+            "Turning on twist controllers",
+            [
+                (
+                    f"roslaunch print_gui turn_on_all_twist_controllers.launch "
+                    f"robot_names:={robot_list_str} UR_prefixes:={ur_prefixes_str}"
+                )
+            ],
+            use_workspace_debug=True,
+            target_robots=[robot],
+        )
 
 def enable_all_urs(gui):
     """Enables all UR robots for the selected configurations."""
@@ -479,12 +552,22 @@ def enable_all_urs(gui):
         print("No robots or URs selected. Skipping launch.")
         return
 
-    robot_names_str = '"' + str(selected_robots).replace("'", '"') + '"'
-    ur_prefixes_str = '"' + str(selected_urs).replace("'", '"') + '"'
+    ur_prefixes_str = _format_ros_list_arg(selected_urs)
 
-    command = f"roslaunch print_gui enable_all_URs.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
-    print(f"Executing: {command}")
-    _popen_with_debug(command, gui, shell=True)
+    for robot in selected_robots:
+        robot_list_str = _format_ros_list_arg([robot])
+        _run_remote_commands(
+            gui,
+            "Enabling URs",
+            [
+                (
+                    f"roslaunch print_gui enable_all_URs.launch "
+                    f"robot_names:={robot_list_str} UR_prefixes:={ur_prefixes_str}"
+                )
+            ],
+            use_workspace_debug=True,
+            target_robots=[robot],
+        )
 
 
 def launch_drivers(gui):
@@ -565,12 +648,32 @@ def move_to_home_pose(gui, UR_prefix):
         _popen_with_debug(command, gui, shell=True)
 
 def parse_mir_path(gui):
-    command = "roslaunch parse_mir_path parse_mir_path.launch"
-    _popen_with_debug(command, gui, shell=True)
+    selected_robots = gui.get_selected_robots()
+    if not selected_robots:
+        print("No robot selected. Skipping MiR path parsing.")
+        return
+
+    _run_remote_commands(
+        gui,
+        "Parsing MiR path",
+        ["roslaunch parse_mir_path parse_mir_path.launch"],
+        use_workspace_debug=True,
+        target_robots=selected_robots,
+    )
 
 def parse_ur_path(gui):
-    command = "roslaunch parse_ur_path parse_ur_path.launch"
-    _popen_with_debug(command, gui, shell=True)
+    selected_robots = gui.get_selected_robots()
+    if not selected_robots:
+        print("No robot selected. Skipping UR path parsing.")
+        return
+
+    _run_remote_commands(
+        gui,
+        "Parsing UR path",
+        ["roslaunch parse_ur_path parse_ur_path.launch"],
+        use_workspace_debug=True,
+        target_robots=selected_robots,
+    )
 
 def move_mir_to_start_pose(gui):
     """Moves the MIR robot to the start pose."""
@@ -627,47 +730,56 @@ def mir_follow_trajectory(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to follow the trajectory.")
         return
-
-    workspace = gui.get_workspace_name()
-    for robot in selected_robots:
-        debug_prefix = _remote_debug_prefix(gui, workspace)
-        command = (
-            f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
-            "source /opt/ros/noetic/setup.bash; "
-            f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch mir_trajectory_follower "
-            f"mir_trajectory_follower.launch robot_name:={robot} ; exec bash'"
-        )
-        print(f"Executing: {command}")
-        _popen_with_debug(command, gui, shell=True)
+    _run_remote_commands(
+        gui,
+        "Launching MiR trajectory follower",
+        [lambda robot: f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot}"],
+        use_workspace_debug=True,
+        target_robots=selected_robots,
+    )
 
 def increment_path_index(gui):
     """Increments the path index for the MIR robot."""
-    command = f"roslaunch print_gui increment_path_index.launch initial_path_index:={gui.idx_spin.value()}"
-    print(f"Executing: {command}")
-    _popen_with_debug(command, gui, shell=True)
+    selected_robots = gui.get_selected_robots()
+    if not selected_robots:
+        print("No robot selected. Skipping path index increment.")
+        return
+
+    initial_idx = gui.idx_spin.value()
+    _run_remote_commands(
+        gui,
+        "Incrementing path index",
+        [f"roslaunch print_gui increment_path_index.launch initial_path_index:={initial_idx}"],
+        use_workspace_debug=True,
+        target_robots=selected_robots,
+    )
 
     # if not rospy.core.is_initialized():
     #     rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
     # rospy.Subscriber('/path_index', Int32, gui.ros_interface._path_idx_cb, queue_size=10)
 
 
-def stop_mir_motion(self):
-    """Stops any running Lissajous motion by killing the process."""
-    command = "pkill -f mir_trajectory_follower"
-    print(f"Stopping MiR motion with command: {command}")
-    _popen_with_debug(command, self, shell=True)
+def stop_mir_motion(gui):
+    """Stops MiR motion on the selected robots via SSH."""
+    _run_remote_commands(
+        gui,
+        "Stopping MiR motion",
+        [
+            "pkill -f mir_trajectory_follower || true",
+            "pkill -f increment_path_index || true",
+        ],
+    )
 
-    command = "pkill -f increment_path_index"
-    print(f"Stopping path index increment with command: {command}")
-    _popen_with_debug(command, self, shell=True)
 
-def stop_ur_motion(self):
-    """Stops any running UR motion by killing the process."""
-
-    # stop ur_direction_controller, orthogonal_error_correction, move_ur_to_start_pose, ur_vel_induced_by_mir
-    command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller'"
-    print(f"Stopping UR motion with command: {command}")
-    _popen_with_debug(command, self, shell=True)
+def stop_ur_motion(gui):
+    """Stops UR motion on the selected robots via SSH."""
+    _run_remote_commands(
+        gui,
+        "Stopping UR motion",
+        [
+            "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller' || true",
+        ],
+    )
 
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""
@@ -688,39 +800,42 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
         print("Please select exactly one UR and one MIR robot to follow the trajectory.")
         return
 
-    base_command = [
-        "roslaunch",
-        "print_hw",
-        "complete_ur_trajectory_follower_ff_only.launch",
-    ]
-    for robot in selected_robots:
-        for ur in selected_urs:
-            args = [
-                f"robot_name:={robot}",
-                f"prefix_ur:={ur}/",
-                f"metric:={metric}",
-                f"threshold:={threshold}",             # no comma
-                f"initial_path_index:={initial_path_index}",
-                f"nozzle_height_default:={spray_distance}",
-            ]
-            command = (
-                "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
-                f"robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
-                f"threshold:={threshold} initial_path_index:={initial_path_index} "
-                f"nozzle_height_default:={spray_distance}"
+    ur = selected_urs[0]
+
+    cmd_template = (
+        "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
+        "robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
+        "threshold:={threshold} initial_path_index:={initial_path_index} "
+        "nozzle_height_default:={spray_distance}"
+    )
+
+    _run_remote_commands(
+        gui,
+        "Launching UR trajectory follower",
+        [
+            lambda robot, template=cmd_template: template.format(
+                robot=robot,
+                ur=ur,
+                metric=metric,
+                threshold=threshold,
+                initial_path_index=initial_path_index,
+                spray_distance=spray_distance,
             )
-            print("Executing:", " ".join(base_command+args))
-            _popen_with_debug(base_command + args, gui, shell=False)
+        ],
+        use_workspace_debug=True,
+        target_robots=selected_robots,
+    )
 
 def stop_idx_advancer(gui):
-    """Stops any running UR motion by killing the process."""
-    command = "pkill -f path_index_advancer"
-    print(f"Stopping path_index_advancer wih command: {command}")
-    _popen_with_debug(command, gui, shell=True)
-
-    command = "pkill -f increment_path_index"
-    print(f"Stopping increment_path_index with command: {command}")
-    _popen_with_debug(command, gui, shell=True)
+    """Stops the path index advancer nodes on the selected robots via SSH."""
+    _run_remote_commands(
+        gui,
+        "Stopping path index advancer",
+        [
+            "pkill -f path_index_advancer || true",
+            "pkill -f increment_path_index || true",
+        ],
+    )
 
 
 def target_broadcaster(gui):
