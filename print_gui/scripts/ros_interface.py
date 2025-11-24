@@ -241,6 +241,22 @@ class ROSInterface:
             )
             self._launch_in_terminal(f"Driver {robot}", command)
 
+    def launch_laser_orthogonal_controller(self):
+        """Launches the Keyence scanner on the robots PC."""
+        selected_robots = self.gui.get_selected_robots()
+        workspace_name = self.gui.get_workspace_name()
+
+        for robot in selected_robots:
+            workspace = workspace_name
+            debug_prefix = self._debug_prefix_for_workspace(workspace)
+            command = (
+                f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
+                "source /opt/ros/noetic/setup.bash; "
+                f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch laser_scanner_tools "
+                "profile_orthogonal_controller.launch; exec bash'"
+            )
+            self._launch_in_terminal(f"Driver {robot}", command)
+
     def launch_strand_center_app(self):
         """Launch the DepthAI strand-center app on the selected robots over SSH."""
         selected_robots = self.gui.get_selected_robots()

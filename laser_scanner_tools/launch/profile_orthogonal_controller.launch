@@ -1,0 +1,12 @@
+<launch>
+
+    <arg name="mir_pose_topic" default="/mur620c/mir_pose_simple" />
+    <arg name="cmd_topic" default="/laser_profile_offset_cmd_vel" />
+
+    <!-- Node that runs the path transformer script -->
+    <node name="profile_orthogonal_controller" pkg="laser_scanner_tools" type="profile_orthogonal_controller.py" output="screen">
+        <!-- Transformation parameters -->
+        <param name="mir_pose_topic" value="$(arg mir_pose_topic)" />
+        <param name="cmd_topic" value="$(arg cmd_topic)" />
+    </node>
+</launch>

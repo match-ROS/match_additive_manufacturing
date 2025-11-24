@@ -77,7 +77,7 @@ class ROSGui(QWidget):
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
             "Launch Strand Center Camera": lambda: self.ros_interface.launch_strand_center_app(),
-            "Open RVIZ": open_rviz,
+            "Open RVIZ": lambda: open_rviz(self),
             "Start Roscore": lambda: self.ros_interface.start_roscore(),
             "Start Mocap": lambda: self.ros_interface.start_mocap(),
             "Start Sync": lambda: self.ros_interface.start_sync(),
@@ -100,14 +100,20 @@ class ROSGui(QWidget):
         }
         for text, fn in controller_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); controller_layout.addWidget(btn)
         controller_group.setLayout(controller_layout); right_layout.addWidget(controller_group)
-        print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
+        prepare_print_group = QGroupBox("Prepare Print Functions"); prepare_print_layout = QVBoxLayout(); prepare_print_buttons = {
             "Parse MiR Path": lambda: parse_mir_path(self),
             "Parse UR Path": lambda: parse_ur_path(self),
             "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
             "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
+            "Broadcast Target Poses": lambda: target_broadcaster(self),
+            "Start Laser Profile Controller": lambda: self.ros_interface.launch_laser_orthogonal_controller(),
+        }
+        for text, fn in prepare_print_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); prepare_print_layout.addWidget(btn)
+        prepare_print_group.setLayout(prepare_print_layout); right_layout.addWidget(prepare_print_group)
+
+        print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
             "Increment Path Index": lambda: self.ros_interface.increment_path_index(),
-            "Broadcast Target Poses": lambda: target_broadcaster(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
             "Stop UR Motion": lambda: stop_ur_motion(self),
         }
@@ -369,6 +375,10 @@ class ROSGui(QWidget):
 
     def get_override_value(self):
         return self.override_slider.value()
+
+    def is_debug_enabled(self):
+        chk = getattr(self, "chk_log_debug", None)
+        return bool(chk and chk.isChecked())
 
     def get_tcp_offset_xyz(self):
         if not hasattr(self, 'tcp_offset_spins'):

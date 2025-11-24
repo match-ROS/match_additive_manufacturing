@@ -18,10 +18,10 @@ class ProfileOrthogonalController(object):
         self.mir_pose_topic  = rospy.get_param("~mir_pose_topic", "/mur620c/mir_pose_simple")
         self.ur_target_topic = rospy.get_param("~ur_target_topic", "/ur_target_pose")
 
-        self.window_size = rospy.get_param("~window_size", 20)     # Mittelung über N Messungen
+        self.window_size = rospy.get_param("~window_size", 50)     # Mittelung über N Messungen
         self.k_p        = rospy.get_param("~k_p", 0.06)            # Reglerverstärkung
         self.max_vel    = rospy.get_param("~max_vel", 0.1)        # |v_quer| Begrenzung [m/s]
-        self.min_expected_height = rospy.get_param("~min_expected_height", -20.0)  # Minimale erwartete Layerhöhe [m]
+        self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)  # Minimale erwartete Layerhöhe [m]
 
         self.deviation_history = deque(maxlen=self.window_size)
 
