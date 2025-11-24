@@ -549,6 +549,7 @@ def move_to_home_pose(gui, UR_prefix):
 
     # Set move_group_name based on UR_prefix
     move_group_name = "UR_arm_l" if UR_prefix == "UR10_l" else "UR_arm_r"
+    spray_distance = gui.get_spray_distance()
 
     for robot in selected_robots:
         # Special case for mur620c with UR10_r
@@ -560,7 +561,7 @@ def move_to_home_pose(gui, UR_prefix):
             home_position = "Home_custom"
 
         # ROS launch command with namespace
-        command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name}"
+        command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name} spray_distance:={spray_distance}"
         print(f"Executing: {command}")
         _popen_with_debug(command, gui, shell=True)
 

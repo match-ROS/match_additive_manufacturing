@@ -88,6 +88,8 @@ class ROSGui(QWidget):
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b
             b.clicked.connect(lambda _, f=fn: f()); b.setStyleSheet("background-color: lightgray;"); setup_layout.addWidget(b)
+        spray_distance_box = QHBoxLayout(); spray_distance_box.addWidget(QLabel("Spray Distance (m):")); self.spray_distance_spin = QDoubleSpinBox(); self.spray_distance_spin.setRange(0.0, 1.0); self.spray_distance_spin.setDecimals(4); self.spray_distance_spin.setSingleStep(0.001); self.spray_distance_spin.setValue(0.15); spray_distance_box.addWidget(self.spray_distance_spin); left_layout.addLayout(spray_distance_box)
+
         self.workspace_input = QLineEdit(); default_path = self.get_relative_workspace_path(); self.workspace_input.setText(default_path); self.workspace_input.setPlaceholderText("Enter workspace name"); setup_layout.addWidget(QLabel("Workspace Name:")); setup_layout.addWidget(self.workspace_input); setup_group.setLayout(setup_layout); left_layout.addWidget(setup_group)
         main_layout.addLayout(left_layout)
         # Right column
@@ -120,6 +122,7 @@ class ROSGui(QWidget):
         for text, fn in print_function_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); print_functions_layout.addWidget(btn)
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
+        
         # Servo section
         servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
         left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setOrientation(Qt.Horizontal); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = EnterSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(0); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); self.servo_left_spin.returnPressed.connect(self._send_percent_targets); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
@@ -499,3 +502,5 @@ class ServoCalibrationDialog(QDialog):
             }
         }
 
+    def get_spray_distance(self):
+        return self.spray_distance_spin.value()
