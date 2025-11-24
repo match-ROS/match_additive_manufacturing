@@ -797,6 +797,29 @@ def stop_ur_motion(gui):
         ],
     )
 
+
+def stop_all_but_drivers(gui):
+    """Stops common non-driver processes on the selected robots via SSH."""
+    _run_remote_commands(
+        gui,
+        "Stopping non-driver processes",
+        [
+            "pkill -f mir_trajectory_follower || true",
+            "pkill -f increment_path_index || true",
+            "pkill -f path_index_advancer || true",
+            "pkill -f complete_ur_trajectory_follower_ff_only || true",
+            "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller' || true",
+            "pkill -f keyence_scanner_ljx8000 || true",
+            "pkill -f profile_orthogonal_controller || true",
+            "pkill -f strand-center-app || true",
+            "pkill -f parse_mir_path || true",
+            "pkill -f parse_ur_path || true",
+            "pkill -f target_broadcaster || true",
+            "pkill -f move_mir_to_start_pose || true",
+            "pkill -f move_ur_to_start_pose || true",
+        ],
+    )
+
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""
     selected_robots = gui.get_selected_robots()
