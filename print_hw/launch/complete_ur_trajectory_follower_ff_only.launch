@@ -13,6 +13,7 @@
     
     <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir'] -->
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
+        <rosparam param="twist_topics" subst_value="true">['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/ur_rotation_twist_world', '/laser_profile_offset_cmd_vel']</rosparam>
         <!-- <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command"/> -->
         <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_controller/command_collision_free"/>
     </include>
@@ -22,10 +23,10 @@
         <remap from="combined_twist" to="/ur_twist_world"/>
     </node>
 
-    <node name="twist_combiner_profile_offset" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
+    <!-- <node name="twist_combiner_profile_offset" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
         <rosparam param="twist_topics" subst_value="true">['/ur_twist_world', '/laser_profile_offset_cmd_vel']</rosparam>
         <remap from="combined_twist" to="/ur_twist_world_offset"/>
-    </node>
+    </node> -->
 
     <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
@@ -41,19 +42,19 @@
         <param name="input_topic" value="$(arg robot_name)/$(arg prefix_ur)ur_calibrated_pose" />
     </node>
 
-    <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
+    <!-- <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
         <arg name="metric" value="$(arg metric)" />
         <arg name="threshold" value="$(arg threshold)" />
         <arg name="current_pose_topic" value="$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
         <arg name="initial_path_index" value="$(arg initial_path_index)" />
-    </include>
+    </include> -->
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
         <arg name="ff_only" value="false" />
-        <remap from="/ur_twist_world_offset" to="/ur_error_world" />
+        <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
         <arg name="path_topic" value="/ur_path_transformed" />
@@ -62,9 +63,9 @@
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
     </include>
-    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+    <!-- <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
-    </include>
+    </include> -->
 
     <!-- PID controllers: -->
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
