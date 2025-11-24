@@ -26,6 +26,8 @@ class PathIndexAdvancer:
         self.virtual_line_threshold = rospy.get_param("~virtual_line_threshold", 0.02)
         self.prev_idx_dist = rospy.get_param("~prev_idx_dist", 1) # distance to previous waypoint for virtual line
         self.next_idx_dist = rospy.get_param("~next_idx_dist", 1) # distance to next waypoint for virtual line
+        self.use_virtual_bisector = rospy.get_param("~use_virtual_bisector", True)
+        rospy.loginfo("Virtual line mode: %s", "bisector" if self.use_virtual_bisector else "segment")
         
 
         # Publishers: next waypoint index and next waypoint pose
@@ -186,17 +188,18 @@ class PathIndexAdvancer:
         d1 = (v1[0]/len_v1, v1[1]/len_v1)
         d2 = (v2[0]/len_v2, v2[1]/len_v2)
 
-        # The angle bisector of d1 and d2 => b
-        # Be careful if they are nearly opposite; skip in that case
-        bx = d1[0] + d2[0]
-        by = d1[1] + d2[1]
-        mag_b = math.hypot(bx, by)
-        if mag_b < 1e-9:
-            print("Degenerate bisector (opposite directions).")
-            #return True
-            return self.check_radius_condition(x,y)  # d1 + d2 is near zero => they are opposite directions. instead check radius
-
-        b = (bx/mag_b, by/mag_b)  # unit bisector
+        if self.use_virtual_bisector:
+            # The angle bisector of d1 and d2 => b
+            bx = d1[0] + d2[0]
+            by = d1[1] + d2[1]
+            mag_b = math.hypot(bx, by)
+            if mag_b < 1e-9:
+                rospy.logdebug("Degenerate bisector (segments nearly opposite), falling back to radius check.")
+                return self.check_radius_condition(x,y)  # fallback if the bisector is ill-defined
+            b = (bx/mag_b, by/mag_b)
+        else:
+            # Use the current segment direction as line normal
+            b = d1
 
         # 1) Find point L on the current segment that is "virtual_line_threshold"
         #    away from p_curr, going BACK along v1
