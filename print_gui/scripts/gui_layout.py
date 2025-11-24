@@ -259,7 +259,7 @@ class ROSGui(QWidget):
         
         self.setLayout(main_layout)
         # Timer
-        self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(5000)
+        self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(8000)
 
     def _handle_launch_drivers_right_click(self, _pos):
         """Stop driver terminals when the launch button is right-clicked."""

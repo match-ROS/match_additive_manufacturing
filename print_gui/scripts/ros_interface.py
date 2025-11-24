@@ -13,6 +13,7 @@ from rosgraph_msgs.msg import Log
 from std_msgs.msg import Float32, Int32, Int16
 from sensor_msgs.msg import BatteryState
 from rosgraph_msgs.msg import Log
+import rosnode
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -228,9 +229,9 @@ class ROSInterface:
     def update_button_status(self):
         # --- Parser + Keyence status ---
         node_cache = self._get_rosnode_list()
-        mir=self.is_ros_node_running("/retrieve_and_publish_mir_path", node_cache); ur=self.is_ros_node_running("/retrieve_and_publish_ur_path", node_cache)
-        key=self.is_ros_node_running("/keyence_ljx_profile_node", node_cache); tgt=self.is_ros_node_running("/target_broadcaster", node_cache)
-        laser=self.is_ros_node_running("/profile_orthogonal_controller", node_cache); mocap=self.is_ros_node_running("/qualisys", node_cache)
+        mir=self.is_ros_node_running_fast("/retrieve_and_publish_mir_path"); ur=self.is_ros_node_running_fast("/retrieve_and_publish_ur_path")
+        key=self.is_ros_node_running_fast("/keyence_ljx_profile_node"); tgt=self.is_ros_node_running_fast("/target_broadcaster")
+        laser=self.is_ros_node_running_fast("/profile_orthogonal_controller"); mocap=self.is_ros_node_running_fast("/qualisys")
 
         # --- Button coloring ---
         self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
@@ -272,6 +273,13 @@ class ROSInterface:
         """Checks if a specific ROS node is running by using `rosnode list`."""
         nodes = node_cache if node_cache is not None else self._get_rosnode_list()
         return node_name in nodes
+
+    def is_ros_node_running_fast(self, name):
+        try: 
+            rosnode.rosnode_ping(name, max_count=1, verbose=False)
+            return True
+        except:
+            return False
 
     def _driver_node_names(self, robots=None, urs=None):
         """Return the UR driver node names to monitor for the given robot/UR selection."""
