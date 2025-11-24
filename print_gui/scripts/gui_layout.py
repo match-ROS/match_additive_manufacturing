@@ -111,6 +111,7 @@ class ROSGui(QWidget):
         for text, fn in setup_buttons.items():
             b = QPushButton(text); 
             if text=="Launch Keyence Scanner": self.btn_keyence=b
+            if text=="Launch Drivers": self.btn_launch_drivers=b
             if text == "Start Roscore": self.btn_roscore = b
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b

@@ -227,8 +227,9 @@ class ROSInterface:
 
     def update_button_status(self):
         # --- Parser + Keyence status ---
-        mir=self.is_ros_node_running("/retrieve_and_publish_mir_path"); ur=self.is_ros_node_running("/retrieve_and_publish_ur_path")
-        key=self.is_ros_node_running("/keyence_ljx_profile_node"); tgt=self.is_ros_node_running("/target_broadcaster")
+        node_cache = self._get_rosnode_list()
+        mir=self.is_ros_node_running("/retrieve_and_publish_mir_path", node_cache); ur=self.is_ros_node_running("/retrieve_and_publish_ur_path", node_cache)
+        key=self.is_ros_node_running("/keyence_ljx_profile_node", node_cache); tgt=self.is_ros_node_running("/target_broadcaster", node_cache)
 
         # --- Button coloring ---
         self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
@@ -236,17 +237,50 @@ class ROSInterface:
         self.gui.btn_keyence.setStyleSheet("background-color: lightgreen;" if key else "background-color: lightgray;") if hasattr(self.gui,"btn_keyence") else None
         self.gui.btn_target_broadcaster.setStyleSheet("background-color: lightgreen;" if tgt else "background-color: lightgray;") if hasattr(self.gui,"btn_target_broadcaster") else None
 
+        # --- Driver status (UR hardware interface nodes) ---
+        driver_nodes = self._driver_node_names(
+            robots=self.gui.get_selected_robots(),
+            urs=self.gui.get_selected_urs(),
+        )
+        driver_total = len(driver_nodes)
+        driver_active = sum(1 for node in driver_nodes if node in node_cache)
+        if hasattr(self.gui, "btn_launch_drivers"):
+            if driver_total == 0 or driver_active == 0:
+                driver_color = "background-color: lightgray;"
+            elif driver_active == driver_total:
+                driver_color = "background-color: lightgreen;"
+            else:
+                driver_color = "background-color: orange;"
+            self.gui.btn_launch_drivers.setStyleSheet(driver_color)
+
         # --- Auto-start target broadcaster ---
         if mir and ur and not tgt: 
             print("Auto-starting /target_broadcaster…"); _popen_with_debug(f"roslaunch print_hw target_broadcaster.launch initial_path_index:={self.gui.idx_spin.value()}", self.gui, shell=True)
 
-    def is_ros_node_running(self, node_name):
-        """Checks if a specific ROS node is running by using `rosnode list`."""
+    def _get_rosnode_list(self):
+        """Return the current ROS node names as a set for quick membership checks."""
         try:
-            output = subprocess.check_output("rosnode list", shell=True).decode()
-            return node_name in output.split("\n")
-        except subprocess.CalledProcessError:
-            return False
+            output = subprocess.check_output(["rosnode", "list"], text=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return set()
+        return {line.strip() for line in output.splitlines() if line.strip()}
+
+    def is_ros_node_running(self, node_name, node_cache=None):
+        """Checks if a specific ROS node is running by using `rosnode list`."""
+        nodes = node_cache if node_cache is not None else self._get_rosnode_list()
+        return node_name in nodes
+
+    def _driver_node_names(self, robots=None, urs=None):
+        """Return the UR driver node names to monitor for the given robot/UR selection."""
+        robot_names = robots if robots else list(getattr(self.gui, "robots", {}).keys())
+        if not robot_names:
+            return []
+        ur_prefixes = urs if urs else ["UR10_l", "UR10_r"]
+        names = []
+        for robot in robot_names:
+            for ur in ur_prefixes:
+                names.append(f"/{robot}/{ur}/ur_hardware_interface")
+        return names
         
     def make_ur_callback(self, robot):
         def callback(msg):
