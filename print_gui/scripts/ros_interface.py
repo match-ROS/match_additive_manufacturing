@@ -230,12 +230,15 @@ class ROSInterface:
         node_cache = self._get_rosnode_list()
         mir=self.is_ros_node_running("/retrieve_and_publish_mir_path", node_cache); ur=self.is_ros_node_running("/retrieve_and_publish_ur_path", node_cache)
         key=self.is_ros_node_running("/keyence_ljx_profile_node", node_cache); tgt=self.is_ros_node_running("/target_broadcaster", node_cache)
+        laser=self.is_ros_node_running("/profile_orthogonal_controller", node_cache); mocap=self.is_ros_node_running("/qualisys", node_cache)
 
         # --- Button coloring ---
         self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
         self.gui.btn_parse_ur.setStyleSheet("background-color: lightgreen;" if ur else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_ur") else None
         self.gui.btn_keyence.setStyleSheet("background-color: lightgreen;" if key else "background-color: lightgray;") if hasattr(self.gui,"btn_keyence") else None
         self.gui.btn_target_broadcaster.setStyleSheet("background-color: lightgreen;" if tgt else "background-color: lightgray;") if hasattr(self.gui,"btn_target_broadcaster") else None
+        self.gui.btn_laser_ctrl.setStyleSheet("background-color: lightgreen;" if laser else "background-color: lightgray;") if hasattr(self.gui,"btn_laser_ctrl") else None
+        self.gui.btn_mocap.setStyleSheet("background-color: lightgreen;" if mocap else "background-color: lightgray;") if hasattr(self.gui,"btn_mocap") else None
 
         # --- Driver status (UR hardware interface nodes) ---
         driver_nodes = self._driver_node_names(

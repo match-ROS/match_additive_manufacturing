@@ -143,6 +143,7 @@ class ROSGui(QWidget):
             if text=="Parse MiR Path": self.btn_parse_mir=btn
             if text=="Parse UR Path": self.btn_parse_ur=btn
             if text=="Broadcast Target Poses": self.btn_target_broadcaster=btn
+            if text=="Start Laser Profile Controller": self.btn_laser_ctrl=btn
         prepare_print_group.setLayout(prepare_print_layout); right_layout.addWidget(prepare_print_group)
 
         print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
