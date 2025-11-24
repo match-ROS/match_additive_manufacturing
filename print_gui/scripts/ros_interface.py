@@ -676,6 +676,7 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
     metric = ur_follow_settings.get("idx_metric")
     threshold = ur_follow_settings.get("threshold")
     initial_path_index = gui.idx_spin.value()
+    spray_distance = gui.get_spray_distance()
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
@@ -700,8 +701,14 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
                 f"metric:={metric}",
                 f"threshold:={threshold}",             # no comma
                 f"initial_path_index:={initial_path_index}",
+                f"nozzle_height_default:={spray_distance}",
             ]
-            command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold} initial_path_index:={initial_path_index}"
+            command = (
+                "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
+                f"robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
+                f"threshold:={threshold} initial_path_index:={initial_path_index} "
+                f"nozzle_height_default:={spray_distance}"
+            )
             print("Executing:", " ".join(base_command+args))
             _popen_with_debug(base_command + args, gui, shell=False)
 
