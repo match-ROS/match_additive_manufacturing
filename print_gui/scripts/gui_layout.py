@@ -109,7 +109,8 @@ class ROSGui(QWidget):
             "Start Sync": lambda: self.ros_interface.start_sync(),
         }
         for text, fn in setup_buttons.items():
-            b = QPushButton(text);
+            b = QPushButton(text); 
+            if text=="Launch Keyence Scanner": self.btn_keyence=b
             if text == "Start Roscore": self.btn_roscore = b
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b
@@ -136,7 +137,11 @@ class ROSGui(QWidget):
             "Broadcast Target Poses": lambda: target_broadcaster(self),
             "Start Laser Profile Controller": lambda: self.ros_interface.launch_laser_orthogonal_controller(),
         }
-        for text, fn in prepare_print_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); prepare_print_layout.addWidget(btn)
+        for text, fn in prepare_print_buttons.items():
+            btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); prepare_print_layout.addWidget(btn)
+            if text=="Parse MiR Path": self.btn_parse_mir=btn
+            if text=="Parse UR Path": self.btn_parse_ur=btn
+            if text=="Broadcast Target Poses": self.btn_target_broadcaster=btn
         prepare_print_group.setLayout(prepare_print_layout); right_layout.addWidget(prepare_print_group)
 
         print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {

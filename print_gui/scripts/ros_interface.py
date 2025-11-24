@@ -226,12 +226,19 @@ class ROSInterface:
             self._launch_in_terminal(f"Sync to {robot}", command)
 
     def update_button_status(self):
-        """Checks if roscore and mocap are running and updates button colors."""
-        roscore_running = self.is_ros_node_running("/rosout")
-        mocap_running = self.is_ros_node_running("/qualisys")
+        # --- Parser + Keyence status ---
+        mir=self.is_ros_node_running("/retrieve_and_publish_mir_path"); ur=self.is_ros_node_running("/retrieve_and_publish_ur_path")
+        key=self.is_ros_node_running("/keyence_ljx_profile_node"); tgt=self.is_ros_node_running("/target_broadcaster")
 
-        self.gui.btn_roscore.setStyleSheet("background-color: lightgreen;" if roscore_running else "background-color: lightgray;")
-        self.gui.btn_mocap.setStyleSheet("background-color: lightgreen;" if mocap_running else "background-color: lightgray;")
+        # --- Button coloring ---
+        self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
+        self.gui.btn_parse_ur.setStyleSheet("background-color: lightgreen;" if ur else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_ur") else None
+        self.gui.btn_keyence.setStyleSheet("background-color: lightgreen;" if key else "background-color: lightgray;") if hasattr(self.gui,"btn_keyence") else None
+        self.gui.btn_target_broadcaster.setStyleSheet("background-color: lightgreen;" if tgt else "background-color: lightgray;") if hasattr(self.gui,"btn_target_broadcaster") else None
+
+        # --- Auto-start target broadcaster ---
+        if mir and ur and not tgt: 
+            print("Auto-starting /target_broadcaster…"); _popen_with_debug(f"roslaunch print_hw target_broadcaster.launch initial_path_index:={self.gui.idx_spin.value()}", self.gui, shell=True)
 
     def is_ros_node_running(self, node_name):
         """Checks if a specific ROS node is running by using `rosnode list`."""
