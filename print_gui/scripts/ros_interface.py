@@ -549,7 +549,6 @@ def move_to_home_pose(gui, UR_prefix):
 
     # Set move_group_name based on UR_prefix
     move_group_name = "UR_arm_l" if UR_prefix == "UR10_l" else "UR_arm_r"
-    spray_distance = gui.get_spray_distance()
 
     for robot in selected_robots:
         # Special case for mur620c with UR10_r
@@ -561,7 +560,7 @@ def move_to_home_pose(gui, UR_prefix):
             home_position = "Home_custom"
 
         # ROS launch command with namespace
-        command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name} spray_distance:={spray_distance}"
+        command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name}"
         print(f"Executing: {command}")
         _popen_with_debug(command, gui, shell=True)
 
@@ -610,10 +609,11 @@ def move_ur_to_start_pose(gui):
         move_group_name = "UR_arm_r"
         planning_group = "UR10_r/tool0"
 
+    spray_distance = gui.get_spray_distance()
 
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()}"
+            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()} spray_distance:={spray_distance}"
             print(f"Executing: {command}")
             _popen_with_debug(command, gui, shell=True)
 

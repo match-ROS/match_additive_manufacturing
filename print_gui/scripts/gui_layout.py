@@ -398,6 +398,9 @@ class ROSGui(QWidget):
             return 0.0
         return math.radians(self.tcp_phi_spin.value())
 
+    def get_spray_distance(self):
+        return self.spray_distance_spin.value()
+
 class URFollowSettingsDialog(QDialog):
     def __init__(self, parent=None, initial_settings=None):
         super().__init__(parent)
@@ -502,5 +505,3 @@ class ServoCalibrationDialog(QDialog):
             }
         }
 
-    def get_spray_distance(self):
-        return self.spray_distance_spin.value()
