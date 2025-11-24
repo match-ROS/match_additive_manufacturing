@@ -43,10 +43,10 @@ class PurePursuitNode:
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
-        self.Ky = rospy.get_param("~Ky", 0.2)  # Lateral error multiplier
-        self.K_distance = rospy.get_param("~K_distance", 0.2)  # Distance error multiplier
-        self.K_orientation = rospy.get_param("~K_orientation", 0.2)  # Orientation error multiplier
-        self.K_idx = rospy.get_param("~K_idx", 0.01)  # Index error multiplier
+        self.Ky = rospy.get_param("~Ky", 0.3)  # Lateral error multiplier
+        self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
+        self.K_orientation = rospy.get_param("~K_orientation", 0.3)  # Orientation error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.015)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
@@ -170,7 +170,7 @@ class PurePursuitNode:
 
             # update layer progress
             self.publish_layer_progress()
-            self.publish_actual_and_target_pose()
+            #self.publish_actual_and_target_pose()
             
             rate.sleep()
 

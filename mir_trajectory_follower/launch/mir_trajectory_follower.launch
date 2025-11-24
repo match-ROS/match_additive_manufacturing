@@ -1,5 +1,5 @@
 <launch>
-    <arg name="robot_name" default="mur620a" doc="Name of the robot to be used in the launch file." />
+    <arg name="robot_name" default="mur620c" doc="Name of the robot to be used in the launch file." />
 "
     <!-- Node that runs the path transformer script -->
     <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower_pure_pursuit_RL.py" output="screen">

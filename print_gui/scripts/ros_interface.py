@@ -289,7 +289,6 @@ class ROSInterface:
         except Exception as e:
             rospy.logerr(f"Failed to publish servo targets: {e}")
 
-
     def _rosout_cb(self, msg: Log):
         """
         Callback for /rosout (rosgraph_msgs/Log).
@@ -648,4 +647,11 @@ def stop_idx_advancer(gui):
 
     command = "pkill -f increment_path_index"
     print(f"Stopping increment_path_index with command: {command}")
+    subprocess.Popen(command, shell=True)
+
+
+def target_broadcaster(gui):
+    """Broadcasts Target Poses."""
+    command = f"roslaunch print_hw target_broadcaster.launch initial_path_index:={gui.idx_spin.value()}"
+    print(f"Executing: {command}")
     subprocess.Popen(command, shell=True)

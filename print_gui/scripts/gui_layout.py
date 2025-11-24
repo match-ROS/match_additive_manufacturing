@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayou
 from PyQt5.QtCore import QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion, stop_idx_advancer, stop_ur_motion
-from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index
+from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index, target_broadcaster
 from ros_interface import ROSInterface
 import os
 import math
@@ -106,7 +106,8 @@ class ROSGui(QWidget):
             "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
             "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
-            "Increment Path Index": lambda: increment_path_index(self),
+            "Increment Path Index": lambda: self.ros_interface.increment_path_index(),
+            "Broadcast Target Poses": lambda: target_broadcaster(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
             "Stop UR Motion": lambda: stop_ur_motion(self),
         }

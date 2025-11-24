@@ -1,0 +1,8 @@
+<launch>
+    <arg name="initial_path_index" default="0" />
+
+    <node name="target_broadcaster" pkg="print_hw" type="target_broadcaster.py" output="screen">
+        <param name="initial_path_index" value="$(arg initial_path_index)" />
+    </node>
+
+</launch>
