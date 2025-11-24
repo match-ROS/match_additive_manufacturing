@@ -1,3 +1,4 @@
+import os
 import subprocess
 import yaml
 import threading
@@ -14,6 +15,37 @@ from rosgraph_msgs.msg import Log
 
 import rospy
 from geometry_msgs.msg import PoseStamped
+
+
+DEBUG_CONFIG_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "config", "rosconsole_debug.config")
+)
+
+
+def _is_debug_enabled(gui) -> bool:
+    return bool(getattr(gui, "is_debug_enabled", lambda: False)())
+
+
+def _build_debug_env(gui, base_env=None):
+    env = os.environ.copy() if base_env is None else base_env.copy()
+    if _is_debug_enabled(gui):
+        env["ROSCONSOLE_CONFIG_FILE"] = DEBUG_CONFIG_PATH
+    else:
+        env.pop("ROSCONSOLE_CONFIG_FILE", None)
+    return env
+
+
+def _remote_debug_prefix(gui, workspace: str = None) -> str:
+    workspace = (workspace or "").strip()
+    if not (_is_debug_enabled(gui) and workspace):
+        return ""
+    remote_config = f"~/{workspace}/src/match_additive_manufacturing/print_gui/config/rosconsole_debug.config"
+    return f"ROSCONSOLE_CONFIG_FILE={remote_config}; "
+
+
+def _popen_with_debug(command, gui, shell=False, **kwargs):
+    env = _build_debug_env(gui, kwargs.pop("env", None))
+    return subprocess.Popen(command, shell=shell, env=env, **kwargs)
 
 class ROSInterface:
     def __init__(self, gui):
@@ -66,6 +98,17 @@ class ROSInterface:
         except Exception as e:
             rospy.logwarn(f"Failed to subscribe to /rosout: {e}")
         
+    def _launch_process(self, command, shell=False, **kwargs):
+        return _popen_with_debug(command, self.gui, shell=shell, **kwargs)
+
+    def _launch_in_terminal(self, title: str, command: str):
+        cmd = ["terminator", f"--title={title}", "-x", f"{command}; exec bash"]
+        return self._launch_process(cmd)
+
+    def _debug_prefix_for_workspace(self, workspace: str = None) -> str:
+        workspace = workspace or self.gui.get_workspace_name()
+        return _remote_debug_prefix(self.gui, workspace)
+
     def init_override_velocity_slider(self):
         self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
         self.gui.override_slider.valueChanged.connect(
@@ -80,13 +123,24 @@ class ROSInterface:
 
     def start_roscore(self):
         """Starts roscore on the roscore PC."""
-        command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; roscore; exec bash'"
-        subprocess.Popen(["terminator", "--title=Roscore Terminal", "-x", f"{command}; exec bash"])
+        workspace = self.gui.get_workspace_name()
+        debug_prefix = self._debug_prefix_for_workspace(workspace)
+        command = (
+            "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; "
+            f"{debug_prefix}roscore; exec bash'"
+        )
+        self._launch_in_terminal("Roscore Terminal", command)
 
     def start_mocap(self):
         """Starts the motion capture system on the roscore PC."""
-        command = "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; source ~/catkin_ws/devel/setup.bash; roslaunch launch_mocap mocap_launch.launch; exec bash'"
-        subprocess.Popen(["terminator", "--title=Mocap", "-x", f"{command}; exec bash"])
+        workspace = self.gui.get_workspace_name()
+        debug_prefix = self._debug_prefix_for_workspace(workspace)
+        command = (
+            "ssh -t -t roscore 'source ~/.bashrc; source /opt/ros/noetic/setup.bash; "
+            "source ~/catkin_ws/devel/setup.bash; "
+            f"{debug_prefix}roslaunch launch_mocap mocap_launch.launch; exec bash'"
+        )
+        self._launch_in_terminal("Mocap", command)
 
     def start_sync(self):
         """Starts file synchronization between workspace and selected robots."""
@@ -98,7 +152,7 @@ class ROSInterface:
             command = f"while inotifywait -r -e modify,create,delete,move ~/{self.workspace_name}/src; do \n" \
                       f"rsync --delete -avzhe ssh ~/{self.workspace_name}/src rosmatch@{robot}:~/{self.workspace_name}/ \n" \
                       "done"
-            subprocess.Popen(["terminator", f"--title=Sync to {robot}", "-x", f"{command}; exec bash"]) 
+            self._launch_in_terminal(f"Sync to {robot}", command)
 
     def update_button_status(self):
         """Checks if roscore and mocap are running and updates button colors."""
@@ -178,15 +232,14 @@ class ROSInterface:
 
         for robot in selected_robots:
             workspace = workspace_name
-            command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch laser_scanner_tools keyence_scanner_ljx8000.launch; exec bash'"
-
-            # Open a new terminal with SSH session + driver launch + keep open
-            subprocess.Popen([
-                "terminator",
-                f"--title=Driver {robot}",      # Set the window title to "Mur Driver" :contentReference[oaicite:0]{index=0}
-                "-x",                       # Execute the following command inside the terminal :contentReference[oaicite:1]{index=1}
-                f"{command}; exec bash"
-            ])
+            debug_prefix = self._debug_prefix_for_workspace(workspace)
+            command = (
+                f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
+                "source /opt/ros/noetic/setup.bash; "
+                f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch laser_scanner_tools "
+                "keyence_scanner_ljx8000.launch; exec bash'"
+            )
+            self._launch_in_terminal(f"Driver {robot}", command)
 
     def launch_strand_center_app(self):
         """Launch the DepthAI strand-center app on the selected robots over SSH."""
@@ -200,22 +253,18 @@ class ROSInterface:
 
         for robot in selected_robots:
             remote_script = f"~/{workspace}/{script_rel}"
+            debug_prefix = self._debug_prefix_for_workspace(workspace)
             command = (
                 f"ssh -t -t {robot} '"
                 "source ~/.bashrc; "
                 "export ROS_MASTER_URI=http://roscore:11311/; "
                 "source /opt/ros/noetic/setup.bash; "
                 f"source ~/{workspace}/devel/setup.bash; "
-                f"python3 {remote_script}; "
+                f"{debug_prefix}python3 {remote_script}; "
                 "exec bash'"
             )
 
-            subprocess.Popen([
-                "terminator",
-                f"--title=StrandCenter {robot}",
-                "-x",
-                f"{command}; exec bash"
-            ])
+            self._launch_in_terminal(f"StrandCenter {robot}", command)
 
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
@@ -226,20 +275,16 @@ class ROSInterface:
             return
         workspace = self.gui.get_workspace_name()
         for robot in selected_robots:
+            debug_prefix = self._debug_prefix_for_workspace(workspace)
             command = (
                 f"ssh -t -t {robot} '"
                 f"source ~/.bashrc; "
                 f"export ROS_MASTER_URI=http://roscore:11311/; "
                 f"source /opt/ros/noetic/setup.bash; "
                 f"source ~/{workspace}/devel/setup.bash; "
-                f"roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
+                f"{debug_prefix}roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
             )
-            subprocess.Popen([
-                "terminator",
-                f"--title=Dynamixel {robot}",
-                "-x",
-                f"{command}; exec bash"
-            ])
+            self._launch_in_terminal(f"Dynamixel {robot}", command)
 
     def stop_dynamixel_driver(self):
         """Stop the Dynamixel servo driver on the selected robots over SSH."""
@@ -260,10 +305,7 @@ class ROSInterface:
                 "pkill -f servo_driver.py || true; "
                 "pkill -f dynamixel_workbench_controllers || true;"
             )
-            subprocess.Popen(
-                f"ssh -t -t {robot} '{remote_cmd}'",
-                shell=True
-            )
+            self._launch_process(f"ssh -t -t {robot} '{remote_cmd}'", shell=True)
 
     def _init_dynamixel_publishers(self):
         """Initialize publishers for left/right servo target topics (Int16)."""
@@ -332,7 +374,7 @@ def launch_ros(gui, package, launch_file):
 
     command = f"roslaunch {package} {launch_file} robot_names:={robot_names_str}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def start_status_update(gui):
     threading.Thread(target=update_status, args=(gui,), daemon=True).start()
@@ -376,9 +418,9 @@ def get_status_symbol(active, total):
         return "⚠️"
     return "❌"
 
-def open_rviz():
+def open_rviz(gui):
     command = "roslaunch print_gui launch_rviz.launch"
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def turn_on_arm_controllers(gui):
     """Turns on all arm controllers for the selected robots."""
@@ -394,7 +436,7 @@ def turn_on_arm_controllers(gui):
 
     command = f"roslaunch print_gui turn_on_all_arm_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def turn_on_twist_controllers(gui):
     """Turns on all twist controllers for the selected robots."""
@@ -410,7 +452,7 @@ def turn_on_twist_controllers(gui):
 
     command = f"roslaunch print_gui turn_on_all_twist_controllers.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def enable_all_urs(gui):
     """Enables all UR robots for the selected configurations."""
@@ -426,7 +468,7 @@ def enable_all_urs(gui):
 
     command = f"roslaunch print_gui enable_all_URs.launch robot_names:={robot_names_str} UR_prefixes:={ur_prefixes_str}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 
 def launch_drivers(gui):
@@ -457,30 +499,31 @@ def launch_drivers(gui):
             offset_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         tcp_offset_literal = "[" + ",".join(f"{value:.6f}" for value in offset_values) + "]"
 
+        debug_prefix = _remote_debug_prefix(gui, workspace)
         command = (
             f"ssh -t -t {robot} '"
             "source ~/.bashrc; "
             "export ROS_MASTER_URI=http://roscore:11311/; "
             "source /opt/ros/noetic/setup.bash; "
             f"source ~/{workspace}/devel/setup.bash; "
-            f"roslaunch mur_launch_hardware {robot}.launch{launch_suffix} "
+            f"{debug_prefix}roslaunch mur_launch_hardware {robot}.launch{launch_suffix} "
             f"tcp_offset:=\\\"{tcp_offset_literal}\\\"; "
             "exec bash'"
         )
 
-        subprocess.Popen([
+        _popen_with_debug([
             "terminator",
             f"--title=Driver {robot}",
             "-x",
             f"{command}; exec bash"
-        ])
+        ], gui)
 
-def quit_drivers():
+def quit_drivers(gui=None):
     """Terminates all running driver sessions and closes terminals."""
     print("Stopping all driver sessions...")
     try:
-        subprocess.Popen("pkill -f 'ssh -t -t'", shell=True)
-        subprocess.Popen("pkill -f 'gnome-terminal'", shell=True)
+        _popen_with_debug("pkill -f 'ssh -t -t'", gui, shell=True)
+        _popen_with_debug("pkill -f 'gnome-terminal'", gui, shell=True)
     except Exception as e:
         print(f"Error stopping processes: {e}")
 
@@ -503,15 +546,15 @@ def move_to_home_pose(gui, UR_prefix):
         # ROS launch command with namespace
         command = f"ROS_NAMESPACE={robot} roslaunch ur_utilities move_UR_to_home_pose.launch tf_prefix:={robot} UR_prefix:={UR_prefix} home_position:={home_position} move_group_name:={move_group_name}"
         print(f"Executing: {command}")
-        subprocess.Popen(command, shell=True)
+        _popen_with_debug(command, gui, shell=True)
 
 def parse_mir_path(gui):
     command = "roslaunch parse_mir_path parse_mir_path.launch"
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def parse_ur_path(gui):
     command = "roslaunch parse_ur_path parse_ur_path.launch"
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def move_mir_to_start_pose(gui):
     """Moves the MIR robot to the start pose."""
@@ -526,7 +569,7 @@ def move_mir_to_start_pose(gui):
         return
     command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 def move_ur_to_start_pose(gui):
     """Moves the UR robot to the start pose."""
@@ -555,7 +598,7 @@ def move_ur_to_start_pose(gui):
         for ur in selected_urs:
             command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()}"
             print(f"Executing: {command}")
-            subprocess.Popen(command, shell=True)
+            _popen_with_debug(command, gui, shell=True)
 
 def mir_follow_trajectory(gui):
     """Moves the MIR robot along a predefined trajectory."""
@@ -570,15 +613,21 @@ def mir_follow_trajectory(gui):
 
     workspace = gui.get_workspace_name()
     for robot in selected_robots:
-        command = f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; source /opt/ros/noetic/setup.bash; source ~/{workspace}/devel/setup.bash; roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot} ; exec bash'"
+        debug_prefix = _remote_debug_prefix(gui, workspace)
+        command = (
+            f"ssh -t -t {robot} 'source ~/.bashrc; export ROS_MASTER_URI=http://roscore:11311/; "
+            "source /opt/ros/noetic/setup.bash; "
+            f"source ~/{workspace}/devel/setup.bash; {debug_prefix}roslaunch mir_trajectory_follower "
+            f"mir_trajectory_follower.launch robot_name:={robot} ; exec bash'"
+        )
         print(f"Executing: {command}")
-        subprocess.Popen(command, shell=True)
+        _popen_with_debug(command, gui, shell=True)
 
 def increment_path_index(gui):
     """Increments the path index for the MIR robot."""
     command = f"roslaunch print_gui increment_path_index.launch initial_path_index:={gui.idx_spin.value()}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
     # if not rospy.core.is_initialized():
     #     rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
@@ -589,11 +638,11 @@ def stop_mir_motion(self):
     """Stops any running Lissajous motion by killing the process."""
     command = "pkill -f mir_trajectory_follower"
     print(f"Stopping MiR motion with command: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, self, shell=True)
 
     command = "pkill -f increment_path_index"
     print(f"Stopping path index increment with command: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, self, shell=True)
 
 def stop_ur_motion(self):
     """Stops any running UR motion by killing the process."""
@@ -601,7 +650,7 @@ def stop_ur_motion(self):
     # stop ur_direction_controller, orthogonal_error_correction, move_ur_to_start_pose, ur_vel_induced_by_mir
     command = "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller'"
     print(f"Stopping UR motion with command: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, self, shell=True)
 
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""
@@ -637,21 +686,21 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
             ]
             command = f"roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' threshold:={threshold} initial_path_index:={initial_path_index}"
             print("Executing:", " ".join(base_command+args))
-            subprocess.Popen(base_command + args, shell=False)  #shell=True?
+            _popen_with_debug(base_command + args, gui, shell=False)
 
 def stop_idx_advancer(gui):
     """Stops any running UR motion by killing the process."""
     command = "pkill -f path_index_advancer"
     print(f"Stopping path_index_advancer wih command: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
     command = "pkill -f increment_path_index"
     print(f"Stopping increment_path_index with command: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
 
 
 def target_broadcaster(gui):
     """Broadcasts Target Poses."""
     command = f"roslaunch print_hw target_broadcaster.launch initial_path_index:={gui.idx_spin.value()}"
     print(f"Executing: {command}")
-    subprocess.Popen(command, shell=True)
+    _popen_with_debug(command, gui, shell=True)
