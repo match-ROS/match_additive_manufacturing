@@ -7,7 +7,7 @@ import numpy as np
 from moveit_commander import MoveGroupCommander, roscpp_initialize, roscpp_shutdown
 import sys
 import tf.transformations as tr
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Float32
 from geometry_msgs.msg import Point, Pose
 from moveit_msgs.msg import DisplayTrajectory, RobotState
 from moveit_msgs.msg import Constraints, JointConstraint
@@ -35,6 +35,7 @@ class MoveManipulatorToTarget:
         param_path = f'/{self.robot_name}/{self.UR_prefix}/ur_calibrated_pose_pub_node/tcp_offset'
         self.tcp_offset = rospy.get_param(param_path, [0.0,0.0,0.0,0.0,0.0,0.0])
         self.spray_distance = rospy.get_param('~spray_distance', 0.15)  # distance from TCP to spray point along z-axis
+        self.nozzle_height_override = 0.0
         # remove [] if present
         if isinstance(self.tcp_offset, str):
             self.tcp_offset = self.tcp_offset.strip('[]').split(',')
@@ -47,8 +48,9 @@ class MoveManipulatorToTarget:
         self.move_group.set_pose_reference_frame(self.manipulator_base_link)
         rospy.loginfo(f"MoveIt MoveGroup for {self.planning_group} initialized.")
 
-        # Initialize the subscriber for the path
+        # Initialize the subscribers for the path and nozzle override
         self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
+        self.nozzle_override_sub = rospy.Subscriber('/nozzle_height_override', Float32, self.nozzle_override_callback)
         
         # TF listener
         self.tf_listener = tf.TransformListener()
@@ -101,6 +103,9 @@ class MoveManipulatorToTarget:
             return
             
 
+    def nozzle_override_callback(self, override_msg: Float32):
+        self.nozzle_height_override = override_msg.data
+
     def path_callback(self, path_msg):
         if len(path_msg.poses) == 0:
             rospy.logwarn("Received an empty path!")
@@ -109,7 +114,7 @@ class MoveManipulatorToTarget:
         # Get the first TCP pose from the path
         target_tcp_pose = path_msg.poses[self.initial_path_index]
         # the target pose is the pose of the path, we need to compute the actual tcp pose
-        target_tcp_pose.pose.position.z += self.tcp_offset[2] + self.spray_distance  # add z offset
+        target_tcp_pose.pose.position.z += self.tcp_offset[2] + self.spray_distance + self.nozzle_height_override  # add z offset including override
         
         # Get the current pose of the manipulator base in the map frame
         try:
