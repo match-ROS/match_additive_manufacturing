@@ -10,9 +10,10 @@ class DirectionController:
         # height controller: fixed dt assumed
         self.nozzle_height_default = rospy.get_param("~nozzle_height_default", 0.1)
         self.nozzle_height_override = 0.0
-        self.kp_z = rospy.get_param("~kp_z", 1.0)
+        self.kp_z = rospy.get_param("~kp_z", 0.0)
         self.ki_z = rospy.get_param("~ki_z", 0.0)
         self.kd_z = rospy.get_param("~kd_z", 0.0)
+        rospy.loginfo(f"Z-controller gains: kp={self.kp_z}, ki={self.ki_z}, kd={self.kd_z}")
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
         self.integral_z = 0
         self.prev_error_z = 0
