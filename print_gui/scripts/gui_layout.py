@@ -111,7 +111,10 @@ class ROSGui(QWidget):
         for text, fn in setup_buttons.items():
             b = QPushButton(text); 
             if text=="Launch Keyence Scanner": self.btn_keyence=b
-            if text=="Launch Drivers": self.btn_launch_drivers=b
+            if text=="Launch Drivers":
+                self.btn_launch_drivers=b
+                b.setContextMenuPolicy(Qt.CustomContextMenu)
+                b.customContextMenuRequested.connect(self._handle_launch_drivers_right_click)
             if text == "Start Roscore": self.btn_roscore = b
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b
@@ -257,6 +260,10 @@ class ROSGui(QWidget):
         self.setLayout(main_layout)
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(5000)
+
+    def _handle_launch_drivers_right_click(self, _pos):
+        """Stop driver terminals when the launch button is right-clicked."""
+        quit_drivers(self)
 
     def _percent_to_raw(self, percent: float, which: str) -> int:
         c = self.servo_calib[which]

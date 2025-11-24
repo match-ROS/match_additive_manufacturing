@@ -639,6 +639,11 @@ def launch_drivers(gui):
         print("No robots selected. Skipping driver launch.")
         return
 
+    if not hasattr(gui, "_driver_processes"):
+        gui._driver_processes = []
+    gui._driver_processes = [p for p in gui._driver_processes if p and p.poll() is None]
+    gui._driver_robots = list(set(selected_robots))
+
     for robot in selected_robots:
         workspace = workspace_name
         selected_urs = gui.get_selected_urs()
@@ -670,19 +675,61 @@ def launch_drivers(gui):
             "exec bash'"
         )
 
-        _popen_with_debug([
+        proc = _popen_with_debug([
             "terminator",
             f"--title=Driver {robot}",
             "-x",
             f"{command}; exec bash"
         ], gui)
+        if proc is not None:
+            gui._driver_processes.append(proc)
 
 def quit_drivers(gui=None):
     """Terminates all running driver sessions and closes terminals."""
     print("Stopping all driver sessions...")
+    processes = []
+    if gui is not None and hasattr(gui, "_driver_processes"):
+        processes = [p for p in gui._driver_processes if p and p.poll() is None]
+
+    for proc in processes:
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        except Exception as exc:
+            rospy.logwarn(f"Failed to terminate driver terminal: {exc}")
+
+    if gui is not None:
+        gui._driver_processes = [p for p in getattr(gui, "_driver_processes", []) if p and p.poll() is None]
+
+    # Ask the robots themselves to stop the driver launch files.
+    robots = []
+    if gui is not None:
+        robots = gui.get_selected_robots()
+        if not robots:
+            robots = getattr(gui, "_driver_robots", [])
+
+    if gui is not None and robots:
+        def _remote_kill(robot):
+            kill_patterns = [
+                f"pkill -f 'mur_launch_hardware {robot}\\.launch' || true",
+                "pkill -f ur_robot_driver || true",
+                "pkill -f roslaunch || true",
+            ]
+            return "; ".join(kill_patterns)
+
+        _run_remote_commands(
+            gui,
+            "Stopping remote driver launch",
+            [_remote_kill],
+            use_workspace_debug=True,
+            target_robots=robots,
+        )
+
+    # Best-effort fallback in case processes were started outside this session.
     try:
-        _popen_with_debug("pkill -f 'ssh -t -t'", gui, shell=True)
-        _popen_with_debug("pkill -f 'gnome-terminal'", gui, shell=True)
+        _popen_with_debug("pkill -f 'terminator.*Driver'", gui, shell=True)
     except Exception as e:
         print(f"Error stopping processes: {e}")
 
