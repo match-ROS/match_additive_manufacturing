@@ -171,6 +171,22 @@ class ROSInterface:
             # publish to /velocity_override as well:
             or self.velocity_override_pub.publish(value / 100.0)  # Convert to a float between 0.0 and 1.0
         )
+
+    def init_nozzle_override_slider(self):
+        """Wire the nozzle height override slider to /nozzle_height_override."""
+        self.nozzle_height_override_pub = rospy.Publisher('/nozzle_height_override', Float32, queue_size=10, latch=True)
+        slider = getattr(self.gui, 'nozzle_override_slider', None)
+        label = getattr(self.gui, 'nozzle_override_value_label', None)
+        if slider is None or label is None:
+            return
+
+        def _handle_change(raw_value: int):
+            meters = raw_value / 1000.0  # slider uses millimeters
+            label.setText(f"{raw_value:.1f} mm")
+            self.nozzle_height_override_pub.publish(Float32(meters))
+
+        slider.valueChanged.connect(_handle_change)
+        _handle_change(slider.value())
     
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
