@@ -112,6 +112,17 @@ class ROSInterface:
         self.active_battery_subs = set()
         self.current_index = 0
 
+        # Rosbag config
+        self.rosbag_topics = [
+            "/tf",
+            "/ur_path_original",
+            "/mir_path_original",
+            "/laser_profile_offset_cmd_vel",
+        ]
+        self.rosbag_enabled = {t: True for t in self.rosbag_topics}
+        self.rosbag_process = None
+
+
         if not rospy.core.is_initialized():
             rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
 
@@ -399,6 +410,32 @@ class ROSInterface:
 
             self._launch_in_terminal(f"StrandCenter {robot}", command)
 
+    def toggle_rosbag_record(self):
+        # --- Stop recording ---
+        if self.rosbag_process and self.rosbag_process.poll() is None:
+            print("Stopping rosbag (SIGINT)…")
+            try:
+                self.rosbag_process.send_signal(subprocess.signal.SIGINT)
+                self.rosbag_process.wait(timeout=4)
+            except Exception:
+                print("Rosbag didn't stop cleanly. Sending SIGTERM…")
+                self.rosbag_process.terminate()
+                try:
+                    self.rosbag_process.wait(timeout=2)
+                except Exception:
+                    print("Force killing rosbag…")
+                    self.rosbag_process.kill()
+
+            self.rosbag_process = None
+            self.gui.btn_rosbag_record.setStyleSheet("background-color: lightgray;")
+            return
+
+        # --- Start recording ---
+        topics = [t for t, ok in self.rosbag_enabled.items() if ok]
+        cmd = ["rosbag", "record", "-O", "recording", "--lz4"] + topics
+        self.rosbag_process = subprocess.Popen(cmd)
+        self.gui.btn_rosbag_record.setStyleSheet("background-color: red; color: white;")
+        
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
         """Start the Dynamixel servo driver on the selected robots over SSH (new terminal per robot)."""

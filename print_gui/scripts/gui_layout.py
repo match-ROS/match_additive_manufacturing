@@ -164,6 +164,11 @@ class ROSGui(QWidget):
             btn.clicked.connect(lambda _, f=fn: f())
             print_functions_layout.addWidget(btn)
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
+        # --- Rosbag recording ---
+        self.btn_rosbag_record = QPushButton("Rosbag Record"); self.btn_rosbag_record.setStyleSheet("background-color: lightgray;");  self.btn_rosbag_settings = QPushButton("Settings")
+        h_rb = QHBoxLayout(); h_rb.addWidget(self.btn_rosbag_record); h_rb.addWidget(self.btn_rosbag_settings);  print_functions_layout.addLayout(h_rb)
+        self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record());  self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
+        
         idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
         
         # Servo section
@@ -338,7 +343,6 @@ class ROSGui(QWidget):
             # Optionally reset sliders/spins to zero percent
             # self.servo_left_slider.setValue(0); self.servo_left_spin.setValue(0)
             # self.servo_right_slider.setValue(0); self.servo_right_spin.setValue(0)
-    
 
     @pyqtSlot(int)
     def _update_spinbox(self, idx):
@@ -488,6 +492,14 @@ class ROSGui(QWidget):
     def get_spray_distance(self):
         return self.spray_distance_spin.value()
 
+    def open_rosbag_settings(self):
+        dlg = RosbagSettingsDialog(self,
+            topics=self.ros_interface.rosbag_topics,
+            enabled=self.ros_interface.rosbag_enabled)
+        if dlg.exec_() == QDialog.Accepted:
+            self.ros_interface.rosbag_enabled = dlg.get_enabled()
+
+
 class URFollowSettingsDialog(QDialog):
     def __init__(self, parent=None, initial_settings=None):
         super().__init__(parent)
@@ -592,3 +604,18 @@ class ServoCalibrationDialog(QDialog):
             }
         }
 
+class RosbagSettingsDialog(QDialog):
+    def __init__(self, parent=None, topics=None, enabled=None):
+        super().__init__(parent); self.setWindowTitle("Rosbag Topics")
+        self.topics = topics or []; self.enabled = enabled or {t: True for t in topics}
+
+        self.boxes = {}
+        layout = QVBoxLayout()
+        for t in self.topics:
+            cb = QCheckBox(t); cb.setChecked(self.enabled.get(t, True)); layout.addWidget(cb); self.boxes[t] = cb
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
+        layout.addWidget(btns); self.setLayout(layout)
+
+    def get_enabled(self):
+        return {t: cb.isChecked() for t, cb in self.boxes.items()}
