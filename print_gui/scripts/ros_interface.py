@@ -14,6 +14,7 @@ from std_msgs.msg import Float32, Int32, Int16
 from sensor_msgs.msg import BatteryState
 from rosgraph_msgs.msg import Log
 import rosnode
+import time
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -117,10 +118,22 @@ class ROSInterface:
             "/tf",
             "/ur_path_original",
             "/mir_path_original",
+            "/profiles"
+            "/path_index",
             "/laser_profile_offset_cmd_vel",
+            "/orthogonal_error",
+            "/orthogonal_twist",
+            "/ur_error_world"
+            "/mur620c/UR10_r/twist_controller/command_collision_free",
+            "/mur620c/UR10_r/twist_controller/controller_input",
+            "/ur_twist_direction_world"
+            "/servo_target_pos_left"
+            "/servo_target_pos_right"
         ]
         self.rosbag_enabled = {t: True for t in self.rosbag_topics}
         self.rosbag_process = None
+        self.rosbag_dir = os.path.expanduser("~/rosbags")  # fixer Ordner
+        os.makedirs(self.rosbag_dir, exist_ok=True)
 
 
         if not rospy.core.is_initialized():
@@ -432,10 +445,11 @@ class ROSInterface:
 
         # --- Start recording ---
         topics = [t for t, ok in self.rosbag_enabled.items() if ok]
-        cmd = ["rosbag", "record", "-O", "recording", "--lz4"] + topics
+        ts = time.strftime("%Y%m%d_%H%M%S"); outfile = os.path.join(self.rosbag_dir, f"record_{ts}")
+        cmd = ["rosbag", "record", "-O", outfile, "--lz4"] + topics
+        cmd = ["rosbag", "record", "-O", outfile, "--lz4"] + topics
         self.rosbag_process = subprocess.Popen(cmd)
         self.gui.btn_rosbag_record.setStyleSheet("background-color: red; color: white;")
-        
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
         """Start the Dynamixel servo driver on the selected robots over SSH (new terminal per robot)."""
