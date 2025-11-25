@@ -115,7 +115,10 @@ class DirectionController:
         v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
-        error_z += self.nozzle_height_default + self.nozzle_height_override
+        if self.ff_only:
+            error_z += 0.0
+        else:
+            error_z += self.nozzle_height_default + self.nozzle_height_override
         v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
         self.integral_z+=error_z
         self.prev_error_z=error_z

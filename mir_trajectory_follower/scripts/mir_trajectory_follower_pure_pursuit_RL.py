@@ -38,7 +38,7 @@ class PurePursuitNode:
         # Config
         self.path = []
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
-        self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.25)
+        self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.35)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier

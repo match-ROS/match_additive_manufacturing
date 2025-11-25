@@ -305,11 +305,9 @@ class ROSInterface:
         return node_name in nodes
 
     def is_ros_node_running_fast(self, name, node_cache=None):
-        try: 
-            rosnode.rosnode_ping(name, max_count=1, verbose=False)
-            return True
-        except:
-            return False
+        if node_cache is None:
+            node_cache = self._get_rosnode_list()
+        return name in node_cache
 
     def _driver_node_names(self, robots=None, urs=None):
         """Return the UR driver node names to monitor for the given robot/UR selection."""
