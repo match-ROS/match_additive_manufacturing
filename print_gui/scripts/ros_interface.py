@@ -304,7 +304,7 @@ class ROSInterface:
         nodes = node_cache if node_cache is not None else self._get_rosnode_list()
         return node_name in nodes
 
-    def is_ros_node_running_fast(self, name):
+    def is_ros_node_running_fast(self, name, node_cache=None):
         try: 
             rosnode.rosnode_ping(name, max_count=1, verbose=False)
             return True
