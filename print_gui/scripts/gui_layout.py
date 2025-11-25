@@ -7,6 +7,7 @@ from ros_interface import ROSInterface
 import os
 import math
 import html
+import json
 
 
 class EnterSpinBox(QSpinBox):
@@ -30,7 +31,7 @@ class ROSGui(QWidget):
         super().__init__()
         # state
         self.ur_follow_settings = {'idx_metric': 'virtual line', 'threshold': 0.010}
-        self.servo_calib = {'left': {'min': 0, 'zero': 0, 'max': 4095}, 'right': {'min': 0, 'zero': 0, 'max': 4095}}
+        self.servo_calib = self._load_servo_calibration_defaults()
         # ROS + window
         self.path_idx.connect(self._update_spinbox)
         self.medians.connect(self._update_medians)
@@ -269,6 +270,46 @@ class ROSGui(QWidget):
     def _handle_launch_drivers_right_click(self, _pos):
         """Stop driver terminals when the launch button is right-clicked."""
         quit_drivers(self)
+
+    def _load_servo_calibration_defaults(self):
+        """Load servo calibration defaults from config, falling back to baked values."""
+        base_defaults = {
+            'left': {'min': 2800, 'zero': 2300, 'max': 3357},
+            'right': {'min': 961, 'zero': 1461, 'max': 404},
+        }
+
+        def clone_defaults(src):
+            return {side: dict(values) for side, values in src.items()}
+
+        config_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "config", "servo_calibration_defaults.json")
+        )
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as cfg:
+                file_data = json.load(cfg)
+        except FileNotFoundError:
+            print(f"Servo calibration config not found at {config_path}. Using built-in defaults.")
+            return clone_defaults(base_defaults)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"Failed to load servo calibration config: {exc}. Using built-in defaults.")
+            return clone_defaults(base_defaults)
+
+        if not isinstance(file_data, dict):
+            print("Servo calibration config is not a mapping. Using built-in defaults.")
+            return clone_defaults(base_defaults)
+
+        merged = clone_defaults(base_defaults)
+        for side in ('left', 'right'):
+            side_data = file_data.get(side)
+            if not isinstance(side_data, dict):
+                continue
+            for key in ('min', 'zero', 'max'):
+                value = side_data.get(key)
+                if isinstance(value, (int, float)):
+                    merged[side][key] = int(value)
+
+        return merged
 
     def _percent_to_raw(self, percent: float, which: str) -> int:
         c = self.servo_calib[which]
