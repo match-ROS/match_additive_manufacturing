@@ -1,0 +1,20 @@
+<launch>
+  <arg name="port" default="/dev/ttyACM0"/>
+  <arg name="baud" default="115200"/>
+  <arg name="topic" default="foam_volume_flow_sensor/samples"/>
+  <arg name="frame_id" default="flow_sensor"/>
+  <arg name="line_prefix" default=""/>
+  <arg name="timeout" default="0.5"/>
+
+  <node pkg="foam_volume_flow_sensor"
+        type="flow_serial_bridge.py"
+        name="flow_serial_bridge"
+        output="screen">
+    <param name="port" value="$(arg port)"/>
+    <param name="baud" value="$(arg baud)"/>
+    <param name="topic" value="$(arg topic)"/>
+    <param name="frame_id" value="$(arg frame_id)"/>
+    <param name="line_prefix" value="$(arg line_prefix)"/>
+    <param name="timeout" value="$(arg timeout)"/>
+  </node>
+</launch>
