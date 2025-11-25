@@ -126,11 +126,11 @@ class ROSInterface:
             "/ur_error_world"
             "/mur620c/UR10_r/twist_controller/command_collision_free",
             "/mur620c/UR10_r/twist_controller/controller_input",
-            "/ur_twist_direction_world"
-            "/servo_target_pos_left"
-            "/servo_target_pos_right"
-            "/mur620c/UR10_r/ur_calibrated_pose"
-            "/mur620c/UR10_r/global_tcp_pose"
+            "/ur_twist_direction_world",
+            "/servo_target_pos_left",
+            "/servo_target_pos_right",
+            "/mur620c/UR10_r/ur_calibrated_pose",
+            "/mur620c/UR10_r/global_tcp_pose",
             "/mur620c/mir_pose_simple"
         ]
         self.rosbag_enabled = {t: True for t in self.rosbag_topics}
