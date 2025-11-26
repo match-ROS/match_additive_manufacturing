@@ -21,8 +21,8 @@ class FlowSerialBridge:
         topic = rospy.get_param("~topic", "samples")
         left_topic = rospy.get_param("~left_topic", "foam_volume_flow_sensor/left")
         right_topic = rospy.get_param("~right_topic", "foam_volume_flow_sensor/right")
-        self.left_channel = int(rospy.get_param("~left_channel", 0))
-        self.right_channel = int(rospy.get_param("~right_channel", 1))
+        self.left_channel = int(rospy.get_param("~left_channel", 1))
+        self.right_channel = int(rospy.get_param("~right_channel", 2))
 
         self.publisher = rospy.Publisher(topic, FlowSample, queue_size=10)
         self.left_percent_pub = rospy.Publisher(left_topic, Float32, queue_size=10)
@@ -64,6 +64,8 @@ class FlowSerialBridge:
                 continue
 
             self.publisher.publish(sample)
+            print("Published sample: %s" % sample)
+            print(f"channel {sample.channel} percent: {sample.percent:.2f}%, channel==left:{self.left_channel == sample.channel} channel==right:{self.right_channel == sample.channel}")
             if sample.channel == self.left_channel:
                 self.left_percent_pub.publish(Float32(sample.percent))
             elif sample.channel == self.right_channel:
