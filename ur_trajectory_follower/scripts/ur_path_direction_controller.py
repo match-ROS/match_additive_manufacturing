@@ -2,6 +2,7 @@
 import rospy
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32, Float32
 import numpy as np
 
@@ -21,7 +22,7 @@ class DirectionController:
         self.prev_error_z = 0
         
 
-        self.path = Path()
+        self.path: Path = Path()
         self.command_old_twist = Twist()
         self.current_index = 1  # Start at the first waypoint in the path
         self.trajectory_velocity=0
@@ -29,6 +30,8 @@ class DirectionController:
         self.current_lift_height = 0.0
         self.current_pose = None
         self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
+        self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
+        self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
         
         self.path = rospy.wait_for_message("path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
@@ -58,23 +61,39 @@ class DirectionController:
 
     def index_callback(self, index_msg: Int32):
         self.current_index = index_msg.data
-        self.get_traj_velocity()
-        self.calculate_twist()
+        self.get_traj_velocity(self.from_index_offset, self.goal_index_offset)
+        self.calculate_twist(self.from_index_offset, self.goal_index_offset)
 
     def velocity_override_callback(self, velocity_msg: Float32):
         self.velocity_override = velocity_msg.data
 
     def ee_pose_callback(self, pose_msg: PoseStamped):
         self.current_pose = pose_msg
-        self.calculate_twist()
+        self.calculate_twist(self.from_index_offset, self.goal_index_offset)
 
-    def get_traj_velocity(self):
+    def _clamp_path_index(self, target_index: int) -> int:
+        if not self.path.poses:
+            return 0
+        return max(0, min(target_index, len(self.path.poses) - 1))
+
+    def get_traj_velocity(self, from_offset: int, goal_offset: int):
         """Calculate the velocity of the robot along the trajectory.
         The velocity is calculated as the distance between the last waypoint and the next waypoint divided by the time.
         """
+        if not self.path.poses:
+            rospy.logwarn("Received empty path; trajectory velocity set to zero.")
+            self.trajectory_velocity = 0.0
+            return
+        last_idx = self._clamp_path_index(self.current_index + from_offset)
+        next_idx = self._clamp_path_index(self.current_index + goal_offset)
+        if last_idx == next_idx:
+            rospy.logwarn("Configured waypoint offsets select identical indices; trajectory velocity set to zero.")
+            self.trajectory_velocity = 0.0
+            return
+
         # Get the last waypoint and the next waypoint
-        last_waypoint = self.path.poses[self.current_index-1]
-        next_waypoint = self.path.poses[self.current_index]
+        last_waypoint = self.path.poses[last_idx]
+        next_waypoint = self.path.poses[next_idx]
 
         # Compute the absolute velocity from the last waypoint to the next waypoint by dividing the distance by the time
         # The time is the difference between the timestamps of the two waypoints
@@ -86,16 +105,20 @@ class DirectionController:
             rospy.logwarn("time difference <=0 encountered in trajectory velocity calculation.")
             self.trajectory_velocity = 0.0
 
-    def get_direction(self):
+    def get_direction(self, from_offset: int, goal_offset: int):
         """Get the direction from the current pose to the next waypoint in the path.
         Returns:
             direction_xy_norm (np.array): The normalized direction vector in the xy-plane.
             error_z (float): The error in the z-axis.
         """
         # Get direction from current pose and goal pose
-        goal_pose = self.path.poses[self.current_index]
+        if not self.path.poses:
+            return np.array([0, 0]), 0.0
+        goal_idx = self._clamp_path_index(self.current_index + goal_offset)
+        goal_pose = self.path.poses[goal_idx]
         if self.ff_only:
-            from_pose = self.path.poses[self.current_index-1]
+            from_idx = self._clamp_path_index(self.current_index + from_offset)
+            from_pose = self.path.poses[from_idx]
         else:
             from_pose = self.current_pose
         direction = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
@@ -123,13 +146,13 @@ class DirectionController:
         return smoothed_command
 
 
-    def calculate_twist(self):
+    def calculate_twist(self, from_offset: int, goal_offset: int):
         """Control the direction of the robot to follow the path."""
         if not self.ff_only and self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return
         
-        direction_xy_norm, error_z = self.get_direction()
+        direction_xy_norm, error_z = self.get_direction(from_offset, goal_offset)
         v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
