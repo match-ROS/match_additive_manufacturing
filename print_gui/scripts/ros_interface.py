@@ -30,6 +30,26 @@ DRIVER_NODE_CACHE_PATH = os.path.abspath(
 )
 
 
+def _deploy_driver_node_cache_to_robot(robot: str, workspace: Optional[str]):
+    """Copy the driver node cache file onto the robot's workspace."""
+    robot = (robot or "").strip()
+    workspace = (workspace or "").strip()
+    if not (robot and workspace):
+        return
+    if not os.path.exists(DRIVER_NODE_CACHE_PATH):
+        return
+
+    remote_path = f"{robot}:~/{workspace}/src/match_additive_manufacturing/print_gui/config/driver_nodes.yaml"
+    try:
+        subprocess.check_call([
+            "scp",
+            DRIVER_NODE_CACHE_PATH,
+            remote_path,
+        ])
+    except subprocess.CalledProcessError as exc:
+        print(f"Failed to copy driver node cache to {robot}: {exc}")
+
+
 def _is_debug_enabled(gui) -> bool:
     return bool(getattr(gui, "is_debug_enabled", lambda: False)())
 
@@ -986,10 +1006,13 @@ def launch_drivers(gui):
         cache = _load_driver_node_cache()
         cache.update({robot: set(nodes) for robot, nodes in persist_updates.items()})
         _save_driver_node_cache(cache)
+        for robot in selected_robots:
+            _deploy_driver_node_cache_to_robot(robot, workspace_name)
 
 def quit_drivers(gui=None):
     """Terminates running driver sessions and uses the per-robot SSH channel for clean stops."""
     print("Stopping all driver sessions...")
+    workspace_name = gui.get_workspace_name() if gui is not None else None
     processes = []
     if gui is not None and hasattr(gui, "_driver_processes"):
         processes = [p for p in gui._driver_processes if p and p.poll() is None]
@@ -1025,22 +1048,21 @@ def quit_drivers(gui=None):
 
         if target_nodes and _kill_ros_nodes(target_nodes):
             print("Killed driver nodes derived from launch introspection.")
-            for robot in robots:
-                node_map.pop(robot, None)
-                file_cache.pop(robot, None)
+            # Keep cache entries so other operators can still reference the
+            # launch configuration even after this GUI session shuts it down.
+            combined_cache = {robot: set(nodes) for robot, nodes in node_map.items() if nodes}
+            if file_cache:
+                for robot, nodes in file_cache.items():
+                    combined_cache.setdefault(robot, set()).update(nodes)
+                _save_driver_node_cache(combined_cache)
+                if robots and workspace_name:
+                    for robot in robots:
+                        _deploy_driver_node_cache_to_robot(robot, workspace_name)
 
-            if node_map:
-                gui._driver_nodes_by_robot = node_map
+            if combined_cache:
+                gui._driver_nodes_by_robot = combined_cache
             elif hasattr(gui, "_driver_nodes_by_robot"):
                 delattr(gui, "_driver_nodes_by_robot")
-
-            if file_cache:
-                _save_driver_node_cache(file_cache)
-            else:
-                try:
-                    os.remove(DRIVER_NODE_CACHE_PATH)
-                except FileNotFoundError:
-                    pass
 
     robots_needing_fallback = robots
     if gui is not None and robots:
