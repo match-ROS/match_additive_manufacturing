@@ -13,6 +13,9 @@
     <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
     <arg name="twist_topic" default="/ur_error_world"/>
     <arg name="ff_only" default="false"/>
+    <arg name="mir_index_topic" default="/mir_current_path_index"/>
+    <arg name="mir_behind_threshold" default="2"/>
+    <arg name="mir_speed_override_percent" default="0.5"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
         <!-- Parameters -->
@@ -21,6 +24,9 @@
         <param name="ki_z" value="$(arg ki_z)"/>
         <param name="kd_z" value="$(arg kd_z)"/>
         <param name="ff_only" value="$(arg ff_only)"/>
+    <param name="mir_index_topic" value="$(arg mir_index_topic)"/>
+    <param name="mir_behind_threshold" value="$(arg mir_behind_threshold)"/>
+    <param name="mir_speed_override_percent" value="$(arg mir_speed_override_percent)"/>
         
         <!-- Topic Remapping -->
         <remap from="/path" to="$(arg path_topic)"/>

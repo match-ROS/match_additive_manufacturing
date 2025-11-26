@@ -26,13 +26,20 @@ class DirectionController:
         self.current_pose = None
         self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         
+        # MIR sync / override settings (subscribe to MIR's current path index)
+        self.mir_index_topic = rospy.get_param("~mir_index_topic", "/mir_current_path_index")
+        self.mir_behind_threshold = rospy.get_param("~mir_behind_threshold", 2)
+        self.mir_speed_override_percent = rospy.get_param("~mir_speed_override_percent", 0.5)
+        self.mir_current_index = None
+        self.mir_override_active = False
+
         self.path = rospy.wait_for_message("path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
+        rospy.Subscriber(self.mir_index_topic, Int32, self.mir_index_callback)
         if not self.ff_only:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)
-
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
 
     def nozzle_height_callback(self, height_msg: Float32):
@@ -45,6 +52,16 @@ class DirectionController:
 
     def velocity_override_callback(self, velocity_msg: Float32):
         self.velocity_override = velocity_msg.data
+
+    def mir_index_callback(self, index_msg: Int32):
+        """Store the MIR's current path index so we can detect lag."""
+        try:
+            self.mir_current_index = int(index_msg.data)
+        except (TypeError, ValueError):
+            rospy.logwarn("Received invalid MIR path index")
+            return
+        # Recalculate so we respond quickly to MIR lag changes
+        #self.calculate_twist()
 
     def ee_pose_callback(self, pose_msg: PoseStamped):
         self.current_pose = pose_msg
@@ -112,7 +129,21 @@ class DirectionController:
             return
         
         direction_xy_norm, error_z = self.get_direction()
-        v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
+
+        # Determine if we need to throttle UR velocity because MIR is lagging
+        effective_velocity_override = self.velocity_override
+        if self.mir_current_index is not None:
+            if self.mir_current_index < (self.current_index - self.mir_behind_threshold):
+                effective_velocity_override *= self.mir_speed_override_percent
+                if not self.mir_override_active:
+                    rospy.loginfo_throttle(5.0, f"MIR behind (mir_index={self.mir_current_index}, ur_index={self.current_index}). Applying UR speed override x{self.mir_speed_override_percent}")
+                    self.mir_override_active = True
+            else:
+                if self.mir_override_active:
+                    rospy.loginfo_throttle(5.0, "MIR caught up — resuming normal UR speed")
+                    self.mir_override_active = False
+
+        v_xy=direction_xy_norm*self.trajectory_velocity*effective_velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
         if self.ff_only:

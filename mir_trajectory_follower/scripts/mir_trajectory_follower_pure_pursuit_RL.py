@@ -59,6 +59,7 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
+        self.mir_current_index_topic = rospy.get_param("~mir_current_index_topic", "/mir_current_path_index")
         self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
         self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
@@ -77,6 +78,7 @@ class PurePursuitNode:
         self.target_pose_pub = rospy.Publisher(self.target_pose_topic, PoseStamped, queue_size=1)
         self.actual_pose_pub = rospy.Publisher(self.actual_pose_topic, PoseStamped, queue_size=1)
         self.layer_progress = rospy.Publisher(self.layer_progress_topic, Float32, queue_size=1)
+        self.mir_current_index_pub = rospy.Publisher(self.mir_current_index_topic, Int32, queue_size=1, latch=True)
         
         # Subscriber
         rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
@@ -116,6 +118,7 @@ class PurePursuitNode:
         self.ur_trajectory_index = rospy.wait_for_message(self.trajectory_index_topic, Int32).data
         rospy.loginfo("Starting from trajectory index: {}".format(self.ur_trajectory_index))
         self.current_mir_path_index = self.ur_trajectory_index
+        self.publish_current_mir_index()
         self.follow_path()
         
 
@@ -150,6 +153,7 @@ class PurePursuitNode:
             if self.reached_target(self.path[self.current_mir_path_index].pose.position):
                 self.current_mir_path_index += 1
                 self.current_sub_step = 0
+                self.publish_current_mir_index()
                 # check if trajectory is finished
                 if self.current_mir_path_index >= len(self.path):
                     self.is_active = False
@@ -445,6 +449,11 @@ class PurePursuitNode:
         else: 
             progress.data = (self.current_mir_path_index - points_in_previous_layers) / points_in_current_layer
         self.layer_progress.publish(progress)
+
+    def publish_current_mir_index(self):
+        msg = Int32()
+        msg.data = int(self.current_mir_path_index)
+        self.mir_current_index_pub.publish(msg)
 
 if __name__ == '__main__':
     PurePursuitNode()
