@@ -63,13 +63,15 @@ class ROSGui(QWidget):
         selection_layout.addLayout(robot_layout); selection_layout.addLayout(ur_layout); selection_group.setLayout(selection_layout); left_layout.addWidget(selection_group)
         # Override
         override_layout = QVBoxLayout()
-        override_label = QLabel("Override (%)")
+        override_label = QLabel("Speed Override (%)")
         self.override_slider = QSlider(Qt.Horizontal)
         self.override_slider.setRange(0, 100)
         self.override_slider.setValue(100)
         self.override_slider.setTickInterval(10)
         self.override_slider.setTickPosition(QSlider.TicksBelow)
         self.override_value_label = QLabel("100%")
+        self.turbo_mode_checkbox = QCheckBox("Turbo Mode")
+        self.turbo_mode_checkbox.setChecked(False)
 
         nozzle_label = QLabel("Nozzle Height Override (mm)")
         self.nozzle_override_slider = QSlider(Qt.Horizontal)
@@ -79,12 +81,14 @@ class ROSGui(QWidget):
         self.nozzle_override_slider.setTickPosition(QSlider.TicksBelow)
         self.nozzle_override_value_label = QLabel("0.0 mm")
 
+        self.turbo_mode_checkbox.toggled.connect(self._handle_turbo_mode_toggle)
         self.ros_interface.init_override_velocity_slider()
         self.ros_interface.init_nozzle_override_slider()
 
         override_layout.addWidget(override_label)
         override_layout.addWidget(self.override_slider)
         override_layout.addWidget(self.override_value_label)
+        override_layout.addWidget(self.turbo_mode_checkbox)
         override_layout.addWidget(nozzle_label)
         override_layout.addWidget(self.nozzle_override_slider)
         override_layout.addWidget(self.nozzle_override_value_label)
@@ -486,8 +490,20 @@ class ROSGui(QWidget):
     def get_override_value(self):
         return self.override_slider.value()
 
+    def _handle_turbo_mode_toggle(self, enabled: bool):
+        if not hasattr(self, 'override_slider'):
+            return
+        max_value = 200 if enabled else 100
+        self.override_slider.setMaximum(max_value)
+        if self.override_slider.value() > max_value:
+            self.override_slider.setValue(max_value)
+
     def is_debug_enabled(self):
         chk = getattr(self, "chk_log_debug", None)
+        return bool(chk and chk.isChecked())
+
+    def is_turbo_mode_enabled(self):
+        chk = getattr(self, "turbo_mode_checkbox", None)
         return bool(chk and chk.isChecked())
 
     def get_tcp_offset_xyz(self):

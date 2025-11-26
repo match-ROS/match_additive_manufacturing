@@ -423,6 +423,8 @@ class ROSInterface:
             # publish to /velocity_override as well:
             or self.velocity_override_pub.publish(value / 100.0)  # Convert to a float between 0.0 and 1.0
         )
+        # ensure the initial slider value is sent once
+        self.velocity_override_pub.publish(self.gui.override_slider.value() / 100.0)
 
     def init_nozzle_override_slider(self):
         """Wire the nozzle height override slider to /nozzle_height_override."""
