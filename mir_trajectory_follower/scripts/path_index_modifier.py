@@ -10,17 +10,18 @@ class TimeWarpingIndex:
 
         # tunable parameters
         self.rate = 100.0
-        self.speed_gain = rospy.get_param("~speed_gain", 0.002)  # how fast dt adapts
+        self.speed_gain = rospy.get_param("~speed_gain", 0.25)  # how fast dt adapts
         self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
-        self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)
-        self.global_avg_speed = 0.085 # default value in m/s 
+        self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)  # max index offset allowed
+        self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.25)  # 25 cm allowed
+        self.global_avg_speed = 0.07 # default value in m/s 
 
         # data
         self.mir_path = None
         self.timestamps = None
         self.t_orig = None
-        # self.global_avg_speed = None
+        self.current_mir_pose = None
 
         self.ur_index = 0
         self.dt_mir = 0.1        # starts with 0.1s per step
@@ -45,29 +46,49 @@ class TimeWarpingIndex:
     def cb_time(self, msg):
         self.timestamps = np.array(msg.data, dtype=float)
         self.t_orig = self.timestamps
-        # self.global_avg_speed = self.compute_global_avg_speed()
 
     def cb_ur_index(self, msg):
         self.ur_index = msg.data
         self.t_ur = self.ur_index * self.dt_mir
 
-    def compute_global_avg_speed(self):
-        if self.mir_path is None or self.timestamps is None:
-            return 0.0
+    def compute_dynamic_offset_limit(self):
+        """
+        Returns the maximum number of indices the MiR may run ahead,
+        purely based on allowed geometric distance from the UR reference position.
+        """
+
+        if self.mir_path is None:
+            return self.max_offset_idx
 
         pts = self.mir_path.poses
-        speeds = []
-        for i in range(1, len(pts)):
-            p0 = pts[i-1].pose.position
-            p1 = pts[i].pose.position
-            dist = np.linalg.norm([
-                p1.x - p0.x,
-                p1.y - p0.y,
-            ])
-            dt = self.timestamps[i] - self.timestamps[i-1]
-            if dt <= 0: dt = 1e-3
-            speeds.append(dist / dt)
-        return np.mean(speeds)
+        N = len(pts)
+        i0 = self.ur_index
+
+        if i0 >= N - 1:
+            return 0
+
+        # Sollposition (aktuelle UR-Pfadposition)
+        p0 = pts[i0].pose.position
+        max_dist = self.max_mir_distance
+
+        allowed_offset = 0
+
+        # Nur bis max_offset_idx testen
+        for k in range(1, self.max_offset_idx + 1):
+            idx = i0 + k
+            if idx >= N:
+                break
+
+            p = pts[idx].pose.position
+            dist = np.linalg.norm([p.x - p0.x, p.y - p0.y])
+
+            if dist > max_dist:
+                break
+
+            allowed_offset = k
+
+        return allowed_offset
+
 
     def estimate_local_speed(self, idx, window=1):
         if self.global_avg_speed is None:
@@ -92,7 +113,7 @@ class TimeWarpingIndex:
 
         # ----- 1) Local speed trend -----
         local_speed = self.estimate_local_speed(self.ur_index)
-
+        print("local speed:", local_speed)
         # ----- 2) Continuous dt_mir adaptation -----
 
         ratio = local_speed / self.global_avg_speed
@@ -100,15 +121,8 @@ class TimeWarpingIndex:
 
         # smooth proportional adaptation of dt_mir
         dt_mir = 1.0 / self.rate
-        dt_mir += self.speed_gain  * error 
-        #print("dt_mir before clamp:", self.dt_mir)
+        dt_mir += self.speed_gain  * error * 0.01
 
-        # clamp speed scaling
-        # self.dt_mir = np.clip(
-        #     self.dt_mir,
-        #     0.1 * self.min_speed_scale,
-        #     0.1 * self.max_speed_scale
-        # )
 
         # ----- 3) Advance MiR’s internal time -----
         self.t_mir += dt_mir
@@ -119,14 +133,18 @@ class TimeWarpingIndex:
 
         # ----- 4) Convert t_mir → MiR index -----
         idx_mir = np.interp(self.t_mir, self.t_orig, np.arange(len(self.t_orig)))
-        #print("t_mir:", self.t_mir, " idx_mir:", idx_mir)
-        #print("index ur:", self.ur_index)
 
         # ----- 5) Limit UR offset -----
         idx_mir = int(round(idx_mir))
-        idx_mir = np.clip(idx_mir,
-            self.ur_index - self.max_offset_idx,
-            self.ur_index + self.max_offset_idx
+        dynamic_limit = self.compute_dynamic_offset_limit()
+
+        if abs(dynamic_limit) > 20:
+            rospy.logwarn("Large dynamic limit computed: {}".format(dynamic_limit))
+
+        idx_mir = np.clip(
+            idx_mir,
+            self.ur_index - dynamic_limit,
+            self.ur_index + dynamic_limit
         )
 
         print("index diff UR-MiR:", self.ur_index - idx_mir, " dt_mir:", dt_mir)
