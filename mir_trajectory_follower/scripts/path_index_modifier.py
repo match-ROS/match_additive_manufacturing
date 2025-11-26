@@ -10,11 +10,11 @@ class TimeWarpingIndex:
 
         # tunable parameters
         self.rate = 100.0
-        self.speed_gain = rospy.get_param("~speed_gain", 0.01)  # how fast dt adapts
+        self.speed_gain = rospy.get_param("~speed_gain", 0.002)  # how fast dt adapts
         self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
         self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)
-        self.global_avg_speed = 0.07 # default value in m/s 
+        self.global_avg_speed = 0.085 # default value in m/s 
 
         # data
         self.mir_path = None
