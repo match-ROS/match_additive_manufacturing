@@ -5,6 +5,7 @@ from nav_msgs.msg import Path
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32, Float32
 import numpy as np
+from sensor_msgs.msg import JointState
 
 class DirectionController:
     def __init__(self):
@@ -33,7 +34,7 @@ class DirectionController:
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
         
-        self.path = rospy.wait_for_message("path", Path)
+        self.path = rospy.wait_for_message("/path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
         if not self.ff_only:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
@@ -43,8 +44,6 @@ class DirectionController:
 
         rospy.wait_for_message(self.joint_state_topic, JointState)
         rospy.wait_for_message("/path_index", Int32)
-        rospy.wait_for_message("path", Path)
-
 
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
 
@@ -159,7 +158,7 @@ class DirectionController:
         if self.ff_only:
             error_z += 0.0
         else:
-            error_z += self.nozzle_height_default + self.nozzle_height_override + self.current_lift_height
+            error_z += self.nozzle_height_default + self.nozzle_height_override 
         v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
         self.integral_z+=error_z
         self.prev_error_z=error_z

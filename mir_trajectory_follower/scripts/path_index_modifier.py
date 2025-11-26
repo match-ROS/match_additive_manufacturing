@@ -10,12 +10,12 @@ class TimeWarpingIndex:
 
         # tunable parameters
         self.rate = 100.0
-        self.speed_gain = rospy.get_param("~speed_gain", 0.25)  # how fast dt adapts
+        self.speed_gain = rospy.get_param("~speed_gain", 0.03)  # how fast dt adapts
         self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
         self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)  # max index offset allowed
-        self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.25)  # 25 cm allowed
-        self.global_avg_speed = 0.07 # default value in m/s 
+        self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
+        self.global_avg_speed = 0.065 # default value in m/s 
 
         # data
         self.mir_path = None
@@ -37,6 +37,14 @@ class TimeWarpingIndex:
 
         # pub
         self.pub_mod = rospy.Publisher("/path_index_modified", Int32, queue_size=1)
+
+        # wait for index to change for the first time
+        last_index = current_index
+        while not rospy.is_shutdown():
+            current_index = rospy.wait_for_message("/path_index", Int32).data
+            if current_index != last_index:
+                break
+            rospy.sleep(0.01)
 
         rospy.Timer(rospy.Duration(1.0/self.rate), self.on_timer)
 
@@ -113,7 +121,6 @@ class TimeWarpingIndex:
 
         # ----- 1) Local speed trend -----
         local_speed = self.estimate_local_speed(self.ur_index)
-        print("local speed:", local_speed)
         # ----- 2) Continuous dt_mir adaptation -----
 
         ratio = local_speed / self.global_avg_speed
