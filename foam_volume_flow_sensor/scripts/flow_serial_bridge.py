@@ -8,6 +8,7 @@ import rospy
 from serial import Serial, SerialException
 
 from foam_volume_flow_sensor.msg import FlowSample
+from std_msgs.msg import Float32
 
 
 class FlowSerialBridge:
@@ -18,8 +19,14 @@ class FlowSerialBridge:
         self.line_prefix = rospy.get_param("~line_prefix", "")
         self.frame_id = rospy.get_param("~frame_id", "flow_sensor")
         topic = rospy.get_param("~topic", "samples")
+        left_topic = rospy.get_param("~left_topic", "foam_volume_flow_sensor/left")
+        right_topic = rospy.get_param("~right_topic", "foam_volume_flow_sensor/right")
+        self.left_channel = int(rospy.get_param("~left_channel", 0))
+        self.right_channel = int(rospy.get_param("~right_channel", 1))
 
         self.publisher = rospy.Publisher(topic, FlowSample, queue_size=10)
+        self.left_percent_pub = rospy.Publisher(left_topic, Float32, queue_size=10)
+        self.right_percent_pub = rospy.Publisher(right_topic, Float32, queue_size=10)
         self.serial: Optional[Serial] = None
 
     def spin(self) -> None:
@@ -57,6 +64,10 @@ class FlowSerialBridge:
                 continue
 
             self.publisher.publish(sample)
+            if sample.channel == self.left_channel:
+                self.left_percent_pub.publish(Float32(sample.percent))
+            elif sample.channel == self.right_channel:
+                self.right_percent_pub.publish(Float32(sample.percent))
             rate.sleep()
 
         self._close_serial()
