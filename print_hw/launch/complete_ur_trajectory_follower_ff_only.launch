@@ -24,11 +24,6 @@
         <remap from="combined_twist" to="/ur_twist_world"/>
     </node>
 
-    <!-- <node name="twist_combiner_profile_offset" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
-        <rosparam param="twist_topics" subst_value="true">['/ur_twist_world', '/laser_profile_offset_cmd_vel']</rosparam>
-        <remap from="combined_twist" to="/ur_twist_world_offset"/>
-    </node> -->
-
     <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
@@ -54,7 +49,7 @@
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
-        <arg name="ff_only" value="false" />
+        <arg name="ff_only" value="true" />
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
         <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
