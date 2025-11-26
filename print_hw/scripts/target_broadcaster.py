@@ -15,6 +15,7 @@ class TargetPoseBroadcaster(object):
         # Parameter
         self.frame_id = rospy.get_param("~frame_id", "map")
         self.mir_child_frame = rospy.get_param("~mir_child_frame", "mir_target")
+        self.modified_mir_child_frame = rospy.get_param("~modified_mir_child_frame", "mir_target_modified")
         self.ur_child_frame = rospy.get_param("~ur_child_frame", "ur_target")
         self.publish_rate = rospy.get_param("~publish_rate", 10.0)  # Hz
         self.initial_path_index = rospy.get_param("~initial_path_index", 150)
@@ -23,6 +24,7 @@ class TargetPoseBroadcaster(object):
         self.mir_path = None          # nav_msgs/Path
         self.ur_path = None           # nav_msgs/Path
         self.current_index = self.initial_path_index     # int
+        self.path_index_modified = self.initial_path_index  # int
 
         # Publisher
         self.mir_pub = rospy.Publisher("mir_target_pose", PoseStamped, queue_size=1)
@@ -35,6 +37,7 @@ class TargetPoseBroadcaster(object):
         rospy.Subscriber("/mir_path_original", Path, self.mir_path_cb, queue_size=1)
         rospy.Subscriber("/ur_path_original", Path, self.ur_path_cb, queue_size=1)
         rospy.Subscriber("/path_index", Int32, self.index_cb, queue_size=1)
+        rospy.Subscriber("/path_index_modified", Int32, self.index_modified_cb, queue_size=1)
 
         # Timer für zyklisches Publizieren
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_rate), self.timer_cb)
@@ -52,6 +55,12 @@ class TargetPoseBroadcaster(object):
         if self.current_index != msg.data:
             self.current_index = msg.data
             self.update_and_publish_once()
+        
+    def index_modified_cb(self, msg):
+        # bei jeder Änderung direkt aktualisieren
+        if self.path_index_modified != msg.data:
+            self.path_index_modified = msg.data
+            self.update_and_publish_modified_once()
 
     def timer_cb(self, event):
         # zyklisches Publizieren der aktuellen Zielpose
@@ -105,6 +114,20 @@ class TargetPoseBroadcaster(object):
             self.publish_pose_and_tf(mir_pose, self.mir_child_frame)
         if ur_pose is not None:
             self.publish_pose_and_tf(ur_pose, self.ur_child_frame)
+
+    def update_and_publish_modified_once(self):
+        # Wenn noch nichts initialisiert ist, nichts tun
+        if self.path_index_modified is None or self.mir_path is None or self.ur_path is None:
+            return
+
+        # Zielposen bestimmen
+        mir_pose = self.get_pose_from_path(self.mir_path, self.path_index_modified)
+        ur_pose = self.get_pose_from_path(self.ur_path, self.path_index_modified)
+
+        # publish+TF
+        if mir_pose is not None:
+            self.publish_pose_and_tf(mir_pose, self.modified_mir_child_frame)
+
 
 
 if __name__ == "__main__":

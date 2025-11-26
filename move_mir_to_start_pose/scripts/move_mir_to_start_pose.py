@@ -28,6 +28,7 @@ class MoveToFirstPathPoint:
         self.move_base_client.wait_for_server()
         rospy.loginfo("Connected to move_base action server.")
         rospy.wait_for_message(self.robot_pose_topic, Pose)
+        rospy.loginfo("Received first robot pose message.")
         self.robot_pose_sub = rospy.Subscriber(self.robot_pose_topic, Pose, self.robot_pose_callback)
         # Start publisher for 'cmd_vel' topic
         self.twist_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
