@@ -3,6 +3,7 @@ import subprocess
 import yaml
 import threading
 from typing import Optional
+import signal
 import rospy
 from geometry_msgs.msg import PoseStamped
 from PyQt5.QtWidgets import QTableWidgetItem
@@ -103,6 +104,117 @@ def _run_remote_commands(
 def _format_ros_list_arg(values):
     """Format Python list as double-quoted string literal for roslaunch args."""
     return '"' + str(values).replace("'", '"') + '"'
+
+
+class _DriverControlSession:
+    """Maintains a lightweight SSH shell per robot for reliable cleanup commands."""
+
+    def __init__(self, gui, robot: str, workspace: Optional[str]):
+        self.robot = robot
+        self.workspace = (workspace or "").strip()
+        self.process = _popen_with_debug(
+            ["ssh", "-T", robot, "bash", "-l"],
+            gui,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if self.process is not None and self.process.stdin is not None:
+            self._bootstrap_environment()
+        else:
+            self.process = None
+
+    def _bootstrap_environment(self):
+        env_cmds = [
+            "source ~/.bashrc",
+            "export ROS_MASTER_URI=http://roscore:11311/",
+            "source /opt/ros/noetic/setup.bash",
+        ]
+        if self.workspace:
+            env_cmds.append(f"source ~/{self.workspace}/devel/setup.bash")
+        env_cmds.append("echo '[driver-control ready]' > /dev/null")
+        self.send(" && ".join(env_cmds))
+
+    def is_alive(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
+    def send(self, command: str) -> bool:
+        if not self.is_alive() or not command:
+            return False
+        proc = self.process
+        if proc is None or proc.stdin is None:
+            return False
+        try:
+            proc.stdin.write(command.strip() + "\n")
+            proc.stdin.flush()
+            return True
+        except Exception:
+            return False
+
+    def close(self):
+        proc = self.process
+        if not proc:
+            return
+        try:
+            self.send("exit")
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            proc.kill()
+
+
+def _ensure_driver_control_session(gui, robot: str, workspace: Optional[str]):
+    if gui is None:
+        return None
+    sessions = getattr(gui, "_driver_control_sessions", {})
+    session = sessions.get(robot)
+    if session is not None and session.is_alive():
+        return session
+    session = _DriverControlSession(gui, robot, workspace)
+    if session.is_alive():
+        sessions[robot] = session
+        gui._driver_control_sessions = sessions
+        return session
+    return None
+
+
+def _driver_kill_commands(robot: str):
+    return [
+        f"pkill -f 'mur_launch_hardware {robot}.launch' || true",
+        "pkill -f ur_robot_driver || true",
+        "pkill -f roslaunch || true",
+    ]
+
+
+def _driver_kill_script(robot: str) -> str:
+    return "; ".join(_driver_kill_commands(robot))
+
+
+def _stop_non_driver_commands():
+    return [
+        "pkill -f mir_trajectory_follower || true",
+        "pkill -f increment_path_index || true",
+        "pkill -f path_index_advancer || true",
+        "pkill -f complete_ur_trajectory_follower_ff_only || true",
+        "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller' || true",
+        "pkill -f keyence_scanner_ljx8000 || true",
+        "pkill -f profile_orthogonal_controller || true",
+        "pkill -f strand-center-app || true",
+        "pkill -f parse_mir_path || true",
+        "pkill -f parse_ur_path || true",
+        "pkill -f target_broadcaster || true",
+        "pkill -f move_mir_to_start_pose || true",
+        "pkill -f move_ur_to_start_pose || true",
+    ]
+
+
+def _stop_non_driver_script(_robot: str) -> str:
+    return "; ".join(_stop_non_driver_commands())
 
 class ROSInterface:
     def __init__(self, gui):
@@ -252,6 +364,29 @@ class ROSInterface:
                       f"rsync --delete -avzhe ssh ~/{self.workspace_name}/src rosmatch@{robot}:~/{self.workspace_name}/ \n" \
                       "done"
             self._launch_in_terminal(f"Sync to {robot}", command)
+
+    def prime_driver_cleanup_sessions(self):
+        """Manually open/refresh the persistent SSH session used for driver cleanup."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robots selected. Skipping driver cleanup session setup.")
+            return
+
+        workspace = self.gui.get_workspace_name()
+        ready = []
+        failed = []
+
+        for robot in selected_robots:
+            session = _ensure_driver_control_session(self.gui, robot, workspace)
+            if session and session.is_alive():
+                ready.append(robot)
+            else:
+                failed.append(robot)
+
+        if ready:
+            print(f"Driver cleanup channel ready for: {', '.join(ready)}")
+        if failed:
+            print(f"Failed to open driver cleanup channel for: {', '.join(failed)}")
 
     def update_button_status(self):
         # --- Parser + Keyence status ---
@@ -436,7 +571,7 @@ class ROSInterface:
         if self.rosbag_process and self.rosbag_process.poll() is None:
             print("Stopping rosbag (SIGINT)…")
             try:
-                self.rosbag_process.send_signal(subprocess.signal.SIGINT)
+                self.rosbag_process.send_signal(signal.SIGINT)
                 self.rosbag_process.wait(timeout=4)
             except Exception:
                 print("Rosbag didn't stop cleanly. Sending SIGTERM…")
@@ -694,7 +829,7 @@ def enable_all_urs(gui):
 
 
 def launch_drivers(gui):
-    """SSH into the selected robots and start the drivers in separate terminals."""
+    """SSH into the selected robots, start drivers, and keep a cleanup channel per robot."""
     selected_robots = gui.get_selected_robots()
     workspace_name = gui.get_workspace_name()
 
@@ -747,8 +882,10 @@ def launch_drivers(gui):
         if proc is not None:
             gui._driver_processes.append(proc)
 
+        _ensure_driver_control_session(gui, robot, workspace)
+
 def quit_drivers(gui=None):
-    """Terminates all running driver sessions and closes terminals."""
+    """Terminates running driver sessions and uses the per-robot SSH channel for clean stops."""
     print("Stopping all driver sessions...")
     processes = []
     if gui is not None and hasattr(gui, "_driver_processes"):
@@ -773,21 +910,28 @@ def quit_drivers(gui=None):
         if not robots:
             robots = getattr(gui, "_driver_robots", [])
 
+    robots_needing_fallback = robots
     if gui is not None and robots:
-        def _remote_kill(robot):
-            kill_patterns = [
-                f"pkill -f 'mur_launch_hardware {robot}\\.launch' || true",
-                "pkill -f ur_robot_driver || true",
-                "pkill -f roslaunch || true",
-            ]
-            return "; ".join(kill_patterns)
+        sessions = getattr(gui, "_driver_control_sessions", {})
+        robots_needing_fallback = []
+        for robot in robots:
+            session = sessions.get(robot)
+            if session and session.is_alive():
+                for cmd in _driver_kill_commands(robot):
+                    session.send(cmd)
+                session.close()
+                sessions.pop(robot, None)
+            else:
+                robots_needing_fallback.append(robot)
+        gui._driver_control_sessions = sessions
 
+    if gui is not None and robots_needing_fallback:
         _run_remote_commands(
             gui,
             "Stopping remote driver launch",
-            [_remote_kill],
+            [_driver_kill_script],
             use_workspace_debug=True,
-            target_robots=robots,
+            target_robots=robots_needing_fallback,
         )
 
     # Best-effort fallback in case processes were started outside this session.
@@ -857,7 +1001,7 @@ def move_mir_to_start_pose(gui):
         print("Please select only the MIR robot to move to the start pose.")
         return
     command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()}"
-    print(f"Executing: {command}")
+    rospy.loginfo(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)
 
 def move_ur_to_start_pose(gui):
@@ -954,25 +1098,39 @@ def stop_ur_motion(gui):
 
 def stop_all_but_drivers(gui):
     """Stops common non-driver processes on the selected robots via SSH."""
-    _run_remote_commands(
-        gui,
-        "Stopping non-driver processes",
-        [
-            "pkill -f mir_trajectory_follower || true",
-            "pkill -f increment_path_index || true",
-            "pkill -f path_index_advancer || true",
-            "pkill -f complete_ur_trajectory_follower_ff_only || true",
-            "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller' || true",
-            "pkill -f keyence_scanner_ljx8000 || true",
-            "pkill -f profile_orthogonal_controller || true",
-            "pkill -f strand-center-app || true",
-            "pkill -f parse_mir_path || true",
-            "pkill -f parse_ur_path || true",
-            "pkill -f target_broadcaster || true",
-            "pkill -f move_mir_to_start_pose || true",
-            "pkill -f move_ur_to_start_pose || true",
-        ],
-    )
+    if gui is None:
+        return
+
+    selected_robots = gui.get_selected_robots()
+    if not selected_robots:
+        print("No robots selected. Skipping non-driver stop.")
+        return
+
+    workspace = gui.get_workspace_name()
+    commands = _stop_non_driver_commands()
+    sessions = getattr(gui, "_driver_control_sessions", {})
+    robots_needing_fallback = []
+
+    for robot in selected_robots:
+        session = sessions.get(robot)
+        if session is None or not session.is_alive():
+            session = _ensure_driver_control_session(gui, robot, workspace)
+        if session and session.is_alive():
+            for cmd in commands:
+                session.send(cmd)
+        else:
+            robots_needing_fallback.append(robot)
+
+    gui._driver_control_sessions = sessions
+
+    if robots_needing_fallback:
+        _run_remote_commands(
+            gui,
+            "Stopping non-driver processes",
+            [_stop_non_driver_script],
+            use_workspace_debug=True,
+            target_robots=robots_needing_fallback,
+        )
 
 def ur_follow_trajectory(gui, ur_follow_settings: dict):
     """Moves the UR robot along a predefined trajectory."""

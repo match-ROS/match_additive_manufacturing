@@ -1,5 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
-from PyQt5.QtCore import QTimer, Qt, pyqtSignal, pyqtSlot
+from PyQt5 import QtCore
+from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
+from typing import Any, cast
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion, stop_idx_advancer, stop_ur_motion, stop_all_but_drivers
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index, target_broadcaster
@@ -8,6 +10,9 @@ import os
 import math
 import html
 import json
+
+
+Qt = cast(Any, QtCore.Qt)
 
 
 class EnterSpinBox(QSpinBox):
@@ -100,6 +105,7 @@ class ROSGui(QWidget):
         setup_buttons = {
             "Check Status": lambda: start_status_update(self),
             "Launch Drivers": lambda: launch_drivers(self),
+            "Prepare Driver Cleanup Channel": lambda: self.ros_interface.prime_driver_cleanup_sessions(),
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
@@ -152,7 +158,7 @@ class ROSGui(QWidget):
 
         print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
-            "Increment Path Index": lambda: self.ros_interface.increment_path_index(),
+            "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
             "Stop UR Motion": lambda: stop_ur_motion(self),
             "Stop All (Keep Drivers)": lambda: stop_all_but_drivers(self),
@@ -411,7 +417,8 @@ class ROSGui(QWidget):
 
         self.ros_log_text.setHtml("<br>".join(html_lines))
         sb = self.ros_log_text.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        if sb is not None:
+            sb.setValue(sb.maximum())
 
 
     def _clear_ros_log(self):
@@ -607,7 +614,9 @@ class ServoCalibrationDialog(QDialog):
 class RosbagSettingsDialog(QDialog):
     def __init__(self, parent=None, topics=None, enabled=None):
         super().__init__(parent); self.setWindowTitle("Rosbag Topics")
-        self.topics = topics or []; self.enabled = enabled or {t: True for t in topics}
+        self.topics = list(topics) if topics else []
+        enabled_map = enabled or {}
+        self.enabled = {t: bool(enabled_map.get(t, True)) for t in self.topics}
 
         self.boxes = {}
         layout = QVBoxLayout()
