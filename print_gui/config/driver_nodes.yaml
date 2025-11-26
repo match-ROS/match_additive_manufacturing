@@ -27,4 +27,4 @@ robots:
   - /mur620c/rgb_control
   - /mur620c/robot_state_publisher
   - /mur620c/tf_remove_state_publisher_frames
-updated_at: '2025-11-26 15:53:39'
+updated_at: '2025-11-26 16:17:29'
