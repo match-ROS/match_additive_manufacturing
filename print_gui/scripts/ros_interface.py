@@ -25,6 +25,10 @@ DEBUG_CONFIG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "config", "rosconsole_debug.config")
 )
 
+DRIVER_NODE_CACHE_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "config", "driver_nodes.yaml")
+)
+
 
 def _is_debug_enabled(gui) -> bool:
     return bool(getattr(gui, "is_debug_enabled", lambda: False)())
@@ -99,6 +103,94 @@ def _run_remote_commands(
         ssh_cmd = ["ssh", "-t", "-t", robot, remote_cmd]
         print(f"{description} on {robot} with command: {remote_cmd}")
         _popen_with_debug(ssh_cmd, gui)
+
+
+def _kill_ros_nodes(node_names) -> bool:
+    """Kill the provided ROS nodes via rosnode kill, returns True if any ran."""
+    nodes = sorted({n.strip() for n in node_names if n and n.strip()})
+    if not nodes:
+        return False
+
+    killed_any = False
+    for node in nodes:
+        try:
+            subprocess.check_call(
+                ["rosnode", "kill", node],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            killed_any = True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print(f"Failed to kill node {node}. It may already be stopped.")
+    return killed_any
+
+
+def _collect_driver_node_names(robot: str, launch_args) -> set:
+    """Use roslaunch introspection to list nodes defined for the driver launch."""
+    cli_args = [arg for arg in launch_args if arg]
+    cmd = [
+        "roslaunch",
+        "--nodes",
+        "mur_launch_hardware",
+        f"{robot}.launch",
+    ] + cli_args
+
+    try:
+        output = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        print(f"Failed to introspect nodes for {robot}: {exc}")
+        return set()
+
+    nodes = set()
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        nodes.add(stripped)
+    return nodes
+
+
+def _load_driver_node_cache() -> dict:
+    """Load the persisted driver nodes from disk (per robot)."""
+    try:
+        with open(DRIVER_NODE_CACHE_PATH, "r", encoding="utf-8") as stream:
+            data = yaml.safe_load(stream) or {}
+    except FileNotFoundError:
+        return {}
+    except (yaml.YAMLError, OSError) as exc:
+        print(f"Failed to read driver node cache: {exc}")
+        return {}
+
+    if isinstance(data, dict) and "robots" in data and isinstance(data["robots"], dict):
+        raw = data["robots"]
+    elif isinstance(data, dict):
+        raw = data
+    else:
+        return {}
+
+    normalized = {}
+    for robot, nodes in raw.items():
+        if not isinstance(robot, str):
+            continue
+        if isinstance(nodes, (list, tuple, set)):
+            normalized[robot] = set(str(n).strip() for n in nodes if str(n).strip())
+    return normalized
+
+
+def _save_driver_node_cache(node_map: dict):
+    """Persist the provided per-robot node map to disk as YAML."""
+    os.makedirs(os.path.dirname(DRIVER_NODE_CACHE_PATH), exist_ok=True)
+    serializable = {
+        robot: sorted({str(n).strip() for n in nodes if str(n).strip()})
+        for robot, nodes in node_map.items()
+        if robot and nodes
+    }
+    payload = {
+        "robots": serializable,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(DRIVER_NODE_CACHE_PATH, "w", encoding="utf-8") as stream:
+        yaml.safe_dump(payload, stream, default_flow_style=False, sort_keys=True)
 
 
 def _format_ros_list_arg(values):
@@ -842,24 +934,24 @@ def launch_drivers(gui):
     gui._driver_processes = [p for p in gui._driver_processes if p and p.poll() is None]
     gui._driver_robots = list(set(selected_robots))
 
+    selected_urs = gui.get_selected_urs()
+    try:
+        offset_values = gui.get_tcp_offset_sixd()
+    except AttributeError:
+        offset_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    tcp_offset_literal = "[" + ",".join(f"{value:.6f}" for value in offset_values) + "]"
+
+    launch_arg_pairs = [
+        ("launch_ur_l", "true" if "UR10_l" in selected_urs else "false"),
+        ("launch_ur_r", "true" if "UR10_r" in selected_urs else "false"),
+        ("tcp_offset", tcp_offset_literal),
+    ]
+    launch_cli_args = [f"{name}:={value}" for name, value in launch_arg_pairs]
+    launch_suffix = "".join(f" {arg}" for arg in launch_cli_args)
+    persist_updates = {}
+
     for robot in selected_robots:
         workspace = workspace_name
-        selected_urs = gui.get_selected_urs()
-        launch_suffix = ""
-        if "UR10_l" in selected_urs:
-            launch_suffix += " launch_ur_l:=true"
-        else:
-            launch_suffix += " launch_ur_l:=false"
-        if "UR10_r" in selected_urs:
-            launch_suffix += " launch_ur_r:=true"
-        else:
-            launch_suffix += " launch_ur_r:=false"
-
-        try:
-            offset_values = gui.get_tcp_offset_sixd()
-        except AttributeError:
-            offset_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        tcp_offset_literal = "[" + ",".join(f"{value:.6f}" for value in offset_values) + "]"
 
         debug_prefix = _remote_debug_prefix(gui, workspace)
         command = (
@@ -868,8 +960,7 @@ def launch_drivers(gui):
             "export ROS_MASTER_URI=http://roscore:11311/; "
             "source /opt/ros/noetic/setup.bash; "
             f"source ~/{workspace}/devel/setup.bash; "
-            f"{debug_prefix}roslaunch mur_launch_hardware {robot}.launch{launch_suffix} "
-            f"tcp_offset:=\\\"{tcp_offset_literal}\\\"; "
+            f"{debug_prefix}roslaunch mur_launch_hardware {robot}.launch{launch_suffix}; "
             "exec bash'"
         )
 
@@ -883,6 +974,18 @@ def launch_drivers(gui):
             gui._driver_processes.append(proc)
 
         _ensure_driver_control_session(gui, robot, workspace)
+
+        nodes = _collect_driver_node_names(robot, launch_cli_args)
+        if nodes:
+            node_map = getattr(gui, "_driver_nodes_by_robot", {})
+            node_map[robot] = nodes
+            gui._driver_nodes_by_robot = node_map
+            persist_updates[robot] = nodes
+
+    if persist_updates:
+        cache = _load_driver_node_cache()
+        cache.update({robot: set(nodes) for robot, nodes in persist_updates.items()})
+        _save_driver_node_cache(cache)
 
 def quit_drivers(gui=None):
     """Terminates running driver sessions and uses the per-robot SSH channel for clean stops."""
@@ -909,6 +1012,35 @@ def quit_drivers(gui=None):
         robots = gui.get_selected_robots()
         if not robots:
             robots = getattr(gui, "_driver_robots", [])
+
+    if gui is not None and robots:
+        node_map = getattr(gui, "_driver_nodes_by_robot", {})
+        file_cache = _load_driver_node_cache()
+        for robot, nodes in file_cache.items():
+            node_map.setdefault(robot, set()).update(nodes)
+
+        target_nodes = set()
+        for robot in robots:
+            target_nodes.update(node_map.get(robot, set()))
+
+        if target_nodes and _kill_ros_nodes(target_nodes):
+            print("Killed driver nodes derived from launch introspection.")
+            for robot in robots:
+                node_map.pop(robot, None)
+                file_cache.pop(robot, None)
+
+            if node_map:
+                gui._driver_nodes_by_robot = node_map
+            elif hasattr(gui, "_driver_nodes_by_robot"):
+                delattr(gui, "_driver_nodes_by_robot")
+
+            if file_cache:
+                _save_driver_node_cache(file_cache)
+            else:
+                try:
+                    os.remove(DRIVER_NODE_CACHE_PATH)
+                except FileNotFoundError:
+                    pass
 
     robots_needing_fallback = robots
     if gui is not None and robots:
