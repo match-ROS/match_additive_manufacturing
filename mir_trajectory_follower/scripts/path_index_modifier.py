@@ -1,114 +1,140 @@
 #!/usr/bin/env python3
 import rospy
+import numpy as np
 from nav_msgs.msg import Path
 from std_msgs.msg import Int32, Float32MultiArray
-from geometry_msgs.msg import PoseStamped
-import numpy as np
 
-class PathIndexModifier:
+class TimeWarpingIndex:
     def __init__(self):
-        rospy.init_node("path_index_modifier")
+        rospy.init_node("mir_time_warping_index")
 
-        # Params
-        self.max_offset = rospy.get_param("~max_offset", 10)               # UR reach limit
-        self.max_offset_change = rospy.get_param("~max_offset_change", 1)  # per step
-        self.look_ahead = rospy.get_param("~look_ahead", 5)
+        # tunable parameters
+        self.rate = 100.0
+        self.speed_gain = rospy.get_param("~speed_gain", 0.01)  # how fast dt adapts
+        self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
+        self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
+        self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)
+        self.global_avg_speed = 0.07 # default value in m/s 
 
-        # Data buffers
+        # data
         self.mir_path = None
         self.timestamps = None
-        self.current_offset = 0
+        self.t_orig = None
+        # self.global_avg_speed = None
 
-        # Subscribers
-        rospy.Subscriber("/mir_path_original", Path, self.cb_mir_path)
-        rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_timestamps)
-        rospy.Subscriber("/path_index", Int32, self.cb_path_index)
+        self.ur_index = 0
+        self.dt_mir = 0.1        # starts with 0.1s per step
 
-        # Publisher
-        self.pub_idx_mod = rospy.Publisher("/path_index_modified", Int32, queue_size=1)
+        # subs
+        rospy.Subscriber("/mir_path_original", Path, self.cb_path)
+        rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_time)
+        rospy.Subscriber("/path_index", Int32, self.cb_ur_index)
 
-    # -------- Callbacks ----------
-    def cb_mir_path(self, msg):
+        # internal time
+        current_index = rospy.wait_for_message("/path_index", Int32).data
+        self.t_mir = current_index * self.dt_mir
+
+        # pub
+        self.pub_mod = rospy.Publisher("/path_index_modified", Int32, queue_size=1)
+
+        rospy.Timer(rospy.Duration(1.0/self.rate), self.on_timer)
+
+    def cb_path(self, msg):
         self.mir_path = msg
 
-    def cb_timestamps(self, msg):
-        self.timestamps = np.array(msg.data)
+    def cb_time(self, msg):
+        self.timestamps = np.array(msg.data, dtype=float)
+        self.t_orig = self.timestamps
+        # self.global_avg_speed = self.compute_global_avg_speed()
 
-    def cb_path_index(self, msg):
+    def cb_ur_index(self, msg):
+        self.ur_index = msg.data
+        self.t_ur = self.ur_index * self.dt_mir
+
+    def compute_global_avg_speed(self):
         if self.mir_path is None or self.timestamps is None:
-            return
-
-        ur_idx = msg.data
-        self.update_offset(ur_idx)
-
-        mod_idx = int(ur_idx + self.current_offset)
-        mod_idx = max(0, min(mod_idx, len(self.timestamps) - 1))
-
-        self.pub_idx_mod.publish(Int32(data=mod_idx))
-
-    # -------- Core Logic ----------
-    def update_offset(self, ur_idx):
-        """
-        Compute local speed of MiR around current index.
-        Compare to global average.
-        Adjust offset smoothly.
-        """
+            return 0.0
 
         pts = self.mir_path.poses
+        speeds = []
+        for i in range(1, len(pts)):
+            p0 = pts[i-1].pose.position
+            p1 = pts[i].pose.position
+            dist = np.linalg.norm([
+                p1.x - p0.x,
+                p1.y - p0.y,
+            ])
+            dt = self.timestamps[i] - self.timestamps[i-1]
+            if dt <= 0: dt = 1e-3
+            speeds.append(dist / dt)
+        return np.mean(speeds)
 
-        # Validate index window
-        if ur_idx < 1 or ur_idx >= len(pts) - 2:
+    def estimate_local_speed(self, idx, window=1):
+        if self.global_avg_speed is None:
+            return self.global_avg_speed
+        
+        pts = self.mir_path.poses
+        start = max(1, idx - 1)
+        end = min(len(pts)-1, idx + window)
+        speeds = []
+        for i in range(start, end):
+            p0 = pts[i-1].pose.position
+            p1 = pts[i].pose.position
+            dist = np.linalg.norm([p1.x - p0.x, p1.y - p0.y])
+            dt = self.timestamps[i] - self.timestamps[i-1]
+            if dt <= 0: dt = 1e-3
+            speeds.append(dist / dt)
+        return np.mean(speeds)
+
+    def on_timer(self, event):
+        if self.timestamps is None or self.mir_path is None:
             return
 
-        # global MiR average speed
-        global_speeds = self.estimate_speeds(pts, self.timestamps)
-        global_avg = np.mean(global_speeds)
+        # ----- 1) Local speed trend -----
+        local_speed = self.estimate_local_speed(self.ur_index)
 
-        # local window speeds
-        start = max(0, ur_idx - 1)
-        end = min(len(pts) - 1, ur_idx + self.look_ahead)
-        local_avg = np.mean(global_speeds[start:end])
+        # ----- 2) Continuous dt_mir adaptation -----
 
-        # offset logic
-        if local_avg < 0.8 * global_avg:
-            # MiR would be slow → give positive offset
-            desired_change = +1
-        elif local_avg > 1.2 * global_avg:
-            # MiR fast → reduce offset
-            desired_change = -1
-        else:
-            desired_change = 0
+        ratio = local_speed / self.global_avg_speed
+        error = (1.0 / max(ratio, 1e-6)) - 1.0     # proportional error
 
-        # slope limit (acceleration constraint)
-        desired_change = np.clip(desired_change,
-                                 -self.max_offset_change,
-                                 +self.max_offset_change)
+        # smooth proportional adaptation of dt_mir
+        dt_mir = 1.0 / self.rate
+        dt_mir += self.speed_gain  * error 
+        #print("dt_mir before clamp:", self.dt_mir)
 
-        # apply
-        new_offset = self.current_offset + desired_change
+        # clamp speed scaling
+        # self.dt_mir = np.clip(
+        #     self.dt_mir,
+        #     0.1 * self.min_speed_scale,
+        #     0.1 * self.max_speed_scale
+        # )
 
-        # UR reachability limit
-        new_offset = np.clip(new_offset,
-                             -self.max_offset,
-                             +self.max_offset)
+        # ----- 3) Advance MiR’s internal time -----
+        self.t_mir += dt_mir
 
-        self.current_offset = int(new_offset)
+        # clamp within path duration
+        t_max = self.t_orig[-1]
+        self.t_mir = np.clip(self.t_mir, self.t_ur - 2.0, self.t_ur + 2.0 if self.t_ur < t_max else t_max)
 
-    # -------- Speed Estimation ----------
-    @staticmethod
-    def estimate_speeds(poses, timestamps):
-        speeds = []
-        for i in range(1, len(poses)):
-            p0 = poses[i - 1].pose.position
-            p1 = poses[i].pose.position
-            dt = timestamps[i] - timestamps[i - 1]
-            if dt <= 0:
-                dt = 1e-3
-            dist = np.sqrt((p1.x - p0.x)**2 + (p1.y - p0.y)**2 + (p1.z - p0.z)**2)
-            speeds.append(dist / dt)
-        return np.array(speeds)
+        # ----- 4) Convert t_mir → MiR index -----
+        idx_mir = np.interp(self.t_mir, self.t_orig, np.arange(len(self.t_orig)))
+        #print("t_mir:", self.t_mir, " idx_mir:", idx_mir)
+        #print("index ur:", self.ur_index)
+
+        # ----- 5) Limit UR offset -----
+        idx_mir = int(round(idx_mir))
+        idx_mir = np.clip(idx_mir,
+            self.ur_index - self.max_offset_idx,
+            self.ur_index + self.max_offset_idx
+        )
+
+        print("index diff UR-MiR:", self.ur_index - idx_mir, " dt_mir:", dt_mir)
+
+        # ----- 6) Publish -----
+        self.pub_mod.publish(Int32(idx_mir))
 
 
 if __name__ == "__main__":
-    PathIndexModifier()
+    TimeWarpingIndex()
     rospy.spin()
