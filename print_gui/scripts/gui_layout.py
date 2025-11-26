@@ -107,6 +107,7 @@ class ROSGui(QWidget):
             "Launch Drivers": lambda: launch_drivers(self),
             "Prepare Driver Cleanup Channel": lambda: self.ros_interface.prime_driver_cleanup_sessions(),
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
+            "Launch Flow Sensor Bridge": lambda: self.ros_interface.launch_flow_sensor_bridge(),
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
             "Launch Strand Center Camera": lambda: self.ros_interface.launch_strand_center_app(),
@@ -118,6 +119,10 @@ class ROSGui(QWidget):
         for text, fn in setup_buttons.items():
             b = QPushButton(text); 
             if text=="Launch Keyence Scanner": self.btn_keyence=b
+            if text=="Launch Flow Sensor Bridge":
+                self.btn_flow_sensor=b
+                b.setContextMenuPolicy(Qt.CustomContextMenu)
+                b.customContextMenuRequested.connect(self._handle_flow_sensor_right_click)
             if text=="Launch Drivers":
                 self.btn_launch_drivers=b
                 b.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -276,6 +281,10 @@ class ROSGui(QWidget):
     def _handle_launch_drivers_right_click(self, _pos):
         """Stop driver terminals when the launch button is right-clicked."""
         quit_drivers(self)
+
+    def _handle_flow_sensor_right_click(self, _pos):
+        """Stop the flow sensor bridge when its button is right-clicked."""
+        self.ros_interface.stop_flow_sensor_bridge()
 
     def _load_servo_calibration_defaults(self):
         """Load servo calibration defaults from config, falling back to baked values."""

@@ -506,6 +506,7 @@ class ROSInterface:
         mir = self.is_ros_node_running_fast("/retrieve_and_publish_mir_path", node_cache)
         ur = self.is_ros_node_running_fast("/retrieve_and_publish_ur_path", node_cache)
         key = self.is_ros_node_running_fast("/keyence_ljx_profile_node", node_cache)
+        flow = self.is_ros_node_running_fast("/flow_serial_bridge", node_cache)
         tgt = self.is_ros_node_running_fast("/target_broadcaster", node_cache)
         laser = self.is_ros_node_running_fast("/profile_orthogonal_controller", node_cache)
         mocap = self.is_ros_node_running_fast("/qualisys", node_cache)
@@ -514,6 +515,8 @@ class ROSInterface:
         self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
         self.gui.btn_parse_ur.setStyleSheet("background-color: lightgreen;" if ur else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_ur") else None
         self.gui.btn_keyence.setStyleSheet("background-color: lightgreen;" if key else "background-color: lightgray;") if hasattr(self.gui,"btn_keyence") else None
+        if hasattr(self.gui, "btn_flow_sensor"):
+            self.gui.btn_flow_sensor.setStyleSheet("background-color: lightgreen;" if flow else "background-color: lightgray;")
         self.gui.btn_target_broadcaster.setStyleSheet("background-color: lightgreen;" if tgt else "background-color: lightgray;") if hasattr(self.gui,"btn_target_broadcaster") else None
         self.gui.btn_laser_ctrl.setStyleSheet("background-color: lightgreen;" if laser else "background-color: lightgray;") if hasattr(self.gui,"btn_laser_ctrl") else None
         self.gui.btn_mocap.setStyleSheet("background-color: lightgreen;" if mocap else "background-color: lightgray;") if hasattr(self.gui,"btn_mocap") else None
@@ -634,6 +637,41 @@ class ROSInterface:
             self.gui,
             "Launching Keyence scanner",
             ["roslaunch laser_scanner_tools keyence_scanner_ljx8000.launch"],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
+
+    def launch_flow_sensor_bridge(self):
+        """Launches the foam volume flow sensor bridge on the robots."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping flow sensor bridge launch.")
+            return
+
+        _run_remote_commands(
+            self.gui,
+            "Launching flow sensor bridge",
+            ["roslaunch foam_volume_flow_sensor flow_serial_bridge.launch"],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
+
+    def stop_flow_sensor_bridge(self):
+        """Stops the foam volume flow sensor bridge on the robots."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping flow sensor bridge stop.")
+            return
+
+        stop_cmds = [
+            "rosnode kill /flow_serial_bridge || true",
+            "pkill -f flow_serial_bridge || true",
+        ]
+
+        _run_remote_commands(
+            self.gui,
+            "Stopping flow sensor bridge",
+            stop_cmds,
             use_workspace_debug=True,
             target_robots=selected_robots,
         )
