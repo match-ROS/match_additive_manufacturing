@@ -7,7 +7,7 @@
         <param name="mir_path_topic" value="/mir_path_original" />
         <param name="mir_pose_topic" value="/$(arg robot_name)/mir_pose_simple" />
         <param name="cmd_vel_topic" value="$(arg robot_name)/cmd_vel" />
-        <param name="trajectory_index_topic" value="/path_index" />
+        <param name="trajectory_index_topic" value="/path_index_modified" />
         <param name="override_topic" value="/velocity_override" />
     </node>
 </launch>
