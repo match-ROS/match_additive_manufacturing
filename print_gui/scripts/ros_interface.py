@@ -821,6 +821,8 @@ class ROSInterface:
                 "The complete state of the robot is not yet known",
                 "Battery:",
                 "Unable to transform object from frame",
+                "tf_static: sent 17 transforms",
+                "tf_static: updated transform",
                 # hier ggf. weitere Phrasen ergänzen
             ]
             for phrase in blacklist:
