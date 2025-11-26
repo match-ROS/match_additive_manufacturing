@@ -15,7 +15,7 @@ class TimeWarpingIndex:
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
         self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)  # max index offset allowed
         self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
-        self.global_avg_speed = 0.065 # default value in m/s 
+        self.global_avg_speed = 0.06 # default value in m/s 
 
         # data
         self.mir_path = None

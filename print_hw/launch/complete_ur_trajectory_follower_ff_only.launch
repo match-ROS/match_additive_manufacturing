@@ -49,7 +49,7 @@
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
-        <arg name="ff_only" value="true" />
+        <arg name="ff_only" value="false" />
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
         <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
