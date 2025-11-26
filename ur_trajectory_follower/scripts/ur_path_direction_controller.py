@@ -14,15 +14,19 @@ class DirectionController:
         self.ki_z = rospy.get_param("~ki_z", 0.0)
         self.kd_z = rospy.get_param("~kd_z", 0.0)
         rospy.loginfo(f"Z-controller gains: kp={self.kp_z}, ki={self.ki_z}, kd={self.kd_z}")
+        self.joint_state_topic = rospy.get_param("~joint_state_topic", "/mur620c/joint_states")
+        self.lift_joint_name = rospy.get_param("~lift_joint_name", "right_lift_joint")
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
         self.integral_z = 0
         self.prev_error_z = 0
+        
 
         self.path = Path()
         self.command_old_twist = Twist()
         self.current_index = 1  # Start at the first waypoint in the path
         self.trajectory_velocity=0
         self.velocity_override=1.0 # in percent
+        self.current_lift_height = 0.0
         self.current_pose = None
         self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         
@@ -31,12 +35,26 @@ class DirectionController:
         if not self.ff_only:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
-        rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)
+        rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)        # lift height
+        rospy.Subscriber(self.joint_state_topic, JointState, self.joint_state_callback)
+
+        rospy.wait_for_message(self.joint_state_topic, JointState)
+        rospy.wait_for_message("/path_index", Int32)
+        rospy.wait_for_message("path", Path)
+
 
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data
+
+    def joint_state_callback(self, msg: JointState):
+        try:
+            idx = msg.name.index(self.lift_joint_name)
+            self.current_lift_height = msg.position[idx]
+        except ValueError:
+            pass  # joint not found in this message
+
 
     def index_callback(self, index_msg: Int32):
         self.current_index = index_msg.data
@@ -118,7 +136,7 @@ class DirectionController:
         if self.ff_only:
             error_z += 0.0
         else:
-            error_z += self.nozzle_height_default + self.nozzle_height_override
+            error_z += self.nozzle_height_default + self.nozzle_height_override + self.current_lift_height
         v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
         self.integral_z+=error_z
         self.prev_error_z=error_z
