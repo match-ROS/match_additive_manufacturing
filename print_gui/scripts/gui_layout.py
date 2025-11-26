@@ -152,7 +152,7 @@ class ROSGui(QWidget):
 
         print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
             "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
-            "Increment Path Index": lambda: self.ros_interface.increment_path_index(),
+            "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
             "Stop UR Motion": lambda: stop_ur_motion(self),
             "Stop All (Keep Drivers)": lambda: stop_all_but_drivers(self),
