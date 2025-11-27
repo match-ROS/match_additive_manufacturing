@@ -30,6 +30,7 @@ class DirectionController:
         self.velocity_override=1.0 # in percent
         self.current_lift_height = 0.0
         self.current_pose = None
+        self.node_ready = False
         self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
@@ -44,8 +45,11 @@ class DirectionController:
 
         rospy.wait_for_message(self.joint_state_topic, JointState)
         rospy.wait_for_message("/path_index", Int32)
-
+        
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
+        rospy.sleep(0.1)  # allow publisher to set up
+        self.node_ready = True
+        rospy.loginfo("UR Direction Controller node initialized.")
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data
@@ -61,6 +65,8 @@ class DirectionController:
     def index_callback(self, index_msg: Int32):
         self.current_index = index_msg.data
         self.get_traj_velocity(self.from_index_offset, self.goal_index_offset)
+        if not self.node_ready:
+            return
         self.calculate_twist(self.from_index_offset, self.goal_index_offset)
 
     def velocity_override_callback(self, velocity_msg: Float32):
@@ -68,6 +74,8 @@ class DirectionController:
 
     def ee_pose_callback(self, pose_msg: PoseStamped):
         self.current_pose = pose_msg
+        if not self.node_ready:
+            return
         self.calculate_twist(self.from_index_offset, self.goal_index_offset)
 
     def _clamp_path_index(self, target_index: int) -> int:
