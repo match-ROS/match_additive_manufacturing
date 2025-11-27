@@ -2,7 +2,8 @@
 import rospy
 import numpy as np
 from nav_msgs.msg import Path
-from std_msgs.msg import Int32, Float32MultiArray
+from std_msgs.msg import Int32, Float32MultiArray, Float32
+from copy import deepcopy
 
 class TimeWarpingIndex:
     def __init__(self):
@@ -16,6 +17,7 @@ class TimeWarpingIndex:
         self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)  # max index offset allowed
         self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
         self.global_avg_speed = 0.06 # default value in m/s 
+        self.global_avg_speed_override = deepcopy(self.global_avg_speed)
 
         # data
         self.mir_path = None
@@ -24,12 +26,19 @@ class TimeWarpingIndex:
         self.current_mir_pose = None
 
         self.ur_index = 0
-        self.dt_mir = 0.1        # starts with 0.1s per step
+        self.dt_mir = 0.1 # dT of the original MiR path
 
         # subs
         rospy.Subscriber("/mir_path_original", Path, self.cb_path)
         rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_time)
         rospy.Subscriber("/path_index", Int32, self.cb_ur_index)
+        rospy.Subscriber("/velocity_override", Float32, self.velocity_override_cb)
+
+        # wait for initial data
+        rospy.loginfo("Waiting for initial data...")
+        rospy.wait_for_message("/mir_path_original", Path)
+        rospy.wait_for_message("/velocity_override", Float32)
+
 
         # internal time
         current_index = rospy.wait_for_message("/path_index", Int32).data
@@ -58,6 +67,10 @@ class TimeWarpingIndex:
     def cb_ur_index(self, msg):
         self.ur_index = msg.data
         self.t_ur = self.ur_index * self.dt_mir
+
+    def velocity_override_cb(self, msg):
+        self.velocity_override = msg.data
+        self.global_avg_speed_override = self.global_avg_speed * self.velocity_override
 
     def compute_dynamic_offset_limit(self):
         """
@@ -99,8 +112,8 @@ class TimeWarpingIndex:
 
 
     def estimate_local_speed(self, idx, window=1):
-        if self.global_avg_speed is None:
-            return self.global_avg_speed
+        if self.global_avg_speed_override is None:
+            return self.global_avg_speed_override
         
         pts = self.mir_path.poses
         start = max(1, idx - 1)
@@ -123,13 +136,12 @@ class TimeWarpingIndex:
         local_speed = self.estimate_local_speed(self.ur_index)
         # ----- 2) Continuous dt_mir adaptation -----
 
-        ratio = local_speed / self.global_avg_speed
+        ratio = local_speed / self.global_avg_speed_override
         error = (1.0 / max(ratio, 1e-6)) - 1.0     # proportional error
 
         # smooth proportional adaptation of dt_mir
-        dt_mir = 1.0 / self.rate
-        dt_mir += self.speed_gain  * error * 0.01
-
+        dt_mir = 1.0 / self.rate 
+        dt_mir += self.speed_gain  * error * 0.01 * self.velocity_override 
 
         # ----- 3) Advance MiR’s internal time -----
         self.t_mir += dt_mir
