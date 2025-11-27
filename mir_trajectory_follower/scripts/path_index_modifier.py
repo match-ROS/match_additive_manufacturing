@@ -14,9 +14,9 @@ class TimeWarpingIndex:
         self.speed_gain = rospy.get_param("~speed_gain", 0.03)  # how fast dt adapts
         self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
-        self.max_offset_idx = rospy.get_param("~max_offset_idx", 20)  # max index offset allowed
+        self.max_offset_idx = rospy.get_param("~max_offset_idx", 10)  # max index offset allowed
         self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
-        self.global_avg_speed = 0.06 # default value in m/s 
+        self.global_avg_speed = 0.045  # default value in m/s 
         self.global_avg_speed_override = deepcopy(self.global_avg_speed)
 
         # data
@@ -70,7 +70,7 @@ class TimeWarpingIndex:
 
     def velocity_override_cb(self, msg):
         self.velocity_override = msg.data
-        self.global_avg_speed_override = self.global_avg_speed * self.velocity_override
+        self.global_avg_speed_override = self.global_avg_speed #* self.velocity_override 
 
     def compute_dynamic_offset_limit(self):
         """
@@ -140,8 +140,8 @@ class TimeWarpingIndex:
         error = (1.0 / max(ratio, 1e-6)) - 1.0     # proportional error
 
         # smooth proportional adaptation of dt_mir
-        dt_mir = 1.0 / self.rate 
-        dt_mir += self.speed_gain  * error * 0.01 * self.velocity_override 
+        dt_mir = self.velocity_override * 1.0 / self.rate 
+        dt_mir += self.speed_gain  * error * 0.01 
 
         # ----- 3) Advance MiR’s internal time -----
         self.t_mir += dt_mir
