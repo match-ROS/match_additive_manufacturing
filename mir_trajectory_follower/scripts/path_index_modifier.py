@@ -11,12 +11,12 @@ class TimeWarpingIndex:
 
         # tunable parameters
         self.rate = 100.0
-        self.speed_gain = rospy.get_param("~speed_gain", 0.03)  # how fast dt adapts
+        self.speed_gain = rospy.get_param("~speed_gain", 0.05)  # how fast dt adapts
         self.max_speed_scale = rospy.get_param("~max_speed_scale", 1.05)
         self.min_speed_scale = rospy.get_param("~min_speed_scale", 0.95)
         self.max_offset_idx = rospy.get_param("~max_offset_idx", 10)  # max index offset allowed
         self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
-        self.global_avg_speed = 0.045  # default value in m/s 
+        self.global_avg_speed = 0.051  # default value in m/s 
         self.global_avg_speed_override = deepcopy(self.global_avg_speed)
 
         # data
@@ -38,6 +38,12 @@ class TimeWarpingIndex:
         rospy.loginfo("Waiting for initial data...")
         rospy.wait_for_message("/mir_path_original", Path)
         rospy.wait_for_message("/velocity_override", Float32)
+        rospy.wait_for_message("/mir_path_timestamps", Float32MultiArray)
+
+        # compute global average speed
+        if self.mir_path is not None:
+            self.global_avg_speed = self.compute_global_avg_speed_from_straights(0.1)
+            rospy.loginfo(f"Global avg speed (straights only): {self.global_avg_speed:.3f} m/s")
 
 
         # internal time
@@ -110,8 +116,83 @@ class TimeWarpingIndex:
 
         return allowed_offset
 
+    def compute_path_curvature(self):
+        """
+        Returns array of curvature values for each path point.
+        Start and end points receive curvature = 0.
+        """
+        pts = self.mir_path.poses
+        N = len(pts)
 
-    def estimate_local_speed(self, idx, window=1):
+        curvature = np.zeros(N)
+
+        for i in range(1, N - 1):
+            p_prev = np.array([pts[i-1].pose.position.x,
+                            pts[i-1].pose.position.y])
+            p     = np.array([pts[i].pose.position.x,
+                            pts[i].pose.position.y])
+            p_next = np.array([pts[i+1].pose.position.x,
+                            pts[i+1].pose.position.y])
+
+            a = np.linalg.norm(p - p_prev)
+            b = np.linalg.norm(p_next - p)
+            c = np.linalg.norm(p_next - p_prev)
+
+            # Degenerate case
+            if a < 1e-6 or b < 1e-6 or c < 1e-6:
+                curvature[i] = 0.0
+                continue
+
+            # Triangle area
+            s = 0.5 * (a + b + c)
+            A = max(0.0, s*(s-a)*(s-b)*(s-c)) ** 0.5
+
+            # curvature k = 4A / (abc)
+            curvature[i] = 4 * A / (a * b * c)
+
+        return curvature
+
+    def compute_global_avg_speed_from_straights(self, curvature_threshold=0.1):
+        """
+        Computes global average speed using only straight segments.
+        curvature_threshold defines what counts as straight.
+        """
+        if self.mir_path is None or self.timestamps is None:
+            return None
+
+        curv = self.compute_path_curvature()
+        pts = self.mir_path.poses
+        t = self.timestamps
+
+        speeds = []
+
+        for i in range(1, len(pts)):
+            if curv[i] > curvature_threshold:
+                continue  # skip curves
+
+            p0 = pts[i-1].pose.position
+            p1 = pts[i].pose.position
+            dist = np.linalg.norm([p1.x - p0.x, p1.y - p0.y])
+
+            dt = t[i] - t[i-1]
+            if dt <= 0:
+                continue
+
+            speeds.append(dist / dt)
+
+        if len(speeds) == 0:
+            # fallback: use full-path average
+            return np.mean([
+                np.linalg.norm([
+                    pts[i].pose.position.x - pts[i-1].pose.position.x,
+                    pts[i].pose.position.y - pts[i-1].pose.position.y
+                ]) / max(t[i]-t[i-1], 1e-3)
+                for i in range(1, len(pts))
+            ])
+
+        return np.mean(speeds)
+
+    def estimate_local_speed(self, idx, window=5):
         if self.global_avg_speed_override is None:
             return self.global_avg_speed_override
         

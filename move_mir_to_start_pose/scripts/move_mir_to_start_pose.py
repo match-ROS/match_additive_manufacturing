@@ -83,7 +83,7 @@ class MoveToFirstPathPoint:
 
 
         if success:
-            self.turn_robot_towards_path()
+            #self.turn_robot_towards_path()
             rospy.loginfo("Successfully reached the first pose!")
             rospy.signal_shutdown("Successfully reached the first pose!")
         else:
@@ -98,9 +98,8 @@ class MoveToFirstPathPoint:
             self.orientation.z,
             self.orientation.w
         ])[2]
-        while angle_diff > 0.1:
+        while not rospy.is_shutdown() and angle_diff > 0.1:
             angle_diff = target_orientation - self.robot_orientation 
-            print(angle_diff)
             if angle_diff > math.pi:
                 angle_diff -= 2*math.pi
             elif angle_diff < -math.pi:
