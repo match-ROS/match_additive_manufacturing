@@ -12,7 +12,7 @@
     <arg name="velocity_override_topic" default="/velocity_override"/>
     <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
     <arg name="twist_topic" default="/ur_error_world"/>
-    <arg name="ff_only" default="false"/>
+    <arg name="ff_only" default="true"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
         <!-- Parameters -->
