@@ -31,13 +31,13 @@ class DirectionController:
         self.current_lift_height = 0.0
         self.current_pose = None
         self.node_ready = False
-        self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
+        self.ff_mode = rospy.get_param("~ff_mode", 3) # 1: ff_only 2: feedback Control 3: ff for direction feedback of distance
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
         
         self.path = rospy.wait_for_message("/path", Path)
         rospy.Subscriber("/path_index", Int32, self.index_callback)
-        if not self.ff_only:
+        if self.ff_mode > 1:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)        # lift height
@@ -50,6 +50,7 @@ class DirectionController:
         rospy.sleep(0.1)  # allow publisher to set up
         self.node_ready = True
         rospy.loginfo("UR Direction Controller node initialized.")
+        self.index_callback(Int32(data=self.current_index))  # initial calculation
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data
@@ -123,7 +124,7 @@ class DirectionController:
             return np.array([0, 0]), 0.0
         goal_idx = self._clamp_path_index(self.current_index + goal_offset)
         goal_pose = self.path.poses[goal_idx]
-        if self.ff_only:
+        if self.ff_mode == 1 or self.ff_mode == 3:
             from_idx = self._clamp_path_index(self.current_index + from_offset)
             from_pose = self.path.poses[from_idx]
         else:
@@ -135,8 +136,14 @@ class DirectionController:
         norm_xy = np.linalg.norm(direction_xy)
         if norm_xy < 1e-6:
             return np.array([0, 0]), direction[2]
-        
-        direction_xy_norm = direction_xy / norm_xy
+
+        if self.ff_mode == 3: # compute distance error along path
+            to_goal = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
+                                goal_pose.pose.position.y - from_pose.pose.position.y])
+            distance_along_path = np.dot(to_goal, direction_xy / norm_xy)
+            direction_xy_norm = ((1+distance_along_path) * direction_xy) / norm_xy
+        else:
+            direction_xy_norm = direction_xy / norm_xy
         return direction_xy_norm, direction[2]
 
     def smooth_output(self, control_command: Twist):
@@ -155,15 +162,31 @@ class DirectionController:
 
     def calculate_twist(self, from_offset: int, goal_offset: int):
         """Control the direction of the robot to follow the path."""
-        if not self.ff_only and self.current_pose is None:
+        if self.ff_mode > 1 and self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return
         
+        # Compute distance error along the path direction
         direction_xy_norm, error_z = self.get_direction(from_offset, goal_offset)
+        goal_idx = self._clamp_path_index(self.current_index + goal_offset)
+        goal_pose = self.path.poses[goal_idx]
+
+        if self.ff_mode == 3:
+            from_pose = self.current_pose
+            # Vector from reference point to goal
+            to_goal = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
+                                goal_pose.pose.position.y - from_pose.pose.position.y])
+            # Project onto path direction to get distance error along path
+            if np.linalg.norm(direction_xy_norm) > 1e-6:
+                distance_along_path = np.dot(to_goal, direction_xy_norm)
+            else:
+                distance_along_path = 0.0
+            #rospy.logwarn(f"Distance along path: {distance_along_path}")
+
         v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
-        if self.ff_only:
+        if self.ff_mode == 1 or self.ff_mode == 3:
             error_z += 0.0
         else:
             error_z += self.nozzle_height_default + self.nozzle_height_override 
@@ -177,7 +200,7 @@ class DirectionController:
         control_command.linear.y = v_xy[1]
         control_command.linear.z = v_z
         control_command_smoothed = self.smooth_output(control_command)
-
+        
         self.pub_ur_velocity_world.publish(control_command_smoothed)
 
 if __name__ == "__main__":
