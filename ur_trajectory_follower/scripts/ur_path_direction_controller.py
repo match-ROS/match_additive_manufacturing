@@ -35,7 +35,11 @@ class DirectionController:
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
         
-        self.path = rospy.wait_for_message("/path", Path)
+        self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
+        rospy.sleep(0.1)  # allow publisher to set up
+
+        self.path = rospy.wait_for_message("/path", Path)        
+
         rospy.Subscriber("/path_index", Int32, self.index_callback)
         if not self.ff_only:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
@@ -46,8 +50,6 @@ class DirectionController:
         rospy.wait_for_message(self.joint_state_topic, JointState)
         rospy.wait_for_message("/path_index", Int32)
         
-        self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
-        rospy.sleep(0.1)  # allow publisher to set up
         self.node_ready = True
         rospy.loginfo("UR Direction Controller node initialized.")
 
@@ -155,6 +157,8 @@ class DirectionController:
 
     def calculate_twist(self, from_offset: int, goal_offset: int):
         """Control the direction of the robot to follow the path."""
+
+        rospy.logdebug(f"Calculating twist at index {self.current_index} with from_offset {from_offset} and goal_offset {goal_offset}.")
         if not self.ff_only and self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return

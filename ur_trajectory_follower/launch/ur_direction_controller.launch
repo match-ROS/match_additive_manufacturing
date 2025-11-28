@@ -13,6 +13,8 @@
     <arg name="nozzle_height_override_topic" default="/nozzle_height_override"/>
     <arg name="twist_topic" default="/ur_error_world"/>
     <arg name="ff_only" default="true"/>
+    <arg name="from_index_offset" default="-2"/>
+    <arg name="to_index_offset" default="2"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
         <!-- Parameters -->

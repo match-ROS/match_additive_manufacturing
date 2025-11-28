@@ -2,7 +2,7 @@ import os
 import subprocess
 import yaml
 import threading
-from typing import Optional
+from typing import Optional, Iterable
 import signal
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -17,6 +17,8 @@ from rosgraph_msgs.msg import Log
 import rosnode
 import time
 
+from dynamixel_workbench_msgs.msg import DynamixelStateList
+
 import rospy
 from geometry_msgs.msg import PoseStamped
 
@@ -25,29 +27,31 @@ DEBUG_CONFIG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "config", "rosconsole_debug.config")
 )
 
-DRIVER_NODE_CACHE_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "config", "driver_nodes.yaml")
+GUI_CACHE_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "config", "gui_persistence.yaml")
 )
 
+DEFAULT_SPRAY_DISTANCE = 0.52
 
-def _deploy_driver_node_cache_to_robot(robot: str, workspace: Optional[str]):
-    """Copy the driver node cache file onto the robot's workspace."""
+
+def _deploy_gui_cache_to_robot(robot: str, workspace: Optional[str]):
+    """Copy the GUI cache (driver nodes, spray distance, …) onto the robot's workspace."""
     robot = (robot or "").strip()
     workspace = (workspace or "").strip()
     if not (robot and workspace):
         return
-    if not os.path.exists(DRIVER_NODE_CACHE_PATH):
+    if not os.path.exists(GUI_CACHE_PATH):
         return
 
-    remote_path = f"{robot}:~/{workspace}/src/match_additive_manufacturing/print_gui/config/driver_nodes.yaml"
+    remote_path = f"{robot}:~/{workspace}/src/match_additive_manufacturing/print_gui/config/gui_persistence.yaml"
     try:
         subprocess.check_call([
             "scp",
-            DRIVER_NODE_CACHE_PATH,
+            GUI_CACHE_PATH,
             remote_path,
         ])
     except subprocess.CalledProcessError as exc:
-        print(f"Failed to copy driver node cache to {robot}: {exc}")
+        print(f"Failed to copy GUI cache to {robot}: {exc}")
 
 
 def _is_debug_enabled(gui) -> bool:
@@ -74,6 +78,49 @@ def _remote_debug_prefix(gui, workspace: Optional[str] = None) -> str:
 def _popen_with_debug(command, gui, shell=False, **kwargs):
     env = _build_debug_env(gui, kwargs.pop("env", None))
     return subprocess.Popen(command, shell=shell, env=env, **kwargs)
+
+
+def _load_gui_cache_payload() -> dict:
+    try:
+        with open(GUI_CACHE_PATH, "r", encoding="utf-8") as stream:
+            data = yaml.safe_load(stream) or {}
+    except FileNotFoundError:
+        return {}
+    except (yaml.YAMLError, OSError) as exc:
+        print(f"Failed to read GUI cache: {exc}")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_gui_cache_payload(payload: dict):
+    os.makedirs(os.path.dirname(GUI_CACHE_PATH), exist_ok=True)
+    with open(GUI_CACHE_PATH, "w", encoding="utf-8") as stream:
+        yaml.safe_dump(payload, stream, default_flow_style=False, sort_keys=True)
+
+
+def _load_servo_targets_cache(default_left: float = 0.0, default_right: float = 0.0):
+    data = _load_gui_cache_payload()
+    entry = data.get("servo_targets") if isinstance(data, dict) else None
+    left = default_left
+    right = default_right
+    if isinstance(entry, dict):
+        l_val = entry.get("left")
+        r_val = entry.get("right")
+        if isinstance(l_val, (int, float)):
+            left = float(l_val)
+        if isinstance(r_val, (int, float)):
+            right = float(r_val)
+    return (left, right)
+
+
+def _save_servo_targets_cache(left: float, right: float):
+    payload = _load_gui_cache_payload()
+    payload["servo_targets"] = {
+        "left": float(left),
+        "right": float(right),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    _save_gui_cache_payload(payload)
 
 
 def _run_remote_commands(
@@ -172,45 +219,119 @@ def _collect_driver_node_names(robot: str, launch_args) -> set:
 
 def _load_driver_node_cache() -> dict:
     """Load the persisted driver nodes from disk (per robot)."""
-    try:
-        with open(DRIVER_NODE_CACHE_PATH, "r", encoding="utf-8") as stream:
-            data = yaml.safe_load(stream) or {}
-    except FileNotFoundError:
-        return {}
-    except (yaml.YAMLError, OSError) as exc:
-        print(f"Failed to read driver node cache: {exc}")
-        return {}
+    data = _load_gui_cache_payload()
 
-    if isinstance(data, dict) and "robots" in data and isinstance(data["robots"], dict):
-        raw = data["robots"]
-    elif isinstance(data, dict):
-        raw = data
-    else:
-        return {}
+    robots_section = data.get("robots") if isinstance(data, dict) else None
+    raw = robots_section if isinstance(robots_section, dict) else {}
+
+    # legacy support: old payload stored under top-level driver_nodes/robots
+    if not raw:
+        legacy = data.get("driver_nodes") if isinstance(data, dict) else None
+        if isinstance(legacy, dict) and isinstance(legacy.get("robots"), dict):
+            raw = legacy.get("robots", {})
+        elif isinstance(data, dict) and isinstance(data.get("robots"), dict):
+            raw = data.get("robots", {})
 
     normalized = {}
     for robot, nodes in raw.items():
         if not isinstance(robot, str):
             continue
-        if isinstance(nodes, (list, tuple, set)):
-            normalized[robot] = set(str(n).strip() for n in nodes if str(n).strip())
+        node_list = None
+        if isinstance(nodes, dict) and isinstance(nodes.get("driver_nodes"), (list, tuple, set)):
+            node_list = nodes.get("driver_nodes")
+        elif isinstance(nodes, (list, tuple, set)):
+            node_list = nodes
+
+        if node_list:
+            normalized[robot] = set(str(n).strip() for n in node_list if str(n).strip())
     return normalized
 
 
 def _save_driver_node_cache(node_map: dict):
     """Persist the provided per-robot node map to disk as YAML."""
-    os.makedirs(os.path.dirname(DRIVER_NODE_CACHE_PATH), exist_ok=True)
-    serializable = {
-        robot: sorted({str(n).strip() for n in nodes if str(n).strip()})
-        for robot, nodes in node_map.items()
-        if robot and nodes
+    payload = _load_gui_cache_payload()
+    robots_section = payload.setdefault("robots", {})
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    for robot, nodes in node_map.items():
+        if not robot:
+            continue
+        normalized = sorted({str(n).strip() for n in nodes if str(n).strip()})
+        robot_entry = robots_section.setdefault(robot, {})
+        robot_entry["driver_nodes"] = normalized
+        robot_entry["updated_at"] = timestamp
+
+    _save_gui_cache_payload(payload)
+
+
+def _clamp_spray_distance(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _extract_spray_distance(entry) -> Optional[float]:
+    if isinstance(entry, dict):
+        block = entry.get("spray_distance")
+        if isinstance(block, dict):
+            val = block.get("value")
+            if isinstance(val, (int, float)):
+                return float(val)
+        if isinstance(block, (int, float)):
+            return float(block)
+        value = entry.get("value")
+        if isinstance(value, (int, float)):
+            return float(value)
+    elif isinstance(entry, (int, float)):
+        return float(entry)
+    return None
+
+
+def _load_spray_distance_cache(robot: Optional[str] = None, default: float = DEFAULT_SPRAY_DISTANCE) -> float:
+    data = _load_gui_cache_payload()
+
+    if robot:
+        robots_section = data.get("robots") if isinstance(data, dict) else None
+        if isinstance(robots_section, dict):
+            robot_entry = robots_section.get(robot)
+            value = _extract_spray_distance(robot_entry)
+            if value is not None:
+                return _clamp_spray_distance(value)
+
+    # fallback to first available robot entry
+    robots_section = data.get("robots") if isinstance(data, dict) else None
+    if isinstance(robots_section, dict):
+        for entry in robots_section.values():
+            value = _extract_spray_distance(entry)
+            if value is not None:
+                return _clamp_spray_distance(value)
+
+    # fallback to legacy top-level spray_distance
+    value = _extract_spray_distance(data if isinstance(data, dict) else None)
+    if value is not None:
+        return _clamp_spray_distance(value)
+
+    return default
+
+
+def _save_spray_distance_cache(value: float, robots: Optional[Iterable[str]] = None):
+    payload = _load_gui_cache_payload()
+    robots_section = payload.setdefault("robots", {})
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    clamped = float(_clamp_spray_distance(value))
+
+    robot_list = [r for r in (robots or []) if r]
+    for robot in robot_list:
+        entry = robots_section.setdefault(robot, {})
+        entry["spray_distance"] = {
+            "value": clamped,
+            "updated_at": timestamp,
+        }
+
+    payload["spray_distance"] = {
+        "value": clamped,
+        "updated_at": timestamp,
     }
-    payload = {
-        "robots": serializable,
-        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    with open(DRIVER_NODE_CACHE_PATH, "w", encoding="utf-8") as stream:
-        yaml.safe_dump(payload, stream, default_flow_style=False, sort_keys=True)
+
+    _save_gui_cache_payload(payload)
 
 
 def _format_ros_list_arg(values):
@@ -336,6 +457,10 @@ class ROSInterface:
         self.battery_states = {}
         self.active_battery_subs = set()
         self.current_index = 0
+        self._cached_spray_distance = _load_spray_distance_cache()
+        self._cached_servo_targets = _load_servo_targets_cache()
+        self._servo_state_lock = threading.Lock()
+        self._latest_servo_positions = {}
 
         # Rosbag config
         self.rosbag_topics = [
@@ -369,6 +494,7 @@ class ROSInterface:
         # Subscriptions and publishers used by the GUI
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
         self._init_dynamixel_publishers()
+        self._init_servo_state_listener()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
         self._last_med_base = float('nan')
         self._last_med_map = float('nan')
@@ -398,6 +524,58 @@ class ROSInterface:
             rospy.Subscriber('/profiles/median_map', Float32, _median_map_cb, queue_size=1)
         except Exception as e:
             rospy.logwarn(f"Failed to subscribe to median topics: {e}")
+
+    def get_cached_spray_distance(self) -> float:
+        current = getattr(self, "_cached_spray_distance", DEFAULT_SPRAY_DISTANCE)
+        robots = getattr(self.gui, "get_selected_robots", lambda: [])()
+        target_robot = None
+        if isinstance(robots, str):
+            target_robot = robots
+        elif isinstance(robots, (list, tuple)) and robots:
+            target_robot = robots[0]
+
+        resolved = _load_spray_distance_cache(target_robot, current)
+        self._cached_spray_distance = resolved
+        return resolved
+
+    def persist_spray_distance(self, value: float, target_robots=None):
+        clamped = _clamp_spray_distance(value)
+        self._cached_spray_distance = clamped
+
+        robots = target_robots if target_robots is not None else (
+            getattr(self.gui, "get_selected_robots", lambda: [])()
+        )
+        if isinstance(robots, str):
+            robots = [robots]
+        elif robots is None:
+            robots = []
+        robots = [r for r in robots if r]
+        _save_spray_distance_cache(clamped, robots)
+        workspace = (getattr(self.gui, "get_workspace_name", lambda: "")() or "").strip()
+
+        if not robots or not workspace:
+            return
+
+        def _run_deploy(targets, ws):
+            for robot in targets:
+                try:
+                    _deploy_gui_cache_to_robot(robot, ws)
+                except Exception as exc:
+                    print(f"Failed to deploy GUI cache to {robot}: {exc}")
+
+        threading.Thread(target=_run_deploy, args=(list(robots), workspace), daemon=True).start()
+
+    def get_cached_servo_targets(self):
+        targets = getattr(self, "_cached_servo_targets", (0.0, 0.0))
+        if isinstance(targets, (list, tuple)) and len(targets) == 2:
+            return targets
+        return (0.0, 0.0)
+
+    def persist_servo_targets(self, left_percent: float, right_percent: float):
+        left = float(left_percent)
+        right = float(right_percent)
+        self._cached_servo_targets = (left, right)
+        _save_servo_targets_cache(left, right)
 
         # Subscribe to /rosout to forward log messages into the GUI
         try:
@@ -810,6 +988,68 @@ class ROSInterface:
         except Exception as e:
             rospy.logerr(f"Failed to publish servo targets: {e}")
 
+    def _init_servo_state_listener(self):
+        """Subscribe to the Dynamixel state topic to cache latest raw positions."""
+        try:
+            rospy.Subscriber(
+                '/dynamixel_workbench/dynamixel_state',
+                DynamixelStateList,
+                self._servo_state_cb,
+                queue_size=1,
+            )
+        except Exception as exc:
+            rospy.logwarn(f"Failed to subscribe to dynamixel state topic: {exc}")
+
+    def _servo_state_cb(self, msg: DynamixelStateList):
+        entries = getattr(msg, 'dynamixel_state', []) if msg is not None else []
+        if not entries:
+            return
+        with self._servo_state_lock:
+            store = self._latest_servo_positions
+            for state in entries:
+                try:
+                    pos_val = int(round(getattr(state, 'present_position', 0)))
+                except Exception:
+                    continue
+                keys = set()
+                name = getattr(state, 'name', '')
+                if isinstance(name, str) and name.strip():
+                    normalized = name.strip().lower()
+                    keys.add(normalized)
+                    if normalized.startswith('servo_'):
+                        keys.add(normalized.replace('servo_', '', 1))
+                    keys.add(f"servo_{normalized}")
+                try:
+                    motor_id = int(getattr(state, 'id', -1))
+                    if motor_id >= 0:
+                        keys.add(str(motor_id))
+                        keys.add(f"id_{motor_id}")
+                except Exception:
+                    pass
+                for key in keys:
+                    store[key] = pos_val
+
+    def get_latest_servo_position(self, which: str):
+        """Return the most recent raw position for the requested servo."""
+        if not which:
+            return None
+        lookup_keys = []
+        normalized = str(which).strip().lower()
+        if normalized:
+            lookup_keys.extend([
+                normalized,
+                f"servo_{normalized}",
+                normalized.replace('servo_', '', 1) if normalized.startswith('servo_') else '',
+            ])
+            if normalized in ('left', 'right'):
+                lookup_keys.append('1' if normalized == 'left' else '2')
+        with self._servo_state_lock:
+            snapshot = dict(self._latest_servo_positions)
+        for key in lookup_keys:
+            if key and key in snapshot:
+                return snapshot[key]
+        return None
+
     def _rosout_cb(self, msg: Log):
         """
         Callback for /rosout (rosgraph_msgs/Log).
@@ -1049,7 +1289,7 @@ def launch_drivers(gui):
         cache.update({robot: set(nodes) for robot, nodes in persist_updates.items()})
         _save_driver_node_cache(cache)
         for robot in selected_robots:
-            _deploy_driver_node_cache_to_robot(robot, workspace_name)
+            _deploy_gui_cache_to_robot(robot, workspace_name)
 
 def quit_drivers(gui=None):
     """Terminates running driver sessions and uses the per-robot SSH channel for clean stops."""
@@ -1099,7 +1339,7 @@ def quit_drivers(gui=None):
                 _save_driver_node_cache(combined_cache)
                 if robots and workspace_name:
                     for robot in robots:
-                        _deploy_driver_node_cache_to_robot(robot, workspace_name)
+                        _deploy_gui_cache_to_robot(robot, workspace_name)
 
             if combined_cache:
                 gui._driver_nodes_by_robot = combined_cache

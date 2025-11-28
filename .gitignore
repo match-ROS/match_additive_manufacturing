@@ -2,3 +2,4 @@
 venv
 component/rl_trajectory_optimizer/ppo_tensorboard_logs/*
 foam_motors_dynamixel/.vscode
+print_gui/config/driver_nodes.yaml

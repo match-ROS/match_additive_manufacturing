@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
 from typing import Any, cast
@@ -135,7 +135,9 @@ class ROSGui(QWidget):
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b
             b.clicked.connect(lambda _, f=fn: f()); b.setStyleSheet("background-color: lightgray;"); setup_layout.addWidget(b)
-        spray_distance_box = QHBoxLayout(); spray_distance_box.addWidget(QLabel("Spray Distance (m):")); self.spray_distance_spin = QDoubleSpinBox(); self.spray_distance_spin.setRange(0.0, 1.0); self.spray_distance_spin.setDecimals(4); self.spray_distance_spin.setSingleStep(0.001); self.spray_distance_spin.setValue(0.52); spray_distance_box.addWidget(self.spray_distance_spin); left_layout.addLayout(spray_distance_box)
+        spray_distance_box = QHBoxLayout(); spray_distance_box.addWidget(QLabel("Spray Distance (m):")); self.spray_distance_spin = QDoubleSpinBox(); self.spray_distance_spin.setRange(0.0, 1.0); self.spray_distance_spin.setDecimals(4); self.spray_distance_spin.setSingleStep(0.001); self.spray_distance_spin.setValue(self.ros_interface.get_cached_spray_distance());
+        self._spray_distance_timer = QTimer(self); self._spray_distance_timer.setSingleShot(True); self._spray_distance_timer.setInterval(700); self._spray_distance_timer.timeout.connect(self._persist_pending_spray_distance); self._pending_spray_distance = self.spray_distance_spin.value();
+        self.spray_distance_spin.valueChanged.connect(self._handle_spray_distance_changed); spray_distance_box.addWidget(self.spray_distance_spin); left_layout.addLayout(spray_distance_box)
 
         self.workspace_input = QLineEdit(); default_path = self.get_relative_workspace_path(); self.workspace_input.setText(default_path); self.workspace_input.setPlaceholderText("Enter workspace name"); setup_layout.addWidget(QLabel("Workspace Name:")); setup_layout.addWidget(self.workspace_input); setup_group.setLayout(setup_layout); left_layout.addWidget(setup_group)
         main_layout.addLayout(left_layout)
@@ -188,8 +190,12 @@ class ROSGui(QWidget):
         
         # Servo section
         servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
-        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setOrientation(Qt.Horizontal); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = EnterSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(0); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); self.servo_left_spin.returnPressed.connect(self._send_percent_targets); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
-        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setOrientation(Qt.Horizontal); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = EnterSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(0); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); self.servo_right_spin.returnPressed.connect(self._send_percent_targets); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
+        left_percent, right_percent = self.ros_interface.get_cached_servo_targets()
+        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setOrientation(Qt.Horizontal); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = EnterSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(int(round(left_percent))); self.servo_left_slider.setValue(int(round(left_percent))); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); self.servo_left_spin.returnPressed.connect(self._send_percent_targets); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
+        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setOrientation(Qt.Horizontal); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = EnterSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(int(round(right_percent))); self.servo_right_slider.setValue(int(round(right_percent))); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); self.servo_right_spin.returnPressed.connect(self._send_percent_targets); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
+        self.servo_left_spin.valueChanged.connect(self._handle_servo_percent_change)
+        self.servo_right_spin.valueChanged.connect(self._handle_servo_percent_change)
+        self._servo_percent_timer = QTimer(self); self._servo_percent_timer.setSingleShot(True); self._servo_percent_timer.setInterval(700); self._servo_percent_timer.timeout.connect(self._persist_pending_servo_percentages); self._pending_servo_targets = (left_percent, right_percent)
         send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
         targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
@@ -290,6 +296,40 @@ class ROSGui(QWidget):
         """Stop the flow sensor bridge when its button is right-clicked."""
         self.ros_interface.stop_flow_sensor_bridge()
 
+    def _handle_spray_distance_changed(self, value: float):
+        self._pending_spray_distance = value
+        if hasattr(self, "_spray_distance_timer"):
+            self._spray_distance_timer.start()
+
+    def _persist_pending_spray_distance(self):
+        value = getattr(self, "_pending_spray_distance", None)
+        if value is None:
+            return
+        try:
+            self.ros_interface.persist_spray_distance(value)
+        except Exception as exc:
+            print(f"Failed to persist spray distance: {exc}")
+
+    def _handle_servo_percent_change(self, _value):
+        if not hasattr(self, "servo_left_spin") or not hasattr(self, "servo_right_spin"):
+            return
+        self._pending_servo_targets = (
+            float(self.servo_left_spin.value()),
+            float(self.servo_right_spin.value())
+        )
+        if hasattr(self, "_servo_percent_timer"):
+            self._servo_percent_timer.start()
+
+    def _persist_pending_servo_percentages(self):
+        pending = getattr(self, "_pending_servo_targets", None)
+        if not pending:
+            return
+        left, right = pending
+        try:
+            self.ros_interface.persist_servo_targets(left, right)
+        except Exception as exc:
+            print(f"Failed to persist servo targets: {exc}")
+
     def _load_servo_calibration_defaults(self):
         """Load servo calibration defaults from config, falling back to baked values."""
         base_defaults = {
@@ -300,9 +340,7 @@ class ROSGui(QWidget):
         def clone_defaults(src):
             return {side: dict(values) for side, values in src.items()}
 
-        config_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "config", "servo_calibration_defaults.json")
-        )
+        config_path = self._servo_calibration_config_path()
 
         try:
             with open(config_path, "r", encoding="utf-8") as cfg:
@@ -330,6 +368,24 @@ class ROSGui(QWidget):
 
         return merged
 
+    def _servo_calibration_config_path(self) -> str:
+        return os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "config", "servo_calibration_defaults.json")
+        )
+
+    def _save_servo_calibration_defaults(self, calib_data: dict):
+        config_path = self._servo_calibration_config_path()
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        normalized = {}
+        for side in ('left', 'right'):
+            values = calib_data.get(side, {}) if isinstance(calib_data, dict) else {}
+            normalized[side] = {
+                key: int(values.get(key, self.servo_calib[side][key]))
+                for key in ('min', 'zero', 'max')
+            }
+        with open(config_path, "w", encoding="utf-8") as cfg:
+            json.dump(normalized, cfg, indent=2, sort_keys=True)
+
     def _percent_to_raw(self, percent: float, which: str) -> int:
         c = self.servo_calib[which]
         span = c['max'] - c['min']
@@ -353,7 +409,12 @@ class ROSGui(QWidget):
         )
 
     def open_servo_calibration(self):
-        dlg = ServoCalibrationDialog(self, self.servo_calib)
+        dlg = ServoCalibrationDialog(
+            self,
+            self.servo_calib,
+            state_provider=self.ros_interface,
+            save_callback=self._save_servo_calibration_defaults,
+        )
         if dlg.exec_() == QDialog.Accepted:
             self.servo_calib = dlg.get_values()
             # update zero spin boxes
@@ -579,7 +640,7 @@ class URFollowSettingsDialog(QDialog):
 
 
 class ServoCalibrationDialog(QDialog):
-    def __init__(self, parent, calib):
+    def __init__(self, parent, calib, state_provider=None, save_callback=None):
         super().__init__(parent)
         self.setWindowTitle("Servo Calibration")
         self._orig = calib
@@ -587,29 +648,137 @@ class ServoCalibrationDialog(QDialog):
             'left': calib['left'].copy(),
             'right': calib['right'].copy()
         }
+        self._state_provider = state_provider
+        self._save_callback = save_callback
         form = QFormLayout()
         # Left
         self.left_min = QSpinBox(); self.left_min.setRange(0,4095); self.left_min.setValue(self._data['left']['min'])
         self.left_zero = QSpinBox(); self.left_zero.setRange(0,4095); self.left_zero.setValue(self._data['left']['zero'])
         self.left_max = QSpinBox(); self.left_max.setRange(0,4095); self.left_max.setValue(self._data['left']['max'])
-        form.addRow(QLabel("Left Min"), self.left_min)
-        form.addRow(QLabel("Left Zero"), self.left_zero)
-        form.addRow(QLabel("Left Max"), self.left_max)
+        form.addRow(QLabel("Left Min"), self._wrap_spin_with_buttons(
+            self.left_min,
+            [
+                ("Use Live", lambda _, spin=self.left_min: self._apply_live_position('left', spin)),
+            ],
+        ))
+        form.addRow(QLabel("Left Zero"), self._wrap_spin_with_buttons(
+            self.left_zero,
+            [
+                ("Use Live", lambda _, spin=self.left_zero: self._apply_live_position('left', spin)),
+                ("Auto Range", lambda _, side='left': self._auto_calc_range(side)),
+            ],
+        ))
+        form.addRow(QLabel("Left Max"), self._wrap_spin_with_buttons(
+            self.left_max,
+            [
+                ("Use Live", lambda _, spin=self.left_max: self._apply_live_position('left', spin)),
+            ],
+        ))
         # Right
         self.right_min = QSpinBox(); self.right_min.setRange(0,4095); self.right_min.setValue(self._data['right']['min'])
         self.right_zero = QSpinBox(); self.right_zero.setRange(0,4095); self.right_zero.setValue(self._data['right']['zero'])
         self.right_max = QSpinBox(); self.right_max.setRange(0,4095); self.right_max.setValue(self._data['right']['max'])
-        form.addRow(QLabel("Right Min"), self.right_min)
-        form.addRow(QLabel("Right Zero"), self.right_zero)
-        form.addRow(QLabel("Right Max"), self.right_max)
+        form.addRow(QLabel("Right Min"), self._wrap_spin_with_buttons(
+            self.right_min,
+            [
+                ("Use Live", lambda _, spin=self.right_min: self._apply_live_position('right', spin)),
+            ],
+        ))
+        form.addRow(QLabel("Right Zero"), self._wrap_spin_with_buttons(
+            self.right_zero,
+            [
+                ("Use Live", lambda _, spin=self.right_zero: self._apply_live_position('right', spin)),
+                ("Auto Range", lambda _, side='right': self._auto_calc_range(side)),
+            ],
+        ))
+        form.addRow(QLabel("Right Max"), self._wrap_spin_with_buttons(
+            self.right_max,
+            [
+                ("Use Live", lambda _, spin=self.right_max: self._apply_live_position('right', spin)),
+            ],
+        ))
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        save_btn = buttons.addButton("Save Defaults", QDialogButtonBox.ActionRole)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
+        if save_btn is not None:
+            save_btn.clicked.connect(self._handle_save_defaults)
         layout = QVBoxLayout()
         layout.addLayout(form)
         layout.addWidget(buttons)
         self.setLayout(layout)
+
+    def _wrap_spin_with_buttons(self, spinbox, button_defs):
+        container = QWidget(); row = QHBoxLayout(container); row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(spinbox)
+        for text, handler in button_defs:
+            btn = QPushButton(text); btn.setAutoDefault(False); btn.setDefault(False); btn.setMaximumWidth(120)
+            btn.clicked.connect(handler)
+            row.addWidget(btn)
+        row.addStretch(1)
+        return container
+
+    def _apply_live_position(self, side: str, spinbox: QSpinBox):
+        value = self._fetch_live_position(side)
+        if value is None:
+            self._show_missing_live_data_warning(side)
+            return
+        spinbox.setValue(self._wrap_raw(value))
+
+    def _fetch_live_position(self, side: str):
+        if self._state_provider is None:
+            return None
+        getter = getattr(self._state_provider, 'get_latest_servo_position', None)
+        if not callable(getter):
+            return None
+        try:
+            value = getter(side)
+        except Exception as exc:
+            print(f"Failed to fetch servo state for {side}: {exc}")
+            return None
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(round(float(value)))
+        return None
+
+    def _show_missing_live_data_warning(self, side: str):
+        QMessageBox.warning(self, "Servo State Unavailable", f"No live position available for the {side} servo.")
+
+    def _auto_calc_range(self, side: str):
+        if side == 'left':
+            zero_spin, min_spin, max_spin = self.left_zero, self.left_min, self.left_max
+        else:
+            zero_spin, min_spin, max_spin = self.right_zero, self.right_min, self.right_max
+        zero_spin.interpretText()
+        zero_value = zero_spin.value()
+        if side == 'left':
+            min_offset = 1643
+            max_delta = 557
+        else:
+            min_offset = -1643
+            max_delta = -557
+        min_value = self._wrap_raw(zero_value + min_offset)
+        max_value = self._wrap_raw(min_value + max_delta)
+        min_spin.setValue(min_value)
+        max_spin.setValue(max_value)
+
+    @staticmethod
+    def _wrap_raw(value: int) -> int:
+        return int(value) % 4096
+
+    def _handle_save_defaults(self):
+        if self._save_callback is None:
+            QMessageBox.warning(self, "Save Unsupported", "Saving defaults is unavailable in this context.")
+            return
+        payload = self.get_values()
+        try:
+            self._save_callback(payload)
+        except Exception as exc:
+            QMessageBox.critical(self, "Save Failed", f"Could not save calibration defaults:\n{exc}")
+            return
+        QMessageBox.information(self, "Defaults Saved", "Servo calibration defaults have been updated.")
 
     def _on_accept(self):
         # Basic validation: min <= zero <= max
