@@ -969,33 +969,115 @@ class ROSInterface:
 
             self._launch_in_terminal(f"StrandCenter {robot}", command)
 
-    def toggle_rosbag_record(self):
-        # --- Stop recording ---
-        if self.rosbag_process and self.rosbag_process.poll() is None:
-            print("Stopping rosbag (SIGINT)…")
-            try:
-                self.rosbag_process.send_signal(signal.SIGINT)
-                self.rosbag_process.wait(timeout=4)
-            except Exception:
-                print("Rosbag didn't stop cleanly. Sending SIGTERM…")
-                self.rosbag_process.terminate()
-                try:
-                    self.rosbag_process.wait(timeout=2)
-                except Exception:
-                    print("Force killing rosbag…")
-                    self.rosbag_process.kill()
+    def start_local_rosbag(self, fname, topics):
+        cmd = ["rosbag", "record", "-O", fname, "--lz4"] + topics
+        print("Starting LOCAL rosbag:", " ".join(cmd))
+        proc = subprocess.Popen(cmd)
+        self._local_rosbag_proc = proc
+        return proc
 
-            self.rosbag_process = None
-            self.gui.btn_rosbag_record.setStyleSheet("background-color: lightgray;")
+    def stop_local_rosbag(self):
+        proc = getattr(self, "_local_rosbag_proc", None)
+        if not proc or proc.poll() is not None:
+            return
+        print("Stopping LOCAL rosbag…")
+        try:
+            proc.send_signal(subprocess.signal.SIGINT); proc.wait(timeout=4)
+        except:
+            proc.terminate()
+        self._local_rosbag_proc = None
+
+    def start_remote_rosbag(self, gui, robot, fname, topics):
+        pidfile = f"/home/rosmatch/rosbags/rosbag_{robot}.pid"
+        rosbag_cmd = f"rosbag record -O {fname} --lz4 {' '.join(topics)}"
+
+        remote_cmd = (
+            f"ssh -t -t {robot} '"
+            "source ~/.bashrc; "
+            "export ROS_MASTER_URI=http://roscore:11311/; "
+            "source /opt/ros/noetic/setup.bash; "
+            "source ~/catkin_ws/devel/setup.bash; "
+            "mkdir -p ~/rosbags; "
+            f"nohup {rosbag_cmd} > /home/rosmatch/rosbags/rosbag_{robot}.log 2>&1 & "
+            "echo $! > " + pidfile + "; "
+            "exec bash'"
+        )
+
+        print("Starting REMOTE rosbag:", remote_cmd)
+        proc = _popen_with_debug([
+            "terminator",
+            f"--title=Rosbag {robot}",
+            "-x",
+            f"{remote_cmd}; exec bash"
+        ], gui)
+
+        if not hasattr(gui, "_remote_rosbag_procs"):
+            gui._remote_rosbag_procs = {}
+        gui._remote_rosbag_procs[robot] = proc
+        return proc
+
+
+    def stop_remote_rosbag(self, gui, robot):
+        pidfile = f"/home/rosmatch/rosbags/rosbag_{robot}.pid"
+        stop_cmd = (
+            f"ssh -t -t {robot} '"
+            f"if [ -f {pidfile} ]; then "
+            f"  pid=$(cat {pidfile}); "
+            f"  echo Stopping rosbag pid $pid; "
+            f"  kill -2 $pid || true; "
+            f"  sleep 2; "
+            f"  kill $pid || true; "
+            f"  rm {pidfile}; "
+            "fi; "
+            "exit'"
+        )
+        print(f"Stopping REMOTE rosbag on {robot}…")
+        subprocess.Popen(stop_cmd, shell=True)
+
+        # mark process as stopped in GUI
+        if hasattr(gui, "_remote_rosbag_procs"):
+            gui._remote_rosbag_procs[robot] = None
+
+
+
+    def toggle_rosbag_record(self, gui):
+        # rebuild topic selection
+        local_topics  = [t for t, s in gui.topic_settings.items() if s["local"]]
+        remote_topics = [t for t, s in gui.topic_settings.items() if s["remote"]]
+
+        # check running state
+        local_running  = hasattr(self, "_local_rosbag_proc") and self._local_rosbag_proc and self._local_rosbag_proc.poll() is None
+        remote_running = hasattr(gui, "_remote_rosbag_procs") and any(
+            p and p.poll() is None for p in gui._remote_rosbag_procs.values()
+        )
+
+        # --- STOP ---
+        if local_running or remote_running:
+            self.stop_local_rosbag()
+            if hasattr(gui, "_remote_rosbag_procs"):
+                for robot in gui._remote_rosbag_procs:
+                    self.stop_remote_rosbag(gui, robot)
+
+            gui.btn_rosbag_record.setStyleSheet("background-color: lightgray;")
             return
 
-        # --- Start recording ---
-        topics = [t for t, ok in self.rosbag_enabled.items() if ok]
-        ts = time.strftime("%Y%m%d_%H%M%S"); outfile = os.path.join(self.rosbag_dir, f"record_{ts}")
-        cmd = ["rosbag", "record", "-O", outfile, "--lz4"] + topics
-        cmd = ["rosbag", "record", "-O", outfile, "--lz4"] + topics
-        self.rosbag_process = subprocess.Popen(cmd)
-        self.gui.btn_rosbag_record.setStyleSheet("background-color: red; color: white;")
+        # --- START ---
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        local_fname  = f"{self.rosbag_dir}/record_{ts}_GUI-PC"
+        remote_fname = f"~/rosbags/record_{ts}_MuR"
+
+        robot_list = gui.get_selected_robots() or ["mur620c"]
+
+        if local_topics:
+            self.start_local_rosbag(local_fname, local_topics)
+
+        if remote_topics:
+            for robot in robot_list:
+                self.start_remote_rosbag(gui, robot, remote_fname, remote_topics)
+
+        gui.btn_rosbag_record.setStyleSheet("background-color: red; color: white;")
+
+
     # -------------------- Dynamixel Driver & Servo Targets --------------------
     def start_dynamixel_driver(self):
         """Start the Dynamixel servo driver on the selected robots over SSH (new terminal per robot)."""
