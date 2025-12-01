@@ -208,7 +208,14 @@ class ROSGui(QWidget):
         h_rb = QHBoxLayout(); h_rb.addWidget(self.btn_rosbag_record); h_rb.addWidget(self.btn_rosbag_settings);  print_functions_layout.addLayout(h_rb)
         self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record(self));  self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
         
-        idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); publish_idx_btn = QPushButton("Publish Index"); publish_idx_btn.clicked.connect(self._publish_current_index); idx_box.addWidget(publish_idx_btn); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
+        default_idx = self.ros_interface.get_cached_path_index()
+        idx_box = QHBoxLayout()
+        idx_box.addWidget(QLabel("Index:"))
+        self.idx_spin = QSpinBox()
+        self.idx_spin.setRange(0, 10000)
+        self.idx_spin.setValue(default_idx)
+        idx_box.addWidget(self.idx_spin)
+        publish_idx_btn = QPushButton("Publish Index"); publish_idx_btn.clicked.connect(self._publish_current_index); idx_box.addWidget(publish_idx_btn); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
         
         # Servo section
         servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();

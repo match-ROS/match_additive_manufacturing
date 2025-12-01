@@ -32,6 +32,7 @@ GUI_CACHE_PATH = os.path.abspath(
 )
 
 DEFAULT_SPRAY_DISTANCE = 0.52
+DEFAULT_PATH_INDEX = 0
 
 
 def _deploy_gui_cache_to_robot(robot: str, workspace: Optional[str]):
@@ -339,6 +340,43 @@ def _save_spray_distance_cache(value: float, robots: Optional[Iterable[str]] = N
     _save_gui_cache_payload(payload)
 
 
+def _normalize_path_index(value) -> Optional[int]:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0, normalized)
+
+
+def _load_path_index_cache(default: int = DEFAULT_PATH_INDEX) -> int:
+    data = _load_gui_cache_payload()
+    if isinstance(data, dict):
+        entry = data.get("path_index")
+        if isinstance(entry, dict):
+            for key in ("value", "default"):
+                normalized = _normalize_path_index(entry.get(key))
+                if normalized is not None:
+                    return normalized
+        else:
+            normalized = _normalize_path_index(entry)
+            if normalized is not None:
+                return normalized
+    normalized_default = _normalize_path_index(default)
+    return normalized_default if normalized_default is not None else DEFAULT_PATH_INDEX
+
+
+def _save_path_index_cache(value: int):
+    normalized = _normalize_path_index(value)
+    if normalized is None:
+        return
+    payload = _load_gui_cache_payload()
+    payload["path_index"] = {
+        "value": normalized,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    _save_gui_cache_payload(payload)
+
+
 def _format_ros_list_arg(values):
     """Format Python list as double-quoted string literal for roslaunch args."""
     return '"' + str(values).replace("'", '"') + '"'
@@ -461,7 +499,8 @@ class ROSInterface:
         self.virtual_object_pose = None
         self.battery_states = {}
         self.active_battery_subs = set()
-        self.current_index = 0
+        self.current_index = _load_path_index_cache(DEFAULT_PATH_INDEX)
+        self._cached_path_index = self.current_index
         self._cached_spray_distance = _load_spray_distance_cache()
         self._cached_servo_targets = _load_servo_targets_cache()
         self._servo_state_lock = threading.Lock()
@@ -588,6 +627,22 @@ class ROSInterface:
 
         self._subscribe_rosout_logs()
 
+    def get_cached_path_index(self) -> int:
+        cached = getattr(self, "_cached_path_index", None)
+        if isinstance(cached, int):
+            return cached
+        value = _load_path_index_cache(self.current_index)
+        self._cached_path_index = value
+        return value
+
+    def persist_path_index(self, value: int):
+        normalized = _normalize_path_index(value)
+        if normalized is None:
+            return
+        self._cached_path_index = normalized
+        self.current_index = normalized
+        _save_path_index_cache(normalized)
+
     def _subscribe_rosout_logs(self):
         """Ensure we have a single /rosout subscription feeding the GUI."""
         if getattr(self, "_rosout_sub", None) is not None:
@@ -671,6 +726,7 @@ class ROSInterface:
     
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
+        self._cached_path_index = self.current_index
         self.gui.path_idx.emit(self.current_index)  # Update the GUI with the new index
 
     def publish_path_index(self, value: int):
@@ -693,6 +749,7 @@ class ROSInterface:
         try:
             publisher.publish(Int32(data=normalized))
             self.current_index = normalized
+            self._cached_path_index = normalized
             rospy.loginfo(f"Published path index {normalized}")
         except Exception as exc:
             rospy.logerr(f"Failed to publish path index {normalized}: {exc}")
@@ -1581,6 +1638,20 @@ def parse_ur_path(gui):
         target_robots=selected_robots,
     )
 
+
+def _persist_gui_index_setting(gui):
+    if gui is None:
+        return
+    ros_iface = getattr(gui, "ros_interface", None)
+    idx_spin = getattr(gui, "idx_spin", None)
+    if ros_iface is None or idx_spin is None:
+        return
+    try:
+        ros_iface.persist_path_index(idx_spin.value())
+    except Exception as exc:
+        print(f"Failed to persist path index default: {exc}")
+
+
 def move_mir_to_start_pose(gui):
     """Moves the MIR robot to the start pose."""
     selected_robots = gui.get_selected_robots()
@@ -1592,6 +1663,7 @@ def move_mir_to_start_pose(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to move to the start pose.")
         return
+    _persist_gui_index_setting(gui)
     command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()}"
     rospy.loginfo(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)
@@ -1620,6 +1692,7 @@ def move_ur_to_start_pose(gui):
 
     spray_distance = gui.get_spray_distance()
 
+    _persist_gui_index_setting(gui)
     for robot in selected_robots:
         for ur in selected_urs:
             command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()} spray_distance:={spray_distance}"
