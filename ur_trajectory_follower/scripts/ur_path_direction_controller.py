@@ -52,6 +52,7 @@ class DirectionController:
         
         self.node_ready = True
         rospy.loginfo("UR Direction Controller node initialized.")
+        self.index_callback(Int32(data=self.current_index))  # initial calculation
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data
