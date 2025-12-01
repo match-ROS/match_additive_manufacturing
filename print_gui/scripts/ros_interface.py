@@ -493,6 +493,7 @@ class ROSInterface:
 
         # Subscriptions and publishers used by the GUI
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
+        self._path_index_pub = rospy.Publisher('/path_index', Int32, queue_size=10, latch=True)
         self._init_dynamixel_publishers()
         self._init_servo_state_listener()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
@@ -623,6 +624,30 @@ class ROSInterface:
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
         self.gui.path_idx.emit(self.current_index)  # Update the GUI with the new index
+
+    def publish_path_index(self, value: int):
+        """Publish the provided index on /path_index so downstream nodes follow the change."""
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError):
+            rospy.logwarn(f"Ignoring invalid path index value: {value}")
+            return
+
+        publisher = getattr(self, "_path_index_pub", None)
+        if publisher is None:
+            try:
+                publisher = rospy.Publisher('/path_index', Int32, queue_size=10, latch=True)
+                self._path_index_pub = publisher
+            except Exception as exc:
+                rospy.logerr(f"Failed to create path index publisher: {exc}")
+                return
+
+        try:
+            publisher.publish(Int32(data=normalized))
+            self.current_index = normalized
+            rospy.loginfo(f"Published path index {normalized}")
+        except Exception as exc:
+            rospy.logerr(f"Failed to publish path index {normalized}: {exc}")
 
     def start_roscore(self):
         """Starts roscore on the roscore PC."""
