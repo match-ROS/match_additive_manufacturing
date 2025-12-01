@@ -943,6 +943,7 @@ class ROSInterface:
         remote_cmd = (
             f"ssh -t -t {robot} '"
             "source ~/.bashrc; "
+            "export ROS_MASTER_URI=http://roscore:11311/; "
             "source /opt/ros/noetic/setup.bash; "
             "source ~/catkin_ws/devel/setup.bash; "
             "mkdir -p ~/rosbags; "
@@ -964,18 +965,26 @@ class ROSInterface:
         return proc
 
     def stop_remote_rosbag(self, gui, robot):
-        procs = getattr(gui, "_remote_rosbag_procs", {})
-        proc = procs.get(robot)
-        if not proc or proc.poll() is not None:
-            return
-
-        print(f"Stopping REMOTE rosbag on {robot}…")
+        pidfile = f"/home/rosmatch/rosbags/rosbag_{robot}.pid"
         stop_cmd = (
             f"ssh -t -t {robot} '"
-            "pkill -2 rosbag || pkill rosbag || true'"
+            f"if [ -f {pidfile} ]; then "
+            f"  pid=$(cat {pidfile}); "
+            f"  echo Stopping rosbag pid $pid; "
+            f"  kill -2 $pid || true; "
+            f"  sleep 2; "
+            f"  kill $pid || true; "
+            f"  rm {pidfile}; "
+            "fi; "
+            "exit'"
         )
+        print(f"Stopping REMOTE rosbag on {robot}…")
         subprocess.Popen(stop_cmd, shell=True)
-        procs[robot] = None
+
+        # mark process as stopped in GUI
+        if hasattr(gui, "_remote_rosbag_procs"):
+            gui._remote_rosbag_procs[robot] = None
+
 
 
     def toggle_rosbag_record(self, gui):
