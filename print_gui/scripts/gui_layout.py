@@ -288,6 +288,19 @@ class ROSGui(QWidget):
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(2000)
 
+    def closeEvent(self, event):
+        """Stop periodic updates and tear down ROS before the app quits."""
+        try:
+            if hasattr(self, "status_timer"):
+                self.status_timer.stop()
+        except Exception as exc:
+            print(f"Failed to stop status timer: {exc}")
+        try:
+            self.ros_interface.shutdown()
+        except Exception as exc:
+            print(f"Failed to shut down ROS interface: {exc}")
+        super().closeEvent(event)
+
     def _handle_launch_drivers_right_click(self, _pos):
         """Stop driver terminals when the launch button is right-clicked."""
         quit_drivers(self)

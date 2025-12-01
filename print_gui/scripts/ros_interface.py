@@ -130,6 +130,7 @@ def _run_remote_commands(
     *,
     use_workspace_debug: bool = False,
     target_robots=None,
+    allocate_tty: bool = False,
 ):
     """Run commands over SSH for each target robot."""
 
@@ -167,9 +168,13 @@ def _run_remote_commands(
             per_robot_cmds.append(resolved_cmd)
 
         remote_cmd = "; ".join(env_prefix + per_robot_cmds)
-        ssh_cmd = ["ssh", "-t", "-t", robot, remote_cmd]
+        ssh_cmd = ["ssh"]
+        if allocate_tty:
+            ssh_cmd += ["-t", "-t"]
+        ssh_cmd.extend([robot, remote_cmd])
         print(f"{description} on {robot} with command: {remote_cmd}")
-        _popen_with_debug(ssh_cmd, gui)
+        stdin_target = None if allocate_tty else subprocess.DEVNULL
+        _popen_with_debug(ssh_cmd, gui, stdin=stdin_target)
 
 
 def _kill_ros_nodes(node_names) -> bool:
@@ -526,6 +531,9 @@ class ROSInterface:
         except Exception as e:
             rospy.logwarn(f"Failed to subscribe to median topics: {e}")
 
+        self._rosout_sub = None
+        self._subscribe_rosout_logs()
+
     def get_cached_spray_distance(self) -> float:
         current = getattr(self, "_cached_spray_distance", DEFAULT_SPRAY_DISTANCE)
         robots = getattr(self.gui, "get_selected_robots", lambda: [])()
@@ -578,11 +586,51 @@ class ROSInterface:
         self._cached_servo_targets = (left, right)
         _save_servo_targets_cache(left, right)
 
-        # Subscribe to /rosout to forward log messages into the GUI
+        self._subscribe_rosout_logs()
+
+    def _subscribe_rosout_logs(self):
+        """Ensure we have a single /rosout subscription feeding the GUI."""
+        if getattr(self, "_rosout_sub", None) is not None:
+            return
         try:
-            rospy.Subscriber('/rosout', Log, self._rosout_cb, queue_size=50)
+            self._rosout_sub = rospy.Subscriber('/rosout', Log, self._rosout_cb, queue_size=50)
         except Exception as e:
+            self._rosout_sub = None
             rospy.logwarn(f"Failed to subscribe to /rosout: {e}")
+
+    def shutdown(self):
+        """Shut down background ROS helpers so the launcher terminal recovers."""
+        if getattr(self, "_is_shutting_down", False):
+            return
+        self._is_shutting_down = True
+
+        # Stop an active rosbag recording first so it flushes cleanly.
+        if self.rosbag_process and self.rosbag_process.poll() is None:
+            try:
+                self.rosbag_process.send_signal(signal.SIGINT)
+                self.rosbag_process.wait(timeout=4)
+            except Exception:
+                try:
+                    self.rosbag_process.terminate()
+                    self.rosbag_process.wait(timeout=2)
+                except Exception:
+                    self.rosbag_process.kill()
+            finally:
+                self.rosbag_process = None
+
+        # Tear down persistent SSH cleanup sessions to avoid dangling TTYs.
+        sessions = getattr(self.gui, "_driver_control_sessions", {}) or {}
+        for robot, session in list(sessions.items()):
+            try:
+                session.close()
+            except Exception as exc:
+                print(f"Failed to close driver cleanup session for {robot}: {exc}")
+        self.gui._driver_control_sessions = {}
+
+        try:
+            rospy.signal_shutdown("GUI closed")
+        except Exception as exc:
+            print(f"Failed to signal rospy shutdown: {exc}")
         
     def _launch_process(self, command, shell=False, **kwargs):
         return _popen_with_debug(command, self.gui, shell=shell, **kwargs)
@@ -987,7 +1035,8 @@ class ROSInterface:
                 "pkill -f servo_driver.py || true; "
                 "pkill -f dynamixel_workbench_controllers || true;"
             )
-            self._launch_process(f"ssh -t -t {robot} '{remote_cmd}'", shell=True)
+            ssh_cmd = ["ssh", robot, remote_cmd]
+            _popen_with_debug(ssh_cmd, self.gui, stdin=subprocess.DEVNULL)
 
     def _init_dynamixel_publishers(self):
         """Initialize publishers for left/right servo target topics (Int16)."""
