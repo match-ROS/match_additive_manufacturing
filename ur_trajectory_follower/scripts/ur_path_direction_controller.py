@@ -18,7 +18,7 @@ class DirectionController:
         rospy.loginfo(f"Z-controller gains: kp={self.kp_z}, ki={self.ki_z}, kd={self.kd_z}")
         self.joint_state_topic = rospy.get_param("~joint_state_topic", "/mur620c/joint_states")
         self.lift_joint_name = rospy.get_param("~lift_joint_name", "right_lift_joint")
-        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.0)  # between 0 and 1
         self.integral_z = 0
         self.prev_error_z = 0
         

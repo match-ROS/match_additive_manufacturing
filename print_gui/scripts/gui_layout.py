@@ -303,6 +303,10 @@ class ROSGui(QWidget):
 
         # connect ROS log signal after widgets exist
         self._ros_log_buffer = []
+        self._ros_log_update_timer = QTimer(self)
+        self._ros_log_update_timer.setSingleShot(True)
+        self._ros_log_update_timer.setInterval(120)
+        self._ros_log_update_timer.timeout.connect(self._flush_ros_log_view)
         self.ros_log_signal.connect(self._append_ros_log)
 
         
@@ -502,6 +506,21 @@ class ROSGui(QWidget):
         self._ros_log_buffer.append((level, node, text))
         self._ros_log_buffer = self._ros_log_buffer[-400:]
 
+        self._schedule_ros_log_refresh()
+
+
+    def _schedule_ros_log_refresh(self):
+        timer = getattr(self, "_ros_log_update_timer", None)
+        if timer is None:
+            self._rebuild_ros_log_view()
+            return
+        timer.start()
+
+
+    def _flush_ros_log_view(self):
+        timer = getattr(self, "_ros_log_update_timer", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
         self._rebuild_ros_log_view()
 
 
@@ -540,6 +559,8 @@ class ROSGui(QWidget):
         """Clear all buffered log messages and the view."""
         self._ros_log_buffer = []
         self.ros_log_text.clear()
+        if hasattr(self, "_ros_log_update_timer"):
+            self._ros_log_update_timer.stop()
         
     def open_ur_settings(self):
         dlg = URFollowSettingsDialog(self, initial_settings=self.ur_follow_settings)
