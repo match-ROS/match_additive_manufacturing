@@ -183,11 +183,25 @@ class ROSGui(QWidget):
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
         self.topic_settings = {
-            "/tf": {"local": True, "remote": True},
-            "/ur_path_original": {"local": True, "remote": True},
-            "/mir_path_original": {"local": True, "remote": False},
-            "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
+            "/tf": {"local": False, "remote": False},
+            "/ur_path_original": {"local": False, "remote": True},
+            "/mir_path_original": {"local": False, "remote": True},
+            "/laser_profile_offset_cmd_vel": {"local": True, "remote": False},
+            "/profiles": {"local": True, "remote": False},
+            "/path_index": {"local": True, "remote": False},
+            "/orthogonal_error": {"local": True, "remote": False},
+            "/orthogonal_twist": {"local": True, "remote": False},
+            "/ur_error_world": {"local": True, "remote": False},
+            "/mur620c/UR10_r/twist_controller/command_collision_free": {"local": True, "remote": False},
+            "/mur620c/UR10_r/twist_controller/controller_input": {"local": True, "remote": False},
+            "/ur_twist_direction_world": {"local": True, "remote": False},
+            "/servo_target_pos_left": {"local": True, "remote": False},
+            "/servo_target_pos_right": {"local": True, "remote": False},
+            "/mur620c/UR10_r/ur_calibrated_pose": {"local": True, "remote": False},
+            "/mur620c/UR10_r/global_tcp_pose": {"local": True, "remote": False},
         }
+
+
         # self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
         # self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record(self))
         self.btn_rosbag_record = QPushButton("Rosbag Record"); self.btn_rosbag_record.setStyleSheet("background-color: lightgray;");  self.btn_rosbag_settings = QPushButton("Settings")
