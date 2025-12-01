@@ -23,14 +23,19 @@ class ProfileOrthogonalController(object):
             "/mur620c/UR10_r/twist_controller/command_collision_free"
         )
 
-        self.window_size = rospy.get_param("~window_size", 20)
+        self.window_size = rospy.get_param("~window_size", 10)
         self.k_p = rospy.get_param("~k_p", 0.0001)
         self.max_vel = rospy.get_param("~max_vel", 0.08)
+        self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.98)
+        self.control_rate = rospy.get_param("~control_rate", 200.0)
 
         self.deviation_history = deque(maxlen=self.window_size)
 
         # Last TCP pose
         self.ur_tcp_pose = None
+        self.scan_data = None
+        self.prev_output = [0.0, 0.0, 0.0]
 
         # --- Publisher ---
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=1)
@@ -43,19 +48,39 @@ class ProfileOrthogonalController(object):
                          self.ur_tcp_callback, queue_size=1)
 
         rospy.loginfo("ProfileOrthogonalController (TCP-based) started.")
-        rospy.spin()
+        
+        rate = rospy.Rate(self.control_rate)
+        while not rospy.is_shutdown():
+            self.update()
+            rate.sleep()
 
     # --- Callbacks ---------------------------------------------------------
 
     def ur_tcp_callback(self, msg: PoseStamped):
         self.ur_tcp_pose = msg
 
+    def smooth_output(self, new_output):
+        smoothed = []
+        for i in range(3):
+            smoothed_value = (self.output_smoothing_coeff * self.prev_output[i] +
+                              (1 - self.output_smoothing_coeff) * new_output[i])
+            smoothed.append(smoothed_value)
+        self.prev_output = smoothed
+        return np.array(smoothed)
+
+
     def profile_callback(self, msg: Float32MultiArray):
+        self.scan_data = msg.data
+       
+        
+        
+        
+    def update(self):
         if self.ur_tcp_pose is None:
             rospy.logwarn_throttle(1.0, "No TCP pose received yet.")
             return
 
-        data = np.array(msg.data, dtype=np.float32)
+        data = np.array(self.scan_data, dtype=np.float32)
         if data.size == 0:
             return
 
@@ -83,6 +108,7 @@ class ProfileOrthogonalController(object):
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
         v_tcp = np.array([0.0, -v_lat, 0.0])
+        v_tcp = self.smooth_output(v_tcp)
 
         # --- TCP -> UR base rotation ---
         q = self.ur_tcp_pose.pose.orientation
@@ -102,6 +128,18 @@ class ProfileOrthogonalController(object):
         twist.linear.x = v_urbase[0]
         twist.linear.y = v_urbase[1]
         twist.linear.z = 0.0
+
+        highest_profile_point = data[min_idx]
+        if highest_profile_point < self.min_expected_height:
+            rospy.logwarn_throttle(
+                5.0,
+                "Profile point too low: %.2f < %.2f",
+                highest_profile_point,
+                self.min_expected_height
+            )
+            twist = Twist()  # Stoppen
+
+
 
         self.cmd_pub.publish(twist)
 
