@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
 from typing import Any, cast
@@ -182,9 +182,17 @@ class ROSGui(QWidget):
             print_functions_layout.addWidget(btn)
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
+        self.topic_settings = {
+            "/tf": {"local": True, "remote": True},
+            "/ur_path_original": {"local": True, "remote": True},
+            "/mir_path_original": {"local": True, "remote": False},
+            "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
+        }
+        # self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
+        # self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record(self))
         self.btn_rosbag_record = QPushButton("Rosbag Record"); self.btn_rosbag_record.setStyleSheet("background-color: lightgray;");  self.btn_rosbag_settings = QPushButton("Settings")
         h_rb = QHBoxLayout(); h_rb.addWidget(self.btn_rosbag_record); h_rb.addWidget(self.btn_rosbag_settings);  print_functions_layout.addLayout(h_rb)
-        self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record());  self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
+        self.btn_rosbag_record.clicked.connect(lambda: self.ros_interface.toggle_rosbag_record(self));  self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
         
         idx_box = QHBoxLayout(); idx_box.addWidget(QLabel("Index:")); self.idx_spin = QSpinBox(); self.idx_spin.setRange(0,10000); self.idx_spin.setValue(0); idx_box.addWidget(self.idx_spin); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
         
@@ -586,11 +594,9 @@ class ROSGui(QWidget):
         return self.spray_distance_spin.value()
 
     def open_rosbag_settings(self):
-        dlg = RosbagSettingsDialog(self,
-            topics=self.ros_interface.rosbag_topics,
-            enabled=self.ros_interface.rosbag_enabled)
+        dlg = RosbagSettingsDialog(self, self.topic_settings)
         if dlg.exec_() == QDialog.Accepted:
-            self.ros_interface.rosbag_enabled = dlg.get_enabled()
+            self.topic_settings = dlg.get_settings()
 
 
 class URFollowSettingsDialog(QDialog):
@@ -806,19 +812,44 @@ class ServoCalibrationDialog(QDialog):
         }
 
 class RosbagSettingsDialog(QDialog):
-    def __init__(self, parent=None, topics=None, enabled=None):
-        super().__init__(parent); self.setWindowTitle("Rosbag Topics")
-        self.topics = list(topics) if topics else []
-        enabled_map = enabled or {}
-        self.enabled = {t: bool(enabled_map.get(t, True)) for t in self.topics}
+    def __init__(self, parent, topic_settings):
+        super().__init__(parent)
+        self.setWindowTitle("Rosbag Settings")
+        self.topic_settings = topic_settings  # {"topic": {"local": True, "remote": True}}
 
-        self.boxes = {}
         layout = QVBoxLayout()
-        for t in self.topics:
-            cb = QCheckBox(t); cb.setChecked(self.enabled.get(t, True)); layout.addWidget(cb); self.boxes[t] = cb
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
-        layout.addWidget(btns); self.setLayout(layout)
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Topic"), 0, 0)
+        grid.addWidget(QLabel("GUI-PC"), 0, 1)
+        grid.addWidget(QLabel("MuR"), 0, 2)
 
-    def get_enabled(self):
-        return {t: cb.isChecked() for t, cb in self.boxes.items()}
+        self.box_local = {}
+        self.box_remote = {}
+
+        row = 1
+        for topic, opts in topic_settings.items():
+            t_label = QLabel(topic)
+            cb_local = QCheckBox();  cb_local.setChecked(opts["local"])
+            cb_remote = QCheckBox(); cb_remote.setChecked(opts["remote"])
+            grid.addWidget(t_label, row, 0)
+            grid.addWidget(cb_local, row, 1)
+            grid.addWidget(cb_remote, row, 2)
+            self.box_local[topic] = cb_local
+            self.box_remote[topic] = cb_remote
+            row += 1
+
+        layout.addLayout(grid)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+        self.setLayout(layout)
+
+    def get_settings(self):
+        out = {}
+        for topic in self.topic_settings:
+            out[topic] = {
+                "local": self.box_local[topic].isChecked(),
+                "remote": self.box_remote[topic].isChecked(),
+            }
+        return out
