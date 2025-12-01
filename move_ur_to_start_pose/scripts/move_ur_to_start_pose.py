@@ -147,7 +147,7 @@ class MoveManipulatorToTarget:
                                                      target_tcp_pose.pose.orientation.y,
                                                      target_tcp_pose.pose.orientation.z,
                                                      target_tcp_pose.pose.orientation.w])
-        mir_orientation = rot[2]
+        mir_orientation = tr.euler_from_quaternion(rot)[2]
         
 
         relative_pose = [0.0,0.0,0.0,0.0,0.0,0.0]
