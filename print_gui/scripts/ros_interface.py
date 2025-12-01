@@ -940,6 +940,9 @@ class ROSInterface:
         self._local_rosbag_proc = None
 
     def start_remote_rosbag(self, gui, robot, fname, topics):
+        pidfile = f"/home/rosmatch/rosbags/rosbag_{robot}.pid"
+        rosbag_cmd = f"rosbag record -O {fname} --lz4 {' '.join(topics)}"
+
         remote_cmd = (
             f"ssh -t -t {robot} '"
             "source ~/.bashrc; "
@@ -947,7 +950,8 @@ class ROSInterface:
             "source /opt/ros/noetic/setup.bash; "
             "source ~/catkin_ws/devel/setup.bash; "
             "mkdir -p ~/rosbags; "
-            f"rosbag record -O {fname} --lz4 {' '.join(topics)}; "
+            f"nohup {rosbag_cmd} > /home/rosmatch/rosbags/rosbag_{robot}.log 2>&1 & "
+            "echo $! > " + pidfile + "; "
             "exec bash'"
         )
 
@@ -963,6 +967,7 @@ class ROSInterface:
             gui._remote_rosbag_procs = {}
         gui._remote_rosbag_procs[robot] = proc
         return proc
+
 
     def stop_remote_rosbag(self, gui, robot):
         pidfile = f"/home/rosmatch/rosbags/rosbag_{robot}.pid"
