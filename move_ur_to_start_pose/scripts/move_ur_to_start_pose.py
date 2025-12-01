@@ -156,7 +156,8 @@ class MoveManipulatorToTarget:
         relative_pose[2] = relative_position[2]
         relative_pose[3] = math.pi
         relative_pose[4] = 0.0
-        relative_pose[5] = mir_orientation - path_orientation[2] + 0.6#+ self.tcp_offset[5] + pi*0.12 #+ pi*1.0 # add tcp offset in rotation around z 
+        # Apply GUI-configured TCP yaw offset instead of hard-coded value
+        relative_pose[5] = mir_orientation - path_orientation[2] + self.tcp_offset[5]
         relative_pose[5] = np.arctan2(np.sin(relative_pose[5]), np.cos(relative_pose[5]))  # normalize angle to [-pi, pi]
         
         # Set the target pose for MoveIt
