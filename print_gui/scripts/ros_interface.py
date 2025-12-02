@@ -11,7 +11,7 @@ from PyQt5.QtCore import QTimer
 import rospy
 import tf.transformations as tf_trans
 from rosgraph_msgs.msg import Log
-from std_msgs.msg import Float32, Int32, Int16
+from std_msgs.msg import Float32, Int32, Int16, Bool
 from sensor_msgs.msg import BatteryState
 from rosgraph_msgs.msg import Log
 import rosnode
@@ -505,6 +505,13 @@ class ROSInterface:
         self._cached_servo_targets = _load_servo_targets_cache()
         self._servo_state_lock = threading.Lock()
         self._latest_servo_positions = {}
+        self._start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
+        self._start_signal_pub = None
+        self._start_signal_active = False
+        self._start_signal_timer = QTimer(self.gui)
+        self._start_signal_timer.setSingleShot(True)
+        self._start_signal_timer.setInterval(10000)
+        self._start_signal_timer.timeout.connect(self._deactivate_start_signal)
 
         # Rosbag config
         self.rosbag_topics = [
@@ -659,6 +666,13 @@ class ROSInterface:
             return
         self._is_shutting_down = True
 
+        try:
+            if hasattr(self, "_start_signal_timer"):
+                self._start_signal_timer.stop()
+        except Exception:
+            pass
+        self._deactivate_start_signal()
+
         # Stop an active rosbag recording first so it flushes cleanly.
         if self.rosbag_process and self.rosbag_process.poll() is None:
             try:
@@ -723,6 +737,54 @@ class ROSInterface:
 
         slider.valueChanged.connect(_handle_change)
         _handle_change(slider.value())
+
+    def trigger_start_signal(self):
+        publisher = self._ensure_start_signal_publisher()
+        if publisher is None:
+            rospy.logerr("Start signal publisher unavailable; cannot trigger start condition.")
+            return
+
+        try:
+            publisher.publish(Bool(data=True))
+        except Exception as exc:
+            rospy.logerr(f"Failed to publish start signal: {exc}")
+            return
+
+        self._start_signal_active = True
+        if hasattr(self.gui, "update_start_signal_visual"):
+            self.gui.update_start_signal_visual(True)
+        if hasattr(self, "_start_signal_timer"):
+            self._start_signal_timer.start()
+
+    def _ensure_start_signal_publisher(self):
+        if self._start_signal_pub is not None:
+            return self._start_signal_pub
+        try:
+            self._start_signal_pub = rospy.Publisher(
+                self._start_condition_topic,
+                Bool,
+                queue_size=1,
+                latch=True,
+            )
+        except Exception as exc:
+            rospy.logerr(f"Failed to create start signal publisher: {exc}")
+            self._start_signal_pub = None
+        return self._start_signal_pub
+
+    def _deactivate_start_signal(self):
+        publisher = getattr(self, "_start_signal_pub", None)
+        if publisher is not None:
+            try:
+                publisher.unregister()
+            except Exception as exc:
+                rospy.logwarn(f"Failed to unregister start signal publisher: {exc}")
+            finally:
+                self._start_signal_pub = None
+
+        if self._start_signal_active:
+            self._start_signal_active = False
+            if hasattr(self.gui, "update_start_signal_visual"):
+                self.gui.update_start_signal_visual(False)
     
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
@@ -1039,7 +1101,7 @@ class ROSInterface:
             return
         print("Stopping LOCAL rosbag…")
         try:
-            proc.send_signal(subprocess.signal.SIGINT); proc.wait(timeout=4)
+            proc.send_signal(signal.SIGINT); proc.wait(timeout=4)
         except:
             proc.terminate()
         self._local_rosbag_proc = None

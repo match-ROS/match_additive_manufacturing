@@ -1,5 +1,7 @@
 <launch>
     <arg name="robot_name" default="mur620c" doc="Name of the robot to be used in the launch file." />
+    <arg name="start_condition_topic" default="/start_condition" />
+    <arg name="wait_for_start_condition" default="true" />
 "
     <!-- Node that runs the path transformer script -->
     <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower_pure_pursuit_RL.py" output="screen">
@@ -9,6 +11,8 @@
         <param name="cmd_vel_topic" value="$(arg robot_name)/cmd_vel" />
         <param name="trajectory_index_topic" value="/path_index_modified" />
         <param name="override_topic" value="/velocity_override" />
+        <param name="start_condition_topic" value="$(arg start_condition_topic)" />
+        <param name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />
     </node>
 
     <node name="path_index_modifier" pkg="mir_trajectory_follower" type="path_index_modifier.py" output="screen">

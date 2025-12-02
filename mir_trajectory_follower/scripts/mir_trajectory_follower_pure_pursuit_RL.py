@@ -64,6 +64,8 @@ class PurePursuitNode:
         self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
         self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.2)  # Maximale Winkelgeschwindigkeit
         self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
+        self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
+        self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 1.0)  # Maximaler Abstandsfehler
@@ -83,6 +85,7 @@ class PurePursuitNode:
         rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
         rospy.Subscriber(self.override_topic, Float32, self.override_callback)
         rospy.Subscriber(self.mir_path_velocity_topic, Path, self.velocity_path_callback)
+        rospy.Subscriber(self.start_condition_topic, Bool, self.start_condition_callback, queue_size=1)
         
         # Start und Status
         self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
@@ -104,6 +107,7 @@ class PurePursuitNode:
         self.filtered_velocity = Twist()
         self.timestamps = None
         self.dT_list = None
+        self.control_enabled = not self.wait_for_start_condition
 
         # Timestamps passend zum Pfad einlesen
         ts_msg = rospy.wait_for_message(self.mir_path_timestamps_topic, Float32MultiArray)
@@ -136,14 +140,21 @@ class PurePursuitNode:
     def follow_path(self):
         # Berechne die Geschwindigkeiten für jeden Pfadpunkt
         self.calculate_path_velocities()
-        while not rospy.is_shutdown() and self.is_active == False:
-            rospy.loginfo_throttle(5, "Waiting for trajectory index.")
-            rospy.sleep(0.01)
-
         rate = rospy.Rate(self.control_rate)
         while not rospy.is_shutdown():
+            if not self.control_enabled:
+                rospy.loginfo_throttle(5, f"Waiting for start condition on {self.start_condition_topic}.")
+                rate.sleep()
+                continue
+
+            if not self.is_active:
+                rospy.loginfo_throttle(5, "Waiting for trajectory index.")
+                rate.sleep()
+                continue
+
             # Überprüfe, ob Pfad und aktuelle Pose vorhanden sind
             if not self.path or self.current_pose is None:
+                rate.sleep()
                 continue
             
             # check if the current path index is reaced 
@@ -386,8 +397,27 @@ class PurePursuitNode:
 
     def trajectory_index_callback(self, msg):
         self.ur_trajectory_index = msg.data
-        if self.ur_trajectory_index > 0:
-            self.is_active = True
+        self._update_active_state()
+
+    def start_condition_callback(self, msg: Bool):
+        new_state = bool(msg.data) or not self.wait_for_start_condition
+        if new_state == self.control_enabled:
+            return
+
+        self.control_enabled = new_state
+        if not self.control_enabled:
+            rospy.loginfo("Start condition reset – pausing MIR trajectory follower.")
+            self.is_active = False
+            self.cmd_vel_pub.publish(Twist())
+        else:
+            rospy.loginfo("Start condition fulfilled – MIR trajectory follower ready.")
+        self._update_active_state()
+
+    def _update_active_state(self):
+        should_be_active = self.control_enabled and self.ur_trajectory_index > 0
+        if should_be_active and not self.is_active:
+            rospy.loginfo("Trajectory index available and start condition met – starting MIR path following.")
+        self.is_active = should_be_active
 
     def calculate_distance(self, current_pose, target_pose):
         # Compute if the mir is in front or behind the target point

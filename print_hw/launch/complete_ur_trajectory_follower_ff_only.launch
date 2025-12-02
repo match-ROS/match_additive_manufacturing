@@ -5,13 +5,15 @@
     <arg name="threshold" default="0.01" />
     <arg name="initial_path_index" default="0" />
     <arg name="nozzle_height_default" default="0.1" />
+    <arg name="start_condition_topic" default="/start_condition" />
+    <arg name="wait_for_start_condition" default="true" />
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
     <group ns="$(arg robot_name)/UR10_r">
         <node name="controller_stop_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop arm_controller" />
         <node name="controller_start_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="spawn twist_controller" />
     </group>
-    
+
     <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir'] -->
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
         <arg name="twist_topics" value="['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/laser_profile_offset_cmd_vel']"/>
@@ -51,6 +53,8 @@
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
         <arg name="ff_only" value="true" />
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
+        <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
+        <arg name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />
         <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
@@ -60,9 +64,9 @@
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
     </include>
-    <!-- <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
-    </include> -->
+    </include>
 
     <!-- PID controllers: -->
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">

@@ -15,6 +15,8 @@
     <arg name="ff_only" default="true"/>
     <arg name="from_index_offset" default="-1"/>
     <arg name="to_index_offset" default="0"/>
+    <arg name="start_condition_topic" default="/start_condition"/>
+    <arg name="wait_for_start_condition" default="true"/>
 
     <node name="ur_direction_controller" pkg="ur_trajectory_follower" type="ur_path_direction_controller.py" output="screen">
         <!-- Parameters -->
@@ -23,6 +25,8 @@
         <param name="ki_z" value="$(arg ki_z)"/>
         <param name="kd_z" value="$(arg kd_z)"/>
         <param name="ff_only" value="$(arg ff_only)"/>
+        <param name="start_condition_topic" value="$(arg start_condition_topic)"/>
+        <param name="wait_for_start_condition" value="$(arg wait_for_start_condition)"/>
         
         <!-- Topic Remapping -->
         <remap from="/path" to="$(arg path_topic)"/>

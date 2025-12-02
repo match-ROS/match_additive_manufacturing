@@ -3,7 +3,7 @@ import rospy
 from geometry_msgs.msg import PoseStamped, Twist
 from nav_msgs.msg import Path
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Int32, Float32
+from std_msgs.msg import Int32, Float32, Bool
 import numpy as np
 from sensor_msgs.msg import JointState
 
@@ -34,6 +34,9 @@ class DirectionController:
         self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
+        self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
+        self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
+        self.control_enabled = not self.wait_for_start_condition
         
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
         rospy.sleep(0.1)  # allow publisher to set up
@@ -46,6 +49,7 @@ class DirectionController:
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)        # lift height
         rospy.Subscriber(self.joint_state_topic, JointState, self.joint_state_callback)
+        rospy.Subscriber(self.start_condition_topic, Bool, self.start_condition_callback, queue_size=1)
 
         rospy.wait_for_message(self.joint_state_topic, JointState)
         rospy.wait_for_message("/path_index", Int32)
@@ -71,6 +75,22 @@ class DirectionController:
         if not self.node_ready:
             return
         self.calculate_twist(self.from_index_offset, self.goal_index_offset)
+
+    def start_condition_callback(self, msg: Bool):
+        new_state = bool(msg.data) or not self.wait_for_start_condition
+        if new_state == self.control_enabled:
+            return
+
+        if new_state:
+            rospy.loginfo("Start condition fulfilled – enabling UR direction controller output.")
+        else:
+            rospy.loginfo("Start condition reset – holding UR direction controller output.")
+            self.command_old_twist = Twist()
+            self.integral_z = 0
+            self.prev_error_z = 0
+            self.pub_ur_velocity_world.publish(Twist())
+
+        self.control_enabled = new_state
 
     def velocity_override_callback(self, velocity_msg: Float32):
         self.velocity_override = velocity_msg.data
@@ -162,6 +182,8 @@ class DirectionController:
         rospy.logdebug(f"Calculating twist at index {self.current_index} with from_offset {from_offset} and goal_offset {goal_offset}.")
         if not self.ff_only and self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
+            return
+        if not self.control_enabled:
             return
         
         direction_xy_norm, error_z = self.get_direction(from_offset, goal_offset)

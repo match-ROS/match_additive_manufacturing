@@ -180,6 +180,13 @@ class ROSGui(QWidget):
                 btn.setStyleSheet("background-color: #ff6666; color: black;")
             btn.clicked.connect(lambda _, f=fn: f())
             print_functions_layout.addWidget(btn)
+
+        self.btn_start_signal = QPushButton("Trigger Start Signal")
+        self.btn_start_signal.setStyleSheet("background-color: #4caf50; color: white;")
+        self.btn_start_signal.clicked.connect(self._handle_start_signal_button)
+        print_functions_layout.addWidget(self.btn_start_signal)
+        self.update_start_signal_visual(False)
+
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
         self.topic_settings = {
@@ -342,6 +349,11 @@ class ROSGui(QWidget):
         """Stop the flow sensor bridge when its button is right-clicked."""
         self.ros_interface.stop_flow_sensor_bridge()
 
+    def _handle_start_signal_button(self):
+        """Trigger the latched start condition via the ROS interface."""
+        if hasattr(self, "ros_interface"):
+            self.ros_interface.trigger_start_signal()
+
     def _publish_current_index(self):
         """Send the currently selected index back onto /path_index."""
         if not hasattr(self, "idx_spin"):
@@ -381,6 +393,17 @@ class ROSGui(QWidget):
             self.ros_interface.persist_servo_targets(left, right)
         except Exception as exc:
             print(f"Failed to persist servo targets: {exc}")
+
+    def update_start_signal_visual(self, active: bool):
+        button = getattr(self, "btn_start_signal", None)
+        if button is None:
+            return
+        if active:
+            button.setText("Start Signal ACTIVE (click to retrigger)")
+            button.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold;")
+        else:
+            button.setText("Trigger Start Signal")
+            button.setStyleSheet("background-color: #4caf50; color: white;")
 
     def _load_servo_calibration_defaults(self):
         """Load servo calibration defaults from config, falling back to baked values."""
