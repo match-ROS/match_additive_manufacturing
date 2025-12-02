@@ -143,6 +143,7 @@ class DirectionYawController:
 
         direction_xy_norm = None
         if self.calculate_path_direction:
+            rospy.logwarn_once("Calculating yaw from path direction.")
             direction_xy_norm = self.get_direction()
             direction_norm = np.linalg.norm(direction_xy_norm)
             if direction_norm > 1e-6:
@@ -151,6 +152,9 @@ class DirectionYawController:
         # Yaw PID
         current_yaw = self.quaternion_to_yaw(self.current_pose.pose.orientation)
         yaw_error = self.wrap_to_pi(desired_yaw - current_yaw)
+        if yaw_error > math.pi / 2:
+            rospy.logwarn_throttle(5.0, "Large yaw error detected: %.2f radians. desired_yaw=%.2f, current_yaw=%.2f",
+                                  yaw_error, desired_yaw, current_yaw)
 
         velocity_scale = self.velocity_override
         proportional = yaw_error * self.kp_yaw
