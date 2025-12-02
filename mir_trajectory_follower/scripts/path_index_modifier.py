@@ -53,11 +53,12 @@ class TimeWarpingIndex:
 
         # wait for index to change for the first time
         last_index = current_index
+        
         while not rospy.is_shutdown():
-            current_index = rospy.wait_for_message("/path_index", Int32).data
-            if current_index != last_index:
+            if self.ur_index != last_index:
                 break
             rospy.sleep(0.01)
+        rospy.loginfo("Starting time warping index modifier...")
 
         rospy.Timer(rospy.Duration(1.0/self.rate), self.on_timer)
 
@@ -244,8 +245,6 @@ class TimeWarpingIndex:
             self.ur_index - dynamic_limit,
             self.ur_index + dynamic_limit
         )
-
-        print("index diff UR-MiR:", self.ur_index - idx_mir, " dt_mir:", dt_mir)
 
         # ----- 6) Publish -----
         self.pub_mod.publish(Int32(idx_mir))
