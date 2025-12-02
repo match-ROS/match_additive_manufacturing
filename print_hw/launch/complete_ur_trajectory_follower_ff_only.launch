@@ -64,9 +64,9 @@
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
     </include>
-    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+    <!-- <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
-    </include>
+    </include> -->
 
     <!-- PID controllers: -->
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
