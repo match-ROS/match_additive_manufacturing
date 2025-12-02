@@ -25,11 +25,14 @@ class TimeWarpingIndex:
 
         self.ur_index = 0
         self.dt_mir = 0.1 # dT of the original MiR path
+        self.path_index_topic = rospy.get_param("~path_index_topic", "/path_index")
+        self.path_index_modified_topic = rospy.get_param("~path_index_modified_topic", "/path_index_modified")
+        self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
 
         # subs
         rospy.Subscriber("/mir_path_original", Path, self.cb_path)
         rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_time)
-        rospy.Subscriber("/path_index", Int32, self.cb_ur_index)
+        rospy.Subscriber(self.path_index_topic, Int32, self.cb_ur_index)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_cb)
 
         # wait for initial data
@@ -45,11 +48,11 @@ class TimeWarpingIndex:
 
 
         # internal time
-        current_index = rospy.wait_for_message("/path_index", Int32).data
+        current_index = self._resolve_initial_path_index()
         self.t_mir = current_index * self.dt_mir
 
         # pub
-        self.pub_mod = rospy.Publisher("/path_index_modified", Int32, queue_size=1)
+        self.pub_mod = rospy.Publisher(self.path_index_modified_topic, Int32, queue_size=1)
         rospy.sleep(0.01) # wait for publisher to connect
         self.pub_mod.publish(Int32(current_index)) # initial publish to start trajectory follower
 
@@ -63,6 +66,27 @@ class TimeWarpingIndex:
         rospy.loginfo("Starting time warping index modifier...")
 
         rospy.Timer(rospy.Duration(1.0/self.rate), self.on_timer)
+
+    @staticmethod
+    def _parse_initial_path_index(raw_value):
+        try:
+            idx = int(raw_value)
+        except (TypeError, ValueError):
+            rospy.logwarn_throttle(5.0, f"Invalid initial_path_index value '{raw_value}', ignoring.")
+            return None
+        return idx if idx >= 0 else None
+
+    def _resolve_initial_path_index(self):
+        if self.initial_path_index is not None:
+            idx = max(0, self.initial_path_index)
+            rospy.loginfo(f"Using initial path index {idx} from parameter for path_index_modifier.")
+            self.ur_index = idx
+            return idx
+
+        rospy.loginfo(f"Waiting for first path index on {self.path_index_topic}")
+        current_index = rospy.wait_for_message(self.path_index_topic, Int32).data
+        self.ur_index = current_index
+        return current_index
 
     def cb_path(self, msg):
         self.mir_path = msg

@@ -6,6 +6,7 @@
 
     <arg name="output_smoothing_coeff" default="0.9"/>
     <arg name="ff_only" default="false"/>
+    <arg name="initial_path_index" default="-1"/>
 
 
     <!-- Topics -->
@@ -23,6 +24,7 @@
 
         <param name="output_smoothing_coeff" value="$(arg output_smoothing_coeff)"/>
         <param name="ff_only" value="$(arg ff_only)"/>
+        <param name="initial_path_index" value="$(arg initial_path_index)"/>
 
         <param name="path_topic" value="$(arg path_topic)"/>
         <param name="current_pose_topic" value="$(arg current_pose_topic)"/>

@@ -37,13 +37,18 @@ class DirectionController:
         self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
         self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
         self.control_enabled = not self.wait_for_start_condition
+        self.path_index_topic = rospy.get_param("~path_index_topic", "/path_index")
+        self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
+        if self.initial_path_index is not None:
+            self.current_index = self.initial_path_index
+            rospy.loginfo(f"Using initial path index {self.current_index} from parameter.")
         
         self.pub_ur_velocity_world = rospy.Publisher("/ur_twist_world", Twist, queue_size=10)
         rospy.sleep(0.1)  # allow publisher to set up
 
         self.path = rospy.wait_for_message("/path", Path)        
 
-        rospy.Subscriber("/path_index", Int32, self.index_callback)
+        rospy.Subscriber(self.path_index_topic, Int32, self.index_callback)
         if not self.ff_only:
             rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
@@ -52,11 +57,23 @@ class DirectionController:
         rospy.Subscriber(self.start_condition_topic, Bool, self.start_condition_callback, queue_size=1)
 
         rospy.wait_for_message(self.joint_state_topic, JointState)
-        rospy.wait_for_message("/path_index", Int32)
+        if self.initial_path_index is None:
+            rospy.wait_for_message(self.path_index_topic, Int32)
+        else:
+            rospy.loginfo(f"Skipping wait for {self.path_index_topic}; initial index provided via parameter.")
         
         self.node_ready = True
         rospy.loginfo("UR Direction Controller node initialized.")
         self.index_callback(Int32(data=self.current_index))  # initial calculation
+
+    @staticmethod
+    def _parse_initial_path_index(raw_value):
+        try:
+            idx = int(raw_value)
+        except (TypeError, ValueError):
+            rospy.logwarn_throttle(5.0, f"Invalid initial_path_index value '{raw_value}', ignoring.")
+            return None
+        return idx if idx >= 0 else None
 
     def nozzle_height_callback(self, height_msg: Float32):
         self.nozzle_height_override = height_msg.data

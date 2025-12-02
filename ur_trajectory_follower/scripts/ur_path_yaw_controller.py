@@ -29,6 +29,11 @@ class DirectionYawController:
         self.current_index = 1
         self.velocity_override = 1.0
 
+        self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
+        if self.initial_path_index is not None:
+            self.current_index = self.initial_path_index
+            rospy.loginfo(f"Yaw controller starting from path index {self.current_index} (parameter).")
+
         # Topics (defaults follow the user's request but remain configurable)
         path_topic = rospy.get_param("~path_topic", "/path")
         pose_topic = rospy.get_param("~current_pose_topic", "/global_nozzle_pose")
@@ -173,6 +178,15 @@ class DirectionYawController:
 
         control_command_smoothed = self.smooth_output(control_command)
         self.pub_ur_velocity_world.publish(control_command_smoothed)
+
+    @staticmethod
+    def _parse_initial_path_index(raw_value):
+        try:
+            idx = int(raw_value)
+        except (TypeError, ValueError):
+            rospy.logwarn_throttle(5.0, f"Invalid initial_path_index value '{raw_value}', ignoring.")
+            return None
+        return idx if idx >= 0 else None
 
 
 def main():

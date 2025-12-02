@@ -1771,10 +1771,12 @@ def mir_follow_trajectory(gui):
     if len(selected_robots) != 1:
         print("Please select only the MIR robot to follow the trajectory.")
         return
+    _persist_gui_index_setting(gui)
+    initial_idx = gui.idx_spin.value()
     _run_remote_commands(
         gui,
         "Launching MiR trajectory follower",
-        [lambda robot: f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot}"],
+        [lambda robot: f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot} initial_path_index:={initial_idx}"],
         use_workspace_debug=True,
         target_robots=selected_robots,
     )

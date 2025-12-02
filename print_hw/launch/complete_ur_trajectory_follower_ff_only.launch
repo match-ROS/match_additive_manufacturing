@@ -55,6 +55,7 @@
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
         <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
         <arg name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
         <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
@@ -63,6 +64,7 @@
         <arg name="path_index_topic" value="/path_index" />
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
     </include>
     <!-- <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />

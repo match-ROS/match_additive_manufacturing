@@ -66,6 +66,7 @@ class PurePursuitNode:
         self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
         self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
         self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
+        self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 1.0)  # Maximaler Abstandsfehler
@@ -117,9 +118,10 @@ class PurePursuitNode:
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
         rospy.loginfo("Got path with {} points.".format(len(self.path)))
-        self.ur_trajectory_index = rospy.wait_for_message(self.trajectory_index_topic, Int32).data
+        self.ur_trajectory_index = self._resolve_initial_path_index()
         rospy.loginfo("Starting from trajectory index: {}".format(self.ur_trajectory_index))
         self.current_mir_path_index = self.ur_trajectory_index
+        self._update_active_state()
         self.follow_path()
         
 
@@ -418,6 +420,28 @@ class PurePursuitNode:
         if should_be_active and not self.is_active:
             rospy.loginfo("Trajectory index available and start condition met – starting MIR path following.")
         self.is_active = should_be_active
+
+    @staticmethod
+    def _parse_initial_path_index(raw_value):
+        try:
+            idx = int(raw_value)
+        except (TypeError, ValueError):
+            rospy.logwarn_throttle(5.0, f"Invalid initial_path_index value '{raw_value}', ignoring.")
+            return None
+        return idx if idx >= 0 else None
+
+    def _resolve_initial_path_index(self):
+        if self.initial_path_index is not None:
+            clamped = min(max(self.initial_path_index, 0), max(len(self.path) - 1, 0))
+            if clamped != self.initial_path_index:
+                rospy.logwarn("Initial path index %d clamped to %d based on path length.", self.initial_path_index, clamped)
+            else:
+                rospy.loginfo("Using initial path index %d from parameter.", clamped)
+            return clamped
+
+        rospy.loginfo("Waiting for first trajectory index on %s", self.trajectory_index_topic)
+        msg = rospy.wait_for_message(self.trajectory_index_topic, Int32)
+        return max(0, msg.data)
 
     def calculate_distance(self, current_pose, target_pose):
         # Compute if the mir is in front or behind the target point
