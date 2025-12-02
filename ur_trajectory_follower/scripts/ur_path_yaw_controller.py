@@ -86,7 +86,7 @@ class DirectionYawController:
         if self.ff_only:
             from_pose = path.poses[max(self.current_index - 1, 0)]
         else:
-            from_pose = self.current_pose if self.current_pose is not None else goal_pose
+            from_pose = self.current_pose if self.current_pose is not None else path.poses[max(self.current_index - 1, 0)]
 
         direction = np.array([
             goal_pose.pose.position.x - from_pose.pose.position.x,
