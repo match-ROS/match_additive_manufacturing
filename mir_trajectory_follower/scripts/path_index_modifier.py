@@ -50,6 +50,8 @@ class TimeWarpingIndex:
 
         # pub
         self.pub_mod = rospy.Publisher("/path_index_modified", Int32, queue_size=1)
+        rospy.sleep(0.01) # wait for publisher to connect
+        self.pub_mod.publish(Int32(current_index)) # initial publish to start trajectory follower
 
         # wait for index to change for the first time
         last_index = current_index
