@@ -537,7 +537,7 @@ class ROSInterface:
 
         # Subscriptions and publishers used by the GUI
         rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
-        self._path_index_pub = rospy.Publisher('/path_index', Int32, queue_size=10, latch=True)
+        self._path_index_pub = rospy.Publisher('/path_index', Int32, queue_size=10, latch=False)
         self._init_dynamixel_publishers()
         self._init_servo_state_listener()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
