@@ -33,6 +33,7 @@ GUI_CACHE_PATH = os.path.abspath(
 
 DEFAULT_SPRAY_DISTANCE = 0.52
 DEFAULT_PATH_INDEX = 0
+ROSCORE_HOST = "roscore"
 
 
 def _deploy_gui_cache_to_robot(robot: str, workspace: Optional[str]):
@@ -151,7 +152,7 @@ def _run_remote_commands(
     debug_prefix = _remote_debug_prefix(gui, workspace) if use_workspace_debug else ""
     env_prefix = [
         "source ~/.bashrc",
-        "export ROS_MASTER_URI=http://roscore:11311/",
+        f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/",
         "source /opt/ros/noetic/setup.bash",
     ]
     if workspace:
@@ -404,7 +405,7 @@ class _DriverControlSession:
     def _bootstrap_environment(self):
         env_cmds = [
             "source ~/.bashrc",
-            "export ROS_MASTER_URI=http://roscore:11311/",
+            f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/",
             "source /opt/ros/noetic/setup.bash",
         ]
         if self.workspace:
@@ -1079,7 +1080,7 @@ class ROSInterface:
             command = (
                 f"ssh -t -t {robot} '"
                 "source ~/.bashrc; "
-                "export ROS_MASTER_URI=http://roscore:11311/; "
+                f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/; "
                 "source /opt/ros/noetic/setup.bash; "
                 f"source ~/{workspace}/devel/setup.bash; "
                 f"{debug_prefix}python3 {remote_script}; "
@@ -1113,7 +1114,7 @@ class ROSInterface:
         remote_cmd = (
             f"ssh -t -t {robot} '"
             "source ~/.bashrc; "
-            "export ROS_MASTER_URI=http://roscore:11311/; "
+            f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/; "
             "source /opt/ros/noetic/setup.bash; "
             "source ~/catkin_ws/devel/setup.bash; "
             "mkdir -p ~/rosbags; "
@@ -1210,7 +1211,7 @@ class ROSInterface:
             command = (
                 f"ssh -t -t {robot} '"
                 f"source ~/.bashrc; "
-                f"export ROS_MASTER_URI=http://roscore:11311/; "
+                f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/; "
                 f"source /opt/ros/noetic/setup.bash; "
                 f"source ~/{workspace}/devel/setup.bash; "
                 f"{debug_prefix}roslaunch dynamixel_match dynamixel_motors.launch; exec bash'"
@@ -1228,7 +1229,7 @@ class ROSInterface:
             # Kill by rosnode and fall back to process patterns
             remote_cmd = (
                 "source ~/.bashrc; "
-                "export ROS_MASTER_URI=http://roscore:11311/; "
+                F"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/; "
                 "source /opt/ros/noetic/setup.bash; "
                 f"source ~/{workspace}/devel/setup.bash; "
                 "rosnode kill /servo_driver || true; "
@@ -1534,7 +1535,7 @@ def launch_drivers(gui):
         command = (
             f"ssh -t -t {robot} '"
             "source ~/.bashrc; "
-            "export ROS_MASTER_URI=http://roscore:11311/; "
+            f"export ROS_MASTER_URI=http://{ROSCORE_HOST}:11311/; "
             "source /opt/ros/noetic/setup.bash; "
             f"source ~/{workspace}/devel/setup.bash; "
             f"{debug_prefix}roslaunch mur_launch_hardware {robot}.launch{launch_suffix}; "
