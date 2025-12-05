@@ -194,7 +194,7 @@ class ROSGui(QWidget):
             "/ur_path_original": {"local": True, "remote": False},
             "/mir_path_original": {"local": True, "remote": False},
             "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
-            "/profiles_float": {"local": False, "remote": True},
+            "/profiles": {"local": False, "remote": True},
             "/path_index": {"local": False, "remote": True},
             "/orthogonal_error": {"local": False, "remote": True},
             "/orthogonal_twist": {"local": False, "remote": True},
