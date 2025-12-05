@@ -3,34 +3,28 @@ import rosbag
 import numpy as np
 import matplotlib.pyplot as plt
 import sensor_msgs.point_cloud2 as pc2
+from nav_msgs.msg import Path
+
+
 
 # ----------------- CONFIG -----------------
-bagfile = "record_20251205_130609_MuR.bag"
+bagfile = "record_20251205_135424_MuR.bag"
 scan_topic_pc2 = "/profiles"
 output_ply = "scans_export.ply"
+path_topic = "/ur_path_original"
+use_live_path_if_missing = True
+z_offset = 0.62
 # -------------------------------------------
 
+def extract_lowest_layer(path_points, tol=1e-4):
+    path_points = np.array(path_points)
+    if len(path_points) == 0:
+        raise RuntimeError("No path points available.")
 
-# ----------------- PLY EXPORT -----------------
-def save_ply(filename, points):
-    """Save Nx3 points as ASCII PLY file."""
-    N = points.shape[0]
-    with open(filename, "w") as f:
-        # header
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {N}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        f.write("end_header\n")
-
-        # points
-        for x, y, z in points:
-            f.write(f"{x} {y} {z}\n")
-
-    print(f"[OK] Saved PLY file: {filename}")
-
+    z0 = path_points[0, 2]
+    idx_same = np.where(np.abs(path_points[:,2] - z0) < tol)[0]
+    end_idx = idx_same[-1]
+    return path_points[:end_idx+1]
 
 # ----------------- LOAD BAG -----------------
 points = []
@@ -43,15 +37,58 @@ with rosbag.Bag(bagfile, "r") as bag:
 
 points = np.array(points)
 
+# ----------------- TRY LOADING PATH FROM BAG -----------------
+path_points = []
 
-# ----------------- EXPORT -----------------
-save_ply(output_ply, points)
+with rosbag.Bag(bagfile, "r") as bag:
+    topics = bag.get_type_and_topic_info().topics.keys()
+
+    if path_topic in topics:
+        # Path exists in bag → load it
+        for topic, msg, t in bag.read_messages(topics=[path_topic]):
+            for pose in msg.poses:
+                p = pose.pose.position
+                path_points.append([p.x, p.y, p.z])
+            break  # take first full Path message
+
+# ----------------- FALLBACK: SUBSCRIBE LIVE IF NOT FOUND -----------------
+if len(path_points) == 0 and use_live_path_if_missing:
+    import rospy
+    from nav_msgs.msg import Path
+
+    rospy.init_node("path_reader_temp", anonymous=True)
+    print("[INFO] No path in bag. Waiting for live path message on /ur_path_original...")
+
+    received = []
+
+    def cb(msg):
+        for pose in msg.poses:
+            p = pose.pose.position
+            received.append([p.x, p.y, p.z])
+        rospy.signal_shutdown("Path received.")
+
+    sub = rospy.Subscriber(path_topic, Path, cb)
+
+    rospy.spin()
+    path_points = received
+    print(f"[INFO] Received live path with {len(path_points)} points.")
+
+
+# ----------------- EXTRACT LOWEST LAYER -----------------
+lowest_layer = extract_lowest_layer(path_points)
 
 
 # ----------------- PLOT -----------------
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.scatter(points[::100, 0], points[::100, 1], points[::100, 2], s=1)
+# Plot scanned points
+ax.scatter(points[::100, 0], points[::100, 1], points[::100, 2], s=1, label="Scans")
+
+# Plot lowest layer of path
+ax.plot(lowest_layer[:,0], lowest_layer[:,1], lowest_layer[:,2] + z_offset,
+        color='red', linewidth=2, label="UR Path (lowest layer)")
+
+ax.legend()
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
@@ -72,3 +109,6 @@ ax.set_ylim(mid_y - max_range, mid_y + max_range)
 ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 plt.show()
+
+
+
