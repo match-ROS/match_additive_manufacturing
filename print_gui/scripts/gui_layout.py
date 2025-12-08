@@ -72,6 +72,8 @@ class ROSGui(QWidget):
         self.override_value_label = QLabel("100%")
         self.turbo_mode_checkbox = QCheckBox("Turbo Mode")
         self.turbo_mode_checkbox.setChecked(False)
+        self.ludicrous_mode_checkbox = QCheckBox("Ludicrous Mode")
+        self.ludicrous_mode_checkbox.setChecked(False)
 
         nozzle_label = QLabel("Nozzle Height Override (mm)")
         self.nozzle_override_slider = QSlider(Qt.Horizontal)
@@ -82,6 +84,7 @@ class ROSGui(QWidget):
         self.nozzle_override_value_label = QLabel("0.0 mm")
 
         self.turbo_mode_checkbox.toggled.connect(self._handle_turbo_mode_toggle)
+        self.ludicrous_mode_checkbox.toggled.connect(self._handle_ludicrous_mode_toggle)
         self.ros_interface.init_override_velocity_slider()
         self.ros_interface.init_nozzle_override_slider()
 
@@ -89,6 +92,7 @@ class ROSGui(QWidget):
         override_layout.addWidget(self.override_slider)
         override_layout.addWidget(self.override_value_label)
         override_layout.addWidget(self.turbo_mode_checkbox)
+        override_layout.addWidget(self.ludicrous_mode_checkbox)
         override_layout.addWidget(nozzle_label)
         override_layout.addWidget(self.nozzle_override_slider)
         override_layout.addWidget(self.nozzle_override_value_label)
@@ -653,12 +657,24 @@ class ROSGui(QWidget):
         if self.override_slider.value() > max_value:
             self.override_slider.setValue(max_value)
 
+    def _handle_ludicrous_mode_toggle(self, enabled: bool):
+        if not hasattr(self, 'override_slider'):
+            return
+        max_value = 300 if enabled else (200 if self.is_turbo_mode_enabled() else 100)
+        self.override_slider.setMaximum(max_value)
+        if self.override_slider.value() > max_value:
+            self.override_slider.setValue(max_value)
+
     def is_debug_enabled(self):
         chk = getattr(self, "chk_log_debug", None)
         return bool(chk and chk.isChecked())
 
     def is_turbo_mode_enabled(self):
         chk = getattr(self, "turbo_mode_checkbox", None)
+        return bool(chk and chk.isChecked())
+
+    def is_ludicrous_mode_enabled(self):
+        chk = getattr(self, "ludicrous_mode_checkbox", None)
         return bool(chk and chk.isChecked())
 
     def get_tcp_offset_xyz(self):
