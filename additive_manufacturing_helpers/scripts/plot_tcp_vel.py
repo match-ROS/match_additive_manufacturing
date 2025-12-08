@@ -14,7 +14,7 @@ def calculate_velocity_in_xy_plane(bag_file_path):
     timestamps = []
 
     # Das gewünschte Topic abonnieren
-    for topic, msg, t in bag.read_messages(topics='/qualisys/karton/pose'):
+    for topic, msg, t in bag.read_messages(topics='/qualisys_map/nozzle/pose'):
         # Position (x, y) extrahieren und Zeitstempel speichern
         x = msg.pose.position.x
         y = msg.pose.position.y
@@ -51,10 +51,11 @@ def smooth_velocity(velocities, window_size=20):
     return np.convolve(velocities, np.ones(window_size)/window_size, mode='valid')
 
 # Beispielaufruf der Funktion
-bag_file_path = '/home/rosmatch/2025-11-18-15-59-21.bag'
+bag_file_path = 'record_20251208_142726_GUI-PC.bag'
 timestamps, velocities = calculate_velocity_in_xy_plane(bag_file_path)
 
 # Glättung der Geschwindigkeit
+print("Anzahl der Geschwindigkeitswerte vor Glättung:", len(velocities))
 smoothed_velocities = smooth_velocity(velocities, window_size=20)
 
 # Die Zeitstempel für den geglätteten Verlauf anpassen (wegen des gleitenden Durchschnitts)
