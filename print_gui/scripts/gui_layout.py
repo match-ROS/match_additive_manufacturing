@@ -206,6 +206,8 @@ class ROSGui(QWidget):
             "/servo_target_pos_right": {"local": False, "remote": True},
             "/mur620c/UR10_r/ur_calibrated_pose": {"local": False, "remote": True},
             "/mur620c/UR10_r/global_tcp_pose": {"local": False, "remote": True},
+            "/qualisys_map/mur620c/pose": {"local": True, "remote": False},
+            "/qualisys_map/nozzle/pose": {"local": True, "remote": False},
         }
 
 
