@@ -46,7 +46,7 @@ class PurePursuitNode:
         self.Ky = rospy.get_param("~Ky", 0.3)  # Lateral error multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.3)  # Orientation error multiplier
-        self.K_idx = rospy.get_param("~K_idx", 0.015)  # Index error multiplier
+        self.K_idx = rospy.get_param("~K_idx", 0.02)  # Index error multiplier
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_original")
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
         self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
@@ -59,7 +59,7 @@ class PurePursuitNode:
         self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
         self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
-        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.95)
+        self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.90)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
         self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
         self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.2)  # Maximale Winkelgeschwindigkeit
@@ -269,13 +269,13 @@ class PurePursuitNode:
         feedforward_v  = self.path_velocities_lin[self.current_mir_path_index]
         feedforward_w  = self.path_velocities_ang[self.current_mir_path_index]
 
-        target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress + self.K_idx*index_error
+        target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress
+        target_v = target_v * (1.0 + self.K_idx*index_error)
         target_w = math.sin(self.K_orientation*orientation_error) * self.current_sub_step_progress + self.Kw*feedforward_w + self.Ky * self.lateral_distance * np.sign(target_v)
+        target_w = target_w * (1.0 + self.K_idx*index_error)
 
-        #print(f"Kv*feedforward_v: {self.Kv*feedforward_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, K_orientation*orientation_error: {self.K_orientation*orientation_error * self.current_sub_step_progress}")
-        #print(f"target_v: {target_v}, K_distance*distance_error: {self.K_distance*distance_error * self.current_sub_step_progress}, K_idx*index_error: {self.K_idx*index_error}, lateral_distance: {self.lateral_distance}, target_w: {target_w}")
-        # Keine Rückwärtsfahrt (optional)
         target_v = max(0.0, target_v) * self.override
+        target_w = target_w * self.override
 
         # Begrenzung der Geschwindigkeiten
         target_v = max(-self.linear_velocity_limit, min(self.linear_velocity_limit, target_v))
