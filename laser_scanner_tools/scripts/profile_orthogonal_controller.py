@@ -24,7 +24,7 @@ class ProfileOrthogonalController(object):
         )
 
         self.window_size = rospy.get_param("~window_size", 10)
-        self.k_p = rospy.get_param("~k_p", 0.0001)
+        self.k_p = rospy.get_param("~k_p", 0.3)
         self.max_vel = rospy.get_param("~max_vel", 0.15)
         self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
@@ -106,7 +106,7 @@ class ProfileOrthogonalController(object):
         print(avg_deviation)
 
         # --- Compute lateral speed in TCP frame (Y axis of TCP) ---
-        v_lat = -self.k_p * avg_deviation
+        v_lat = -self.k_p * avg_deviation * 0.001  # Scale factor to convert index to meters
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
         v_tcp = np.array([0.0, -v_lat, 0.0])
