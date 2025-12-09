@@ -25,9 +25,9 @@ class ProfileOrthogonalController(object):
 
         self.window_size = rospy.get_param("~window_size", 10)
         self.k_p = rospy.get_param("~k_p", 0.0001)
-        self.max_vel = rospy.get_param("~max_vel", 0.08)
+        self.max_vel = rospy.get_param("~max_vel", 0.15)
         self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)
-        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.98)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
         self.control_rate = rospy.get_param("~control_rate", 200.0)
 
         self.deviation_history = deque(maxlen=self.window_size)
@@ -102,6 +102,8 @@ class ProfileOrthogonalController(object):
         # --- Smooth deviation over N frames ---
         self.deviation_history.append(deviation)
         avg_deviation = float(np.mean(self.deviation_history))
+
+        print(avg_deviation)
 
         # --- Compute lateral speed in TCP frame (Y axis of TCP) ---
         v_lat = -self.k_p * avg_deviation
