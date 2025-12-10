@@ -19,21 +19,48 @@ def read_poses_from_bag(bag_path, topic):
     return np.array(xs), np.array(ys), np.array(zs)
 
 
-def split_layers_by_z(z, z_jump_threshold):
+def split_layers_by_start_proximity(x, y, start_radius, min_points_between_layers):
     """
-    Teilt die Zeitreihe in Layer auf, wenn der z-Sprung größer als z_jump_threshold ist.
-    Gibt eine Liste von slice-Objekten zurück.
-    """
-    layers = []
-    if len(z) == 0:
-        return layers
+    Teilt die Zeitreihe in Layer auf, basierend darauf,
+    dass die Bahn immer wieder in die Nähe der Startposition kommt.
 
-    start_idx = 0
-    for i in range(1, len(z)):
-        if abs(z[i] - z[i - 1]) > z_jump_threshold:
-            layers.append(slice(start_idx, i))
-            start_idx = i
-    layers.append(slice(start_idx, len(z)))
+    - Startpunkt = (x[0], y[0])
+    - start_radius: Abstand, bei dem wir „nahe am Start“ sind
+    - min_points_between_layers: Mindestanzahl Punkte zwischen zwei Lagenwechseln
+    """
+    n = len(x)
+    if n == 0:
+        return []
+
+    x0, y0 = x[0], y[0]
+    dx = x - x0
+    dy = y - y0
+    r = np.sqrt(dx**2 + dy**2)
+
+    inside = r < start_radius
+    start_indices = [0]  # erster Layer startet bei 0
+
+    # Wir starten "inside"
+    was_outside = False
+
+    for i in range(1, n):
+        if not inside[i]:
+            # wir sind draußen
+            was_outside = True
+        else:
+            # wir sind im Startbereich
+            if was_outside:
+                # wir kommen gerade von draußen wieder rein
+                if (i - start_indices[-1]) >= min_points_between_layers:
+                    start_indices.append(i)
+                was_outside = False
+
+    # in Slices umwandeln
+    layers = []
+    for k in range(len(start_indices) - 1):
+        layers.append(slice(start_indices[k], start_indices[k + 1]))
+    layers.append(slice(start_indices[-1], n))
+
     return layers
 
 
@@ -44,7 +71,6 @@ def resample_layer_xy(x, y, slc, n_samples):
 
     if len(x_layer) < 2:
         # zu wenige Punkte zum Resamplen
-        s = np.array([0.0])
         return np.repeat(x_layer, n_samples), np.repeat(y_layer, n_samples)
 
     dx = np.diff(x_layer)
@@ -52,7 +78,6 @@ def resample_layer_xy(x, y, slc, n_samples):
     ds = np.hypot(dx, dy)
     s = np.concatenate(([0.0], np.cumsum(ds)))
 
-    # Einheitliches s-Raster
     s_new = np.linspace(0, s[-1], n_samples)
     x_new = np.interp(s_new, s, x_layer)
     y_new = np.interp(s_new, s, y_layer)
@@ -79,7 +104,7 @@ def compute_centerline_and_spread(x, y, layer_slices, n_samples=200):
     dx = layer_x_resampled - center_x[None, :]
     dy = layer_y_resampled - center_y[None, :]
     r = np.sqrt(dx**2 + dy**2)
-    spread = r.std(axis=0)  # Standardabweichung des radialen Fehlers
+    spread = r.std(axis=0)
 
     return center_x, center_y, spread, layer_x_resampled, layer_y_resampled
 
@@ -92,19 +117,14 @@ def plot_layers_and_centerline(x, y, layer_slices,
 
     # Original-Layer (dünn grau)
     for slc in layer_slices:
-        ax.plot(x[slc], y[slc], linewidth=0.7, alpha=0.4, linestyle="-", zorder=1)
-
-    # Resample-Layer (optional, leicht dunkler, um zu sehen, was gemittelt wurde)
-    # Kannst du auch auskommentieren, wenn dir das zu viel ist.
-    # for i in range(layer_x_resampled.shape[0]):
-    #     ax.plot(layer_x_resampled[i], layer_y_resampled[i],
-    #             linewidth=0.8, alpha=0.5, linestyle=":", zorder=2)
+        ax.plot(x[slc], y[slc], linewidth=0.7, alpha=0.4,
+                linestyle="-", zorder=1)
 
     # Mittellinie (schwarz gestrichelt)
-    ax.plot(center_x, center_y, "k--", linewidth=1.5, label="Mittellinie", zorder=3)
+    ax.plot(center_x, center_y, "k--", linewidth=1.5,
+            label="Mittellinie", zorder=3)
 
     # Streuungs-Band: Kreise um die Mittellinie
-    # Radius = spread_scale * spread (z.B. 2 * sigma)
     for cx, cy, s in zip(center_x, center_y, spread):
         if s <= 0:
             continue
@@ -130,7 +150,7 @@ def plot_layers_and_centerline(x, y, layer_slices,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot TCP Position in XY-Ebene aus ROS-Bag mit Layer-Erkennung."
+        description="Plot TCP Position in XY-Ebene aus ROS-Bag mit Layer-Erkennung über Startnähe."
     )
     parser.add_argument(
         "--topic",
@@ -138,10 +158,16 @@ def main():
         help="Topic mit PoseStamped-Nachrichten (default: %(default)s)",
     )
     parser.add_argument(
-        "--z_jump_threshold",
+        "--start_radius",
         type=float,
-        default=0.4e-3,  # z.B. 0.4 mm
-        help="Schwellwert in m für Z-Sprung zur Layer-Erkennung (default: %(default)s)",
+        default=0.005,  # 5 mm
+        help="Radius um die Startposition zur Erkennung eines Lagenwechsels (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--min_points_between_layers",
+        type=int,
+        default=200,
+        help="Mindestanzahl Punkte zwischen zwei Lagenwechseln (default: %(default)s)",
     )
     parser.add_argument(
         "--samples",
@@ -170,8 +196,24 @@ def main():
         print("Keine Daten im angegebenen Topic gefunden.")
         return
 
-    layer_slices = split_layers_by_z(z, args.z_jump_threshold)
-    print(f"Erkannte Layer: {len(layer_slices)}")
+    layer_slices = split_layers_by_start_proximity(
+        x, y,
+        start_radius=args.start_radius,
+        min_points_between_layers=args.min_points_between_layers,
+    )
+
+    print(f"Erkannte Layer (inkl. erster/letzter): {len(layer_slices)}")
+
+    # Ersten und letzten Layer verwerfen
+    if len(layer_slices) > 2:
+        layer_slices = layer_slices[1:-1]
+    else:
+        print("Zu wenig Layer, um ersten und letzten zu verwerfen.")
+
+    print(f"Verbleibende Layer: {len(layer_slices)}")
+    for i, slc in enumerate(layer_slices):
+        print(f"  Layer {i}: Indizes {slc.start} bis {slc.stop} (n={slc.stop - slc.start})")
+
     for i, slc in enumerate(layer_slices):
         print(f"  Layer {i}: Indizes {slc.start} bis {slc.stop} (n={slc.stop - slc.start})")
 
