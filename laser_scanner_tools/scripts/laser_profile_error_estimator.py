@@ -12,7 +12,7 @@ class LaserProfileErrorEstimator(object):
         self.profile_topic = rospy.get_param("~profile_topic", "/profiles_float")
 
         # Ziel-Schichthöhe
-        self.target_layer_height = rospy.get_param("~target_layer_height", -10.0)  # z.B. mm
+        self.target_layer_height = rospy.get_param("~target_layer_height", -15.0)  # z.B. mm
         self.height_half_width = rospy.get_param("~height_half_width", 50)         # Punkte links/rechts
 
         # Scanner-zu-Düse-Geometrie / Zeitversatz
