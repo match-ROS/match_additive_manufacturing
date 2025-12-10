@@ -28,6 +28,23 @@ class LaserProfileController(object):
             "/laser_profile/height_error"
         )
 
+        # Override-Steuerung
+        self.manual_override_topic = rospy.get_param(
+            "~manual_override_topic",
+            "/velocity_override_manual"
+        )
+        self.override_out_topic = rospy.get_param(
+            "~override_out_topic",
+            "/velocity_override"
+        )
+        # max. Änderung gegenüber manuellem Override (z.B. 0.3 = ±30 Prozentpunkte)
+        self.max_override_adjust = rospy.get_param("~max_override_adjust", 0.3)
+        # Gain: wie stark der Höhenfehler in Override-Änderung übersetzt wird
+        self.height_override_gain = rospy.get_param("~height_override_gain", 0.01)
+        # Grenzen für den effektiven Override
+        self.override_min = rospy.get_param("~override_min", 0.0)
+        self.override_max = rospy.get_param("~override_max", 2.0)
+
         self.k_p = rospy.get_param("~k_p", 0.3)
         self.max_vel = rospy.get_param("~max_vel", 0.15)
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
@@ -43,8 +60,12 @@ class LaserProfileController(object):
         self.height_error = None
         self.prev_output = [0.0, 0.0, 0.0]
 
+        self.manual_override = 1.0
+        self.current_override = 1.0
+
         # --- Publisher ---
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=1)
+        self.override_pub = rospy.Publisher(self.override_out_topic, Float32, queue_size=1)
 
         # --- Subscribers ---
         rospy.Subscriber(self.tcp_pose_topic, PoseStamped,
@@ -53,6 +74,8 @@ class LaserProfileController(object):
                          self.lateral_error_callback, queue_size=1)
         rospy.Subscriber(self.height_error_topic, Float32,
                          self.height_error_callback, queue_size=1)
+        rospy.Subscriber(self.manual_override_topic, Float32,
+                         self.manual_override_callback, queue_size=1)
 
         rospy.loginfo("LaserProfileController started.")
 
@@ -72,6 +95,9 @@ class LaserProfileController(object):
     def height_error_callback(self, msg: Float32):
         self.height_error = msg.data
 
+    def manual_override_callback(self, msg: Float32):
+        self.manual_override = msg.data
+
     def smooth_output(self, new_output):
         smoothed = []
         for i in range(3):
@@ -80,6 +106,34 @@ class LaserProfileController(object):
             smoothed.append(smoothed_value)
         self.prev_output = smoothed
         return np.array(smoothed)
+
+    def update_override_from_height(self):
+        """
+        Nutzt height_error, um den manuellen Override moderat zu verändern.
+
+        height_error < 0  -> zu viel Material -> schneller fahren (Override hoch)
+        height_error > 0  -> zu wenig Material -> langsamer fahren (Override runter)
+        """
+        if self.height_error is None:
+            # Noch keine Höheninfo -> einfach manuellen Override durchreichen
+            self.current_override = self.manual_override
+        else:
+            # Delta-Override proportional zum Höhenfehler
+            # Vorzeichen: negativer Fehler -> +Delta, positiver Fehler -> -Delta
+            raw_delta = -self.height_override_gain * self.height_error
+            # Auf ±max_override_adjust begrenzen
+            delta = np.clip(raw_delta,
+                            -self.max_override_adjust,
+                            self.max_override_adjust)
+            # Effektiver Override um Delta verschoben
+            eff = self.manual_override + delta
+
+            # Auf globale Grenzen clampen
+            eff = max(self.override_min, min(self.override_max, eff))
+            self.current_override = eff
+
+        # Publish
+        self.override_pub.publish(Float32(data=self.current_override))
 
     # ------------------------------------------------------------------
 
@@ -91,7 +145,10 @@ class LaserProfileController(object):
             rospy.logwarn_throttle(1.0, "No lateral_error received yet.")
             return
 
-        # --- Optional: Höhencheck ---
+        # Override anhand Höhenfehler updaten
+        self.update_override_from_height()
+
+        # --- Optional: Höhencheck zum Sicherheits-Stop ---
         if self.height_error is not None:
             current_height = self.target_layer_height - self.height_error
             if current_height < self.min_expected_height:
@@ -106,7 +163,6 @@ class LaserProfileController(object):
                 return
 
         # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        # lateral_error ist wie vorher avg_deviation in Indexschritten
         v_lat = -self.k_p * self.lateral_error * 0.001  # Index -> m
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 

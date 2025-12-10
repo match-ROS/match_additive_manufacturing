@@ -714,7 +714,7 @@ class ROSInterface:
         return _remote_debug_prefix(self.gui, workspace)
 
     def init_override_velocity_slider(self):
-        self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
+        self.velocity_override_pub = rospy.Publisher('/velocity_override_manual', Float32, queue_size=10, latch=True)
         self.gui.override_slider.valueChanged.connect(
             lambda value: self.gui.override_value_label.setText(f"{value}%")
             # publish to /velocity_override as well:
