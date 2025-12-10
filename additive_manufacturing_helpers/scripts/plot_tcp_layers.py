@@ -5,8 +5,9 @@ import rosbag
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
-bagfile = "record_20251210_141133_GUI-PC.bag"
-
+#bag_path = "record_20251210_141133_MuR.bag"
+bag_path = "record_20251209_171429_GUI-PC.bag"
+bag_tcp = "record_20251209_171429_GUI-PC.bag"
 
 def read_poses_from_bag(bag_path, topic):
     xs, ys, zs = [], [], []
@@ -40,12 +41,10 @@ def split_layers_by_start_proximity(x, y, start_radius, min_points_between_layer
     inside = r < start_radius
     start_indices = [0]  # erster Layer startet bei 0
 
-    # Wir starten "inside"
     was_outside = False
 
     for i in range(1, n):
         if not inside[i]:
-            # wir sind draußen
             was_outside = True
         else:
             # wir sind im Startbereich
@@ -55,7 +54,6 @@ def split_layers_by_start_proximity(x, y, start_radius, min_points_between_layer
                     start_indices.append(i)
                 was_outside = False
 
-    # in Slices umwandeln
     layers = []
     for k in range(len(start_indices) - 1):
         layers.append(slice(start_indices[k], start_indices[k + 1]))
@@ -70,7 +68,6 @@ def resample_layer_xy(x, y, slc, n_samples):
     y_layer = y[slc]
 
     if len(x_layer) < 2:
-        # zu wenige Punkte zum Resamplen
         return np.repeat(x_layer, n_samples), np.repeat(y_layer, n_samples)
 
     dx = np.diff(x_layer)
@@ -100,7 +97,6 @@ def compute_centerline_and_spread(x, y, layer_slices, n_samples=200):
     center_x = layer_x_resampled.mean(axis=0)
     center_y = layer_y_resampled.mean(axis=0)
 
-    # Radiale Abweichung jedes Layers von der Mittellinie
     dx = layer_x_resampled - center_x[None, :]
     dy = layer_y_resampled - center_y[None, :]
     r = np.sqrt(dx**2 + dy**2)
@@ -109,20 +105,87 @@ def compute_centerline_and_spread(x, y, layer_slices, n_samples=200):
     return center_x, center_y, spread, layer_x_resampled, layer_y_resampled
 
 
+# ---------- UR-Pfad (Groundtruth) einlesen ----------
+
+def split_path_layers_by_z(z, z_jump_threshold):
+    """
+    Teilt den UR-Pfad in Layer auf, basierend auf Z-Sprüngen.
+    Eignet sich gut für /ur_path_original mit diskreten Layerhöhen.
+    """
+    layers = []
+    if len(z) == 0:
+        return layers
+
+    start_idx = 0
+    for i in range(1, len(z)):
+        if abs(z[i] - z[i - 1]) > z_jump_threshold:
+            layers.append(slice(start_idx, i))
+            start_idx = i
+    layers.append(slice(start_idx, len(z)))
+    return layers
+
+
+def read_ur_path_layer2(bag_path, topic="/ur_path_original", z_jump_threshold=0.0005):
+    """
+    Liest /ur_path_original aus einer Bag und gibt den zweiten Layer (XY) zurück.
+    Falls weniger als 2 Layer vorhanden sind, wird der gesamte Pfad zurückgegeben.
+    """
+    print(f"Lese UR-Pfad aus Bag: {bag_path}")
+    with rosbag.Bag(bag_path, "r") as bag:
+        path_msg = None
+        for _, msg, _ in bag.read_messages(topics=[topic]):
+            path_msg = msg  # letzte Nachricht verwenden
+
+    if path_msg is None:
+        print("  Keine /ur_path_original Nachricht gefunden.")
+        return None, None
+
+    if not path_msg.poses:
+        print("  ur_path_original enthält keine Posen.")
+        return None, None
+
+    xs, ys, zs = [], [], []
+    for ps in path_msg.poses:
+        p = ps.pose.position
+        xs.append(p.x)
+        ys.append(p.y)
+        zs.append(p.z)
+
+    x = np.array(xs)
+    y = np.array(ys)
+    z = np.array(zs)
+
+    layer_slices = split_path_layers_by_z(z, z_jump_threshold)
+    print(f"  UR-Pfad: erkannte Layer: {len(layer_slices)}")
+
+    if len(layer_slices) >= 2:
+        sl = layer_slices[1]  # zweiter Layer
+        print(f"  Nutze UR-Pfad Layer 2: Indizes {sl.start} bis {sl.stop}")
+        return x[sl], y[sl]
+    else:
+        print("  UR-Pfad hat weniger als 2 Layer – verwende gesamten Pfad.")
+        return x, y
+
+
+# ---------- Plot ----------
+
 def plot_layers_and_centerline(x, y, layer_slices,
                                center_x, center_y, spread,
                                layer_x_resampled, layer_y_resampled,
-                               spread_scale=2.0, output=None):
+                               spread_scale=2.0,
+                               gt_x=None, gt_y=None,
+                               output=None):
     fig, ax = plt.subplots(figsize=(8, 8))
 
     # Original-Layer (dünn grau)
     for slc in layer_slices:
-        ax.plot(x[slc], y[slc], linewidth=0.7, alpha=0.4,
+        ax.plot(x[slc], y[slc],
+                linewidth=0.7, alpha=0.4,
                 linestyle="-", zorder=1)
 
     # Mittellinie (schwarz gestrichelt)
-    ax.plot(center_x, center_y, "k--", linewidth=1.5,
-            label="Mittellinie", zorder=3)
+    ax.plot(center_x, center_y, "k--",
+            linewidth=1.5, label="Mittellinie", zorder=3)
 
     # Streuungs-Band: Kreise um die Mittellinie
     for cx, cy, s in zip(center_x, center_y, spread):
@@ -136,10 +199,18 @@ def plot_layers_and_centerline(x, y, layer_slices,
                         zorder=2)
         ax.add_patch(circle)
 
+    # Groundtruth-Pfad (UR-Pfad, Layer 2)
+    if gt_x is not None and gt_y is not None:
+        ax.plot(gt_x, gt_y,
+                linewidth=1.5,
+                linestyle="-",
+                label="UR-Pfad (Layer 2)",
+                zorder=4)
+
     ax.set_aspect("equal", "box")
     ax.set_xlabel("X [m]")
     ax.set_ylabel("Y [m]")
-    ax.set_title("TCP-Bahn mit Layern, Mittellinie und Streuungsband")
+    ax.set_title("TCP-Bahn mit Layern, Mittellinie, Streuungsband und UR-Pfad")
     ax.legend()
     ax.grid(True)
 
@@ -150,12 +221,12 @@ def plot_layers_and_centerline(x, y, layer_slices,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot TCP Position in XY-Ebene aus ROS-Bag mit Layer-Erkennung über Startnähe."
+        description="Plot TCP Position in XY-Ebene mit Layer-Erkennung + UR-Pfad-Groundtruth."
     )
     parser.add_argument(
         "--topic",
         default="/mur620c/UR10_r/global_tcp_pose_mocap",
-        help="Topic mit PoseStamped-Nachrichten (default: %(default)s)",
+        help="Topic mit PoseStamped-Nachrichten (TCP-Mocap) (default: %(default)s)",
     )
     parser.add_argument(
         "--start_radius",
@@ -182,14 +253,25 @@ def main():
         help="Faktor für den Streuungsradius (z.B. 2*sigma) (default: %(default)s)",
     )
     parser.add_argument(
+        "--path_z_jump_threshold",
+        type=float,
+        default=0.005,
+        help="Z-Sprungschwelle für Layer-Trennung im UR-Pfad (default: %(default)s)",
+    )
+    parser.add_argument(
         "--output",
-        help="Optionaler Dateiname zum Speichern des Plots (PNG)",
+        default="layer_plot.pdf",
+        help="Dateiname zum Speichern des Plots (z.B. .pdf oder .png) (default: %(default)s)",
     )
 
     args = parser.parse_args()
 
-    print(f"Lese Bag: {bagfile}")
-    x, y, z = read_poses_from_bag(bagfile, args.topic)
+    tcp_bag = bag_tcp
+    path_bag = bag_path if bag_path is not None else bag_tcp
+
+    # --- TCP-Daten einlesen ---
+    print(f"Lese TCP-Bag: {tcp_bag}")
+    x, y, z = read_poses_from_bag(tcp_bag, args.topic)
     print(f"Anzahl empfangener Posen: {len(x)}")
 
     if len(x) == 0:
@@ -214,17 +296,23 @@ def main():
     for i, slc in enumerate(layer_slices):
         print(f"  Layer {i}: Indizes {slc.start} bis {slc.stop} (n={slc.stop - slc.start})")
 
-    for i, slc in enumerate(layer_slices):
-        print(f"  Layer {i}: Indizes {slc.start} bis {slc.stop} (n={slc.stop - slc.start})")
-
     center_x, center_y, spread, layer_x_resampled, layer_y_resampled = \
         compute_centerline_and_spread(x, y, layer_slices, n_samples=args.samples)
 
+    # --- UR-Pfad (Groundtruth, Layer 2) einlesen ---
+    gt_x, gt_y = read_ur_path_layer2(
+        path_bag,
+        topic="/ur_path_original",
+        z_jump_threshold=args.path_z_jump_threshold,
+    )
+
+    # --- Plot ---
     plot_layers_and_centerline(
         x, y, layer_slices,
         center_x, center_y, spread,
         layer_x_resampled, layer_y_resampled,
         spread_scale=args.spread_scale,
+        gt_x=gt_x, gt_y=gt_y,
         output=args.output,
     )
 
