@@ -881,7 +881,7 @@ class ROSInterface:
         key = self.is_ros_node_running_fast("/keyence_ljx_profile_node", node_cache)
         flow = self.is_ros_node_running_fast("/flow_serial_bridge", node_cache)
         tgt = self.is_ros_node_running_fast("/target_broadcaster", node_cache)
-        laser = self.is_ros_node_running_fast("/profile_orthogonal_controller", node_cache)
+        laser = self.is_ros_node_running_fast("/laser_profile_controller", node_cache)
         mocap = self.is_ros_node_running_fast("/qualisys", node_cache)
 
         # --- Button coloring ---
