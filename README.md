@@ -43,6 +43,14 @@ roslaunch print_sim run_simulation_complete.launch
 roslaunch ur_trajectory_follower complete_ur_trajectory_follower_ff_only.launch
 ```
 
+## Measurement Data
+
+Measurement results in Rosbag format can be found at the following link
+
+
+```
+https://seafile.cloud.uni-hannover.de/d/9b66d3d6af834b0b815f/
+```
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request.
