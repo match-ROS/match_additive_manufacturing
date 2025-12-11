@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
 #bag_path = "record_20251210_141133_MuR.bag"
-bag_path = "record_20251209_171429_GUI-PC.bag"
-bag_tcp = "record_20251209_171429_GUI-PC.bag"
+bag_path = "record_20251209_174518_GUI-PC.bag"
+bag_tcp = "record_20251209_174518_GUI-PC.bag"
 
 def read_poses_from_bag(bag_path, topic):
     xs, ys, zs = [], [], []
@@ -231,7 +231,7 @@ def main():
     parser.add_argument(
         "--start_radius",
         type=float,
-        default=0.005,  # 5 mm
+        default=0.25,  # 5 mm
         help="Radius um die Startposition zur Erkennung eines Lagenwechsels (default: %(default)s)",
     )
     parser.add_argument(
@@ -255,7 +255,7 @@ def main():
     parser.add_argument(
         "--path_z_jump_threshold",
         type=float,
-        default=0.005,
+        default=0.25,
         help="Z-Sprungschwelle für Layer-Trennung im UR-Pfad (default: %(default)s)",
     )
     parser.add_argument(
@@ -288,7 +288,7 @@ def main():
 
     # Ersten und letzten Layer verwerfen
     if len(layer_slices) > 2:
-        layer_slices = layer_slices[1:-1]
+        layer_slices = layer_slices[1:-1]   
     else:
         print("Zu wenig Layer, um ersten und letzten zu verwerfen.")
 

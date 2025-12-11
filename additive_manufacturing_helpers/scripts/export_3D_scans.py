@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import sensor_msgs.point_cloud2 as pc2
 
 # ----------------- CONFIG -----------------
-bagfile = "record_20251205_135424_MuR.bag"
+bagfile = "record_20251210_141133_MuR.bag"
 scan_topic_pc2 = "/profiles"
 output_ply = "scans_export.ply"
 # -------------------------------------------

@@ -8,7 +8,7 @@ from nav_msgs.msg import Path
 
 
 # ----------------- CONFIG -----------------
-bagfile = "record_20251205_135424_MuR.bag"
+bagfile = "record_20251210_141133_MuR.bag"
 scan_topic_pc2 = "/profiles"
 output_ply = "scans_export.ply"
 path_topic = "/ur_path_original"
