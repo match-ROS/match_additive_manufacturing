@@ -4,7 +4,7 @@
     <arg name="wait_for_start_condition" default="true" />
     <arg name="initial_path_index" default="-1" />
     <!-- Node that runs the path transformer script -->
-    <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower_pure_pursuit_RL.py" output="screen">
+    <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower.py" output="screen">
         <!-- Transformation parameters -->
         <param name="mir_path_topic" value="/mir_path_original" />
         <param name="mir_pose_topic" value="/$(arg robot_name)/mir_pose_simple" />

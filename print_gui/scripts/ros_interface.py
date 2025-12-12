@@ -714,7 +714,7 @@ class ROSInterface:
         return _remote_debug_prefix(self.gui, workspace)
 
     def init_override_velocity_slider(self):
-        self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
+        self.velocity_override_pub = rospy.Publisher('/velocity_override_manual', Float32, queue_size=10, latch=True)
         self.gui.override_slider.valueChanged.connect(
             lambda value: self.gui.override_value_label.setText(f"{value}%")
             # publish to /velocity_override as well:
@@ -881,7 +881,7 @@ class ROSInterface:
         key = self.is_ros_node_running_fast("/keyence_ljx_profile_node", node_cache)
         flow = self.is_ros_node_running_fast("/flow_serial_bridge", node_cache)
         tgt = self.is_ros_node_running_fast("/target_broadcaster", node_cache)
-        laser = self.is_ros_node_running_fast("/profile_orthogonal_controller", node_cache)
+        laser = self.is_ros_node_running_fast("/laser_profile_controller", node_cache)
         mocap = self.is_ros_node_running_fast("/qualisys", node_cache)
 
         # --- Button coloring ---

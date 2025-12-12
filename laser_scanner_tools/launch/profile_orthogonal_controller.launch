@@ -1,12 +1,26 @@
 <launch>
 
-    <arg name="mir_pose_topic" default="/mur620c/mir_pose_simple" />
+    <arg name="tcp_pose_topic" default="/mur620c/UR10_r/ur_calibrated_pose" />
     <arg name="cmd_topic" default="/laser_profile_offset_cmd_vel" />
+    <arg name="profile_topic" default="/profiles_float" />
+    <arg name="target_layer_height" default="-43.23" />
+    <arg name="distance_scanner_to_nozzle" default="0.05" />
+    <arg name="velocity_override_topic" default="/velocity_override" />
 
     <!-- Node that runs the path transformer script -->
-    <node name="profile_orthogonal_controller" pkg="laser_scanner_tools" type="profile_orthogonal_controller.py" output="screen">
+    <node name="laser_profile_error_estimator" pkg="laser_scanner_tools" type="laser_profile_error_estimator.py" output="screen">
         <!-- Transformation parameters -->
-        <param name="mir_pose_topic" value="$(arg mir_pose_topic)" />
+        <param name="profile_topic" value="$(arg profile_topic)" />
+        <param name="target_layer_height" value="$(arg target_layer_height)" />
+        <param name="distance_scanner_to_nozzle" value="$(arg distance_scanner_to_nozzle)" />
+        <param name="velocity_override_topic" value="$(arg velocity_override_topic)" />
+    </node>
+
+    <node name="laser_profile_controller" pkg="laser_scanner_tools" type="laser_profile_controller.py" output="screen">
+        <!-- Transformation parameters -->
+        <param name="tcp_pose_topic" value="$(arg tcp_pose_topic)" />
         <param name="cmd_topic" value="$(arg cmd_topic)" />
+        <param name="lateral_error_topic" value="/laser_profile/lateral_error" />
+        <param name="height_error_topic" value="/laser_profile/height_error" />
     </node>
 </launch>

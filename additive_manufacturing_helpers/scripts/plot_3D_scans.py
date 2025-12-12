@@ -1,136 +1,99 @@
 #!/usr/bin/env python3
 import rosbag
 import numpy as np
-import tf.transformations as tf
 import matplotlib.pyplot as plt
 import sensor_msgs.point_cloud2 as pc2
+from nav_msgs.msg import Path
+
+
 
 # ----------------- CONFIG -----------------
-bagfile = "record_20251203_155544_MuR.bag"
-scan_topic_float = "/profiles_float"
-scan_topic_pc2   = "/profiles"
-pose_topic = "/mur620c/UR10_r/global_tcp_pose"
-nozzle_angle_deg = 100.0
+bagfile = "record_20251210_141133_MuR.bag"
+scan_topic_pc2 = "/profiles"
+output_ply = "scans_export.ply"
+path_topic = "/ur_path_original"
+use_live_path_if_missing = True
+z_offset = 0.62
 # -------------------------------------------
 
-scans = []
-poses = []
-use_pc2 = True
-scanner_rot = tf.rotation_matrix(np.deg2rad(nozzle_angle_deg), (0, 0, 1))[0:3, 0:3]
+def extract_lowest_layer(path_points, tol=1e-4):
+    path_points = np.array(path_points)
+    if len(path_points) == 0:
+        raise RuntimeError("No path points available.")
+
+    z0 = path_points[0, 2]
+    idx_same = np.where(np.abs(path_points[:,2] - z0) < tol)[0]
+    end_idx = idx_same[-1]
+    return path_points[:end_idx+1]
 
 # ----------------- LOAD BAG -----------------
-with rosbag.Bag(bagfile, "r") as bag:
-
-    topics = bag.get_type_and_topic_info().topics.keys()
-    float_available = scan_topic_float in topics
-    pc2_available   = scan_topic_pc2 in topics
-
-    if not float_available and not pc2_available:
-        raise RuntimeError("Neither /profiles_float nor /profiles found in bag.")
-
-    # Prefer float-mode if available
-    use_pc2 = not float_available
-
-    for topic, msg, t in bag.read_messages():
-        # FLOAT MODE
-        if not use_pc2 and topic == scan_topic_float:
-            scans.append({
-                "t": None,
-                "data": np.array(msg.data)  # 1D profile
-            })
-
-        # POINTCLOUD2 MODE
-        elif use_pc2 and topic == scan_topic_pc2:
-            pts = []
-            for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
-                pts.append([p[0], p[1], p[2]])
-            scans.append({
-                "t": t.to_sec(),
-                "data": np.array(pts)  # Nx3 points in scanner frame
-            })
-
-        # TCP POSE
-        elif topic == pose_topic:
-            p = np.array([msg.pose.position.x,
-                          msg.pose.position.y,
-                          msg.pose.position.z])
-            q = np.array([msg.pose.orientation.x,
-                          msg.pose.orientation.y,
-                          msg.pose.orientation.z,
-                          msg.pose.orientation.w])
-            poses.append((t.to_sec(), p, q))
-
-# ----------------- PREPARE POSE DATA -----------------
-poses = sorted(poses, key=lambda x: x[0])
-
-T_pose = np.array([p[0] for p in poses])
-P_pose = np.array([p[1] for p in poses])
-Q_pose = np.array([p[2] for p in poses])
-
-t_start = T_pose[0]
-t_end   = T_pose[-1]
-
-# ----------------- RECONSTRUCT TIMESTAMPS -----------------
-if not use_pc2:
-    N = len(scans)
-    T_scan = np.linspace(t_start, t_end, N)
-    for i in range(N):
-        scans[i]["t"] = T_scan[i]
-else:
-    T_scan = np.array([scan["t"] for scan in scans])
-
-# ----------------- SLERP INTERPOLATION -----------------
-def slerp(q1, q2, t):
-    return tf.quaternion_slerp(q1, q2, t)
-
-def interp_pose(t):
-    idx = np.searchsorted(T_pose, t)
-    idx = np.clip(idx, 1, len(T_pose)-1)
-
-    t0, t1 = T_pose[idx-1], T_pose[idx]
-    u = (t - t0) / (t1 - t0)
-
-    p = (1-u)*P_pose[idx-1] + u*P_pose[idx]
-    q = slerp(Q_pose[idx-1], Q_pose[idx], u)
-    return p, q
-
-# ----------------- TRANSFORM SCANS -----------------
 points = []
 
-for scan in scans:
-    t = scan["t"]
-    p_tcp, q_tcp = interp_pose(t)
-    R = tf.quaternion_matrix(q_tcp)[0:3, 0:3]
+with rosbag.Bag(bagfile, "r") as bag:
+    for topic, msg, t in bag.read_messages(topics=[scan_topic_pc2]):
 
-    data = scan["data"]
-
-    # FLOAT MODE: 1D values along Y of TCP
-    if data.ndim == 1:
-        for val in data:
-            local = np.array([0.0, 0.0, val])
-            local = scanner_rot.dot(local)
-            world = p_tcp + R.dot(local)
-            points.append(world)
-
-    # PC2 MODE: Nx3 points
-    else:
-        for pt in data:
-            local = scanner_rot.dot(pt)
-            world = p_tcp + R.dot(local)
-            points.append(world)
+        for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            points.append([p[0], p[1], p[2]])
 
 points = np.array(points)
-# invert z axis
-points[:,2] = -points[:,2]
+
+# ----------------- TRY LOADING PATH FROM BAG -----------------
+path_points = []
+
+with rosbag.Bag(bagfile, "r") as bag:
+    topics = bag.get_type_and_topic_info().topics.keys()
+
+    if path_topic in topics:
+        # Path exists in bag → load it
+        for topic, msg, t in bag.read_messages(topics=[path_topic]):
+            for pose in msg.poses:
+                p = pose.pose.position
+                path_points.append([p.x, p.y, p.z])
+            break  # take first full Path message
+
+# ----------------- FALLBACK: SUBSCRIBE LIVE IF NOT FOUND -----------------
+if len(path_points) == 0 and use_live_path_if_missing:
+    import rospy
+    from nav_msgs.msg import Path
+
+    rospy.init_node("path_reader_temp", anonymous=True)
+    print("[INFO] No path in bag. Waiting for live path message on /ur_path_original...")
+
+    received = []
+
+    def cb(msg):
+        for pose in msg.poses:
+            p = pose.pose.position
+            received.append([p.x, p.y, p.z])
+        rospy.signal_shutdown("Path received.")
+
+    sub = rospy.Subscriber(path_topic, Path, cb)
+
+    rospy.spin()
+    path_points = received
+    print(f"[INFO] Received live path with {len(path_points)} points.")
+
+
+# ----------------- EXTRACT LOWEST LAYER -----------------
+lowest_layer = extract_lowest_layer(path_points)
+
 
 # ----------------- PLOT -----------------
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.scatter(points[::100, 0], points[::100, 1], points[::100, 2], s=1)
+# Plot scanned points
+ax.scatter(points[::100, 0], points[::100, 1], points[::100, 2], s=1, label="Scans")
+
+# Plot lowest layer of path
+ax.plot(lowest_layer[:,0], lowest_layer[:,1], lowest_layer[:,2] + z_offset,
+        color='red', linewidth=2, label="UR Path (lowest layer)")
+
+ax.legend()
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
-# --- Equal axis scaling ---
+
+# Equal axis scaling
 max_range = np.array([
     points[:,0].max() - points[:,0].min(),
     points[:,1].max() - points[:,1].min(),
@@ -146,3 +109,6 @@ ax.set_ylim(mid_y - max_range, mid_y + max_range)
 ax.set_zlim(mid_z - max_range, mid_z + max_range)
 
 plt.show()
+
+
+
