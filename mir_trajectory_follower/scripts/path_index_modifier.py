@@ -12,7 +12,7 @@ class TimeWarpingIndex:
         # tunable parameters
         self.rate = 100.0
         self.speed_gain = rospy.get_param("~speed_gain", 0.05)  # how fast dt adapts
-        self.max_offset_idx = rospy.get_param("~max_offset_idx", 1)  # max index offset allowed
+        self.max_offset_idx = rospy.get_param("~max_offset_idx", 10)  # max index offset allowed
         self.max_mir_distance = rospy.get_param("~max_mir_distance", 0.15)  # 25 cm allowed
         self.global_avg_speed = 0.051  # default value in m/s 
         self.global_avg_speed_override = deepcopy(self.global_avg_speed)
@@ -38,8 +38,11 @@ class TimeWarpingIndex:
         # wait for initial data
         rospy.loginfo("Waiting for initial data...")
         rospy.wait_for_message("/mir_path_original", Path)
+        rospy.loginfo("Received MiR path.")
         rospy.wait_for_message("/velocity_override", Float32)
+        rospy.loginfo("Received velocity override.")
         rospy.wait_for_message("/mir_path_timestamps", Float32MultiArray)
+        rospy.loginfo("Received MiR timestamps.")
 
         # compute global average speed
         if self.mir_path is not None:
@@ -271,6 +274,8 @@ class TimeWarpingIndex:
             self.ur_index - dynamic_limit,
             self.ur_index + dynamic_limit
         )
+
+        rospy.loginfo_throttle(1.0, f"UR idx: {self.ur_index}, MiR idx: {idx_mir}, dt_mir: {dt_mir:.4f}, local speed: {local_speed:.3f} m/s, dynamic limit: {dynamic_limit}")
 
         # ----- 6) Publish -----
         self.pub_mod.publish(Int32(idx_mir))
