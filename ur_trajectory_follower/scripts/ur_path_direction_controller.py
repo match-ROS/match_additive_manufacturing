@@ -49,8 +49,7 @@ class DirectionController:
         self.path = rospy.wait_for_message("/path", Path)        
 
         rospy.Subscriber(self.path_index_topic, Int32, self.index_callback)
-        if not self.ff_only:
-            rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
+        rospy.Subscriber("/current_pose", PoseStamped, self.ee_pose_callback)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_callback)
         rospy.Subscriber("/nozzle_height_override", Float32, self.nozzle_height_callback)        # lift height
         rospy.Subscriber(self.joint_state_topic, JointState, self.joint_state_callback)
@@ -166,6 +165,7 @@ class DirectionController:
         if self.ff_only:
             from_idx = self._clamp_path_index(self.current_index + from_offset)
             from_pose = self.path.poses[from_idx]
+            from_pose.pose.position.z = self.current_pose.pose.position.z  # use controller for z height even in ff_only mode
         else:
             from_pose = self.current_pose
         direction = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
@@ -207,10 +207,8 @@ class DirectionController:
         v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
         
         # v_z pid controller (Annahme fester Regeltakt, ohne dt)
-        if self.ff_only:
-            error_z += 0.0
-        else:
-            error_z += self.nozzle_height_default + self.nozzle_height_override 
+
+        error_z += self.nozzle_height_default + self.nozzle_height_override 
         v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
         self.integral_z+=error_z
         self.prev_error_z=error_z

@@ -52,7 +52,7 @@ class LaserProfileController(object):
 
         # Für Höhencheck
         self.target_layer_height = rospy.get_param("~target_layer_height", -10.0)
-        self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)
+        self.min_expected_height = rospy.get_param("~min_expected_height", -50.0)
 
         # --- State ---
         self.ur_tcp_pose = None
