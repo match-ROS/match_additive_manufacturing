@@ -1,6 +1,8 @@
 <launch>
+    <arg name="component_name" default="rectangleRoundedCorners" />
     <!-- Node that runs the path transformer script -->
     <node name="retrieve_and_publish_ur_path" pkg="parse_ur_path" type="retrieve_and_publish_path.py" output="screen">
+        <param name="component_name" value="$(arg component_name)" />
         <!-- Transformation parameters -->
         <!-- <param name="tx" value="-51.615323" />
         <param name="ty" value="-39.752500" /> -->

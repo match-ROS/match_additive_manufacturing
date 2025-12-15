@@ -1,11 +1,12 @@
 #! /usr/bin/env python3
 import sys
 import os
+import importlib
+import math
 import rospy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 import tf.transformations as tf
-import math
 from std_msgs.msg import Float32MultiArray
 
 
@@ -14,18 +15,38 @@ from std_msgs.msg import Float32MultiArray
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 start_index = 10
 
-print(f"Parent directory: {parent_dir}")
-sys.path.append(parent_dir+ "/component/rectangleRoundedCorners")
+DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
+REQUIRED_MODULES = (
+    "xMIR",
+    "yMIR",
+    "nL",
+    "xVecMIRx",
+    "xVecMIRy",
+    "vxMIR",
+    "vyMIR",
+    "t",
+)
 
-# Import mir_path to retrieve mirX and mirY
-from print_path import xMIR
-from print_path import yMIR
-from print_path import nL
-from print_path import xVecMIRx
-from print_path import xVecMIRy
-from print_path import vxMIR
-from print_path import vyMIR
-from print_path import t
+
+def _load_component_modules(component_name):
+    component_path = os.path.join(parent_dir, "component", component_name)
+    if not os.path.isdir(component_path):
+        rospy.logfatal("Component folder '%s' not found at %s", component_name, component_path)
+        raise rospy.ROSInitException("Invalid component folder")
+
+    if component_path not in sys.path:
+        sys.path.append(component_path)
+
+    modules = {}
+    for module_name in REQUIRED_MODULES:
+        try:
+            modules[module_name] = importlib.import_module(f"print_path.{module_name}")
+        except ImportError as exc:
+            rospy.logfatal("Failed to import %s from component '%s': %s", module_name, component_name, exc)
+            raise
+
+    rospy.loginfo("Loaded MiR print_path component '%s'", component_name)
+    return modules
 
 
 def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
@@ -62,6 +83,9 @@ def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
 def publish_paths():
     rospy.init_node('path_transformer')
     
+    component_name = rospy.get_param('~component_name', DEFAULT_COMPONENT_NAME)
+    modules = _load_component_modules(component_name)
+
     # Publishers for the original and transformed paths
     original_pub = rospy.Publisher('/mir_path_original', Path, queue_size=10)
     transformed_pub = rospy.Publisher('/mir_path_transformed', Path, queue_size=10)
@@ -70,14 +94,14 @@ def publish_paths():
 
     
     # Retrieve the original path
-    x_coords = xMIR.xMIR() 
-    y_coords = yMIR.yMIR()
-    vx_coords = vxMIR.vxMIR()
-    vy_coords = vyMIR.vyMIR()
-    orientation_vector_x = xVecMIRx.xVecMIRx()
-    orientation_vector_y = xVecMIRy.xVecMIRy()
-    layer_number = nL.nL()
-    t_coords = t.t()
+    x_coords = modules["xMIR"].xMIR()
+    y_coords = modules["yMIR"].yMIR()
+    vx_coords = modules["vxMIR"].vxMIR()
+    vy_coords = modules["vyMIR"].vyMIR()
+    orientation_vector_x = modules["xVecMIRx"].xVecMIRx()
+    orientation_vector_y = modules["xVecMIRy"].xVecMIRy()
+    layer_numbers = modules["nL"].nL()
+    t_coords = modules["t"].t()
     
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
@@ -102,7 +126,7 @@ def publish_paths():
         pose_stamped = PoseStamped()
         pose_stamped.pose.position.x = x_coords[i]
         pose_stamped.pose.position.y = y_coords[i]
-        pose_stamped.pose.position.z = layer_number[i]  # assuming z=0 for 2D path
+        pose_stamped.pose.position.z = layer_numbers[i]
         
         # the path should always face towards the next point
         #orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
@@ -141,7 +165,7 @@ def publish_paths():
     # Transform and fill transformed Path message
     transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
     
-    set_metadata()
+    set_metadata(layer_numbers)
 
     rate = rospy.Rate(0.2)  # Publish at 1 Hz
     while not rospy.is_shutdown():
@@ -157,16 +181,18 @@ def publish_paths():
         timestamps_pub.publish(timestamps_msg)
         rate.sleep()
 
-def set_metadata():
+def set_metadata(layer_numbers):
+    if not layer_numbers:
+        rospy.logwarn("No layer metadata available to publish")
+        return
 
-    nL_ = nL.nL()
-
-    # points per layer
-    points_per_layer = [zero for zero in range(0,int(max(nL_)))]  
-    print("Points per layer: ", points_per_layer)
-    for i in range(len(nL_)):
-        points_per_layer[int(nL_[i])-1] += 1
-    #print("Points per layer: ", points_per_layer)
+    normalized_layers = [max(1, int(round(val))) for val in layer_numbers]
+    max_layer = max(normalized_layers)
+    points_per_layer = [0 for _ in range(max_layer)]
+    for layer in normalized_layers:
+        idx = layer - 1
+        if 0 <= idx < len(points_per_layer):
+            points_per_layer[idx] += 1
 
     rospy.set_param("/points_per_layer", points_per_layer)
 

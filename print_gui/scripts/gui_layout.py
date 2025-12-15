@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox, QInputDialog
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
 from typing import Any, cast
@@ -41,6 +41,7 @@ class ROSGui(QWidget):
         self.path_idx.connect(self._update_spinbox)
         self.medians.connect(self._update_medians)
         self.ros_interface = ROSInterface(self)
+        self._selected_component_name = self.ros_interface.get_cached_component_name()
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
         self.setGeometry(100, 100, 3200, 1700)
@@ -155,15 +156,21 @@ class ROSGui(QWidget):
         }
         for text, fn in controller_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); controller_layout.addWidget(btn)
         controller_group.setLayout(controller_layout); right_layout.addWidget(controller_group)
-        prepare_print_group = QGroupBox("Prepare Print Functions"); prepare_print_layout = QVBoxLayout(); prepare_print_buttons = {
-            "Parse MiR Path": lambda: parse_mir_path(self),
-            "Parse UR Path": lambda: parse_ur_path(self),
-            "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
-            "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
-            "Broadcast Target Poses": lambda: target_broadcaster(self),
-            "Start Laser Profile Controller": lambda: self.ros_interface.launch_laser_orthogonal_controller(),
-        }
-        for text, fn in prepare_print_buttons.items():
+        prepare_print_group = QGroupBox("Prepare Print Functions"); prepare_print_layout = QVBoxLayout()
+        self.component_select_button = QPushButton()
+        self.component_select_button.setStyleSheet("text-align: left;")
+        self.component_select_button.clicked.connect(self._prompt_component_selection)
+        prepare_print_layout.addWidget(self.component_select_button)
+        self._update_component_button_label()
+        prepare_print_buttons = [
+            ("Parse MiR Path", lambda: parse_mir_path(self)),
+            ("Parse UR Path", lambda: parse_ur_path(self)),
+            ("Move MiR to Start Pose", lambda: move_mir_to_start_pose(self)),
+            ("Move UR to Start Pose", lambda: move_ur_to_start_pose(self)),
+            ("Broadcast Target Poses", lambda: target_broadcaster(self)),
+            ("Start Laser Profile Controller", lambda: self.ros_interface.launch_laser_orthogonal_controller()),
+        ]
+        for text, fn in prepare_print_buttons:
             btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); prepare_print_layout.addWidget(btn)
             if text=="Parse MiR Path": self.btn_parse_mir=btn
             if text=="Parse UR Path": self.btn_parse_ur=btn
@@ -400,6 +407,66 @@ class ROSGui(QWidget):
             self.ros_interface.persist_servo_targets(left, right)
         except Exception as exc:
             print(f"Failed to persist servo targets: {exc}")
+
+    def _prompt_component_selection(self):
+        components = self._list_available_components()
+        if not components:
+            QMessageBox.warning(self, "Component Selection", "No components found in the component directory.")
+            return
+
+        current_name = self.get_selected_component_name()
+        try:
+            current_index = components.index(current_name)
+        except ValueError:
+            current_index = 0
+
+        choice, ok = QInputDialog.getItem(self, "Select Component", "Component:", components, current_index, False)
+        if ok and choice:
+            self._set_selected_component(choice)
+
+    def _list_available_components(self):
+        root = self._get_component_root()
+        try:
+            entries = sorted(
+                [entry for entry in os.listdir(root) if os.path.isdir(os.path.join(root, entry))]
+            )
+        except OSError as exc:
+            QMessageBox.critical(self, "Component Selection", f"Failed to read component directory:\n{exc}")
+            entries = []
+        return entries
+
+    def _get_component_root(self):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "component"))
+
+    def _set_selected_component(self, component_name):
+        normalized = (component_name or "").strip()
+        if not normalized:
+            return
+        self._selected_component_name = normalized
+        self._update_component_button_label()
+        try:
+            self.ros_interface.persist_component_choice(normalized)
+        except Exception as exc:
+            print(f"Failed to persist component choice: {exc}")
+
+    def _update_component_button_label(self):
+        button = getattr(self, "component_select_button", None)
+        if button is None:
+            return
+        name = getattr(self, "_selected_component_name", None)
+        if not name:
+            name = self.ros_interface.get_cached_component_name()
+            self._selected_component_name = name
+        button.setText(f"Component: {name}")
+
+    def get_selected_component_name(self):
+        name = getattr(self, "_selected_component_name", None)
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+        fallback = self.ros_interface.get_cached_component_name()
+        self._selected_component_name = fallback
+        self._update_component_button_label()
+        return fallback
 
     def update_start_signal_visual(self, active: bool):
         button = getattr(self, "btn_start_signal", None)
