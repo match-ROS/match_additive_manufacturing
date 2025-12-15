@@ -78,7 +78,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.029999999329447746
       Shaft Length: 0.05000000074505806
-      Topic: /mir_path_original
+      Topic: /mir_path_transformed
       Unreliable: false
       Value: true
     - Alpha: 0.699999988079071
@@ -112,7 +112,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.009999999776482582
       Shaft Length: 0.10000000149011612
-      Topic: /ur_path_original
+      Topic: /ur_path_transformed
       Unreliable: false
       Value: true
     - Alpha: 0.20000000298023224

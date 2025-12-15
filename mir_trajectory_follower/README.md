@@ -21,7 +21,7 @@ roslaunch mir_trajectory_follower mir_trajectory_follower.launch
 ## Parameters
 You can override the default parameters using the launch file or command line switches. Here are some of the key parameters:
 
-- **mir_path_topic**: Topic for the input path (default: `/mir_path_original`).
+- **mir_path_topic**: Topic for the input path (default: `/mir_path_transformed`).
 - **mir_pose_topic**: Topic for the robot pose (default: `/mur620/mir_pose_simple`).
 - **cmd_vel_topic**: Topic to publish velocity commands (default: `/mur620/mobile_base_controller/cmd_vel`).
 - **trajectory_index_topic**: Topic for trajectory indexing (default: `/trajectory_index`).

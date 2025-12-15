@@ -30,14 +30,14 @@ class TimeWarpingIndex:
         self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
 
         # subs
-        rospy.Subscriber("/mir_path_original", Path, self.cb_path)
+        rospy.Subscriber("/mir_path_transformed", Path, self.cb_path)
         rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_time)
         rospy.Subscriber(self.path_index_topic, Int32, self.cb_ur_index)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_cb)
 
         # wait for initial data
         rospy.loginfo("Waiting for initial data...")
-        rospy.wait_for_message("/mir_path_original", Path)
+        rospy.wait_for_message("/mir_path_transformed", Path)
         rospy.loginfo("Received MiR path.")
         rospy.wait_for_message("/velocity_override", Float32)
         rospy.loginfo("Received velocity override.")

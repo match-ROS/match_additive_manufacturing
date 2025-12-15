@@ -1,6 +1,6 @@
 <launch>
     <arg name="robot_name" default="mur620a" />
-    <arg name="path_topic" default="/mir_path_original" />
+    <arg name="path_topic" default="/mir_path_transformed" />
     <arg name="initial_path_index" default="0" />
 
     <!-- Node that runs the path transformer script -->

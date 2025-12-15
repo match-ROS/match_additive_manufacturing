@@ -600,8 +600,8 @@ class ROSInterface:
         # Rosbag config
         self.rosbag_topics = [
             # "/tf",
-            "/ur_path_original",
-            "/mir_path_original",
+            "/ur_path_transformed",
+            "/mir_path_transformed",
             "/profiles"
             "/path_index",
             "/laser_profile_offset_cmd_vel",

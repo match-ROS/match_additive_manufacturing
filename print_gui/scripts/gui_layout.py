@@ -225,8 +225,8 @@ class ROSGui(QWidget):
         # --- Rosbag recording ---
         self.topic_settings = {
             "/tf": {"local": False, "remote": False},
-            "/ur_path_original": {"local": True, "remote": False},
-            "/mir_path_original": {"local": True, "remote": False},
+            "/ur_path_transformed": {"local": True, "remote": False},
+            "/mir_path_transformed": {"local": True, "remote": False},
             "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
             "/profiles": {"local": False, "remote": True},
             "/path_index": {"local": False, "remote": True},
