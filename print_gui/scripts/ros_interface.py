@@ -35,6 +35,7 @@ GUI_CACHE_PATH = os.path.abspath(
 DEFAULT_SPRAY_DISTANCE = 0.52
 DEFAULT_PATH_INDEX = 0
 DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
+COMPONENT_TRANSFORM_KEYS = ("tx", "ty", "tz", "rx", "ry", "rz")
 ROSCORE_HOST = "roscore"
 
 
@@ -417,6 +418,52 @@ def _save_component_choice(component_name: str):
     _save_gui_cache_payload(payload)
 
 
+def _default_component_transform():
+    return {key: 0.0 for key in COMPONENT_TRANSFORM_KEYS}
+
+
+def _coerce_float(value, fallback: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _normalize_component_transform(block) -> dict:
+    normalized = _default_component_transform()
+    if isinstance(block, dict):
+        for key in COMPONENT_TRANSFORM_KEYS:
+            normalized[key] = _coerce_float(block.get(key), normalized[key])
+    return normalized
+
+
+def _load_component_transform_entry(component_name: Optional[str]) -> dict:
+    name = (component_name or DEFAULT_COMPONENT_NAME).strip() or DEFAULT_COMPONENT_NAME
+    payload = _load_gui_cache_payload()
+    transforms = payload.get("component_transforms") if isinstance(payload, dict) else None
+    entry = {}
+    if isinstance(transforms, dict):
+        entry = transforms.get(name, {})
+    return _normalize_component_transform(entry)
+
+
+def _save_component_transform_entry(component_name: str, transform: dict):
+    name = (component_name or "").strip()
+    if not name:
+        return
+    payload = _load_gui_cache_payload()
+    transforms = payload.setdefault("component_transforms", {})
+    normalized = _normalize_component_transform(transform)
+    stored = dict(normalized)
+    stored["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    transforms[name] = stored
+    _save_gui_cache_payload(payload)
+
+
 class _DriverControlSession:
     """Maintains a lightweight SSH shell per robot for reliable cleanup commands."""
 
@@ -539,6 +586,7 @@ class ROSInterface:
         self._cached_spray_distance = _load_spray_distance_cache()
         self._cached_servo_targets = _load_servo_targets_cache()
         self._cached_component_name = _load_component_choice(DEFAULT_COMPONENT_NAME)
+        self._component_transform_cache = {}
         self._servo_state_lock = threading.Lock()
         self._latest_servo_positions = {}
         self._start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
@@ -700,6 +748,27 @@ class ROSInterface:
             return
         self._cached_component_name = normalized
         _save_component_choice(normalized)
+
+    def get_component_transform(self, component_name: Optional[str] = None) -> dict:
+        name = (component_name or self.get_cached_component_name() or DEFAULT_COMPONENT_NAME).strip()
+        if not name:
+            name = DEFAULT_COMPONENT_NAME
+        cache = getattr(self, "_component_transform_cache", {}) or {}
+        if name not in cache:
+            cache[name] = _load_component_transform_entry(name)
+            self._component_transform_cache = cache
+        entry = cache.get(name, _default_component_transform())
+        return dict(entry)
+
+    def persist_component_transform(self, component_name: Optional[str], transform: dict):
+        name = (component_name or self.get_cached_component_name() or "").strip()
+        if not name:
+            return
+        normalized = _normalize_component_transform(transform)
+        cache = getattr(self, "_component_transform_cache", {}) or {}
+        cache[name] = normalized
+        self._component_transform_cache = cache
+        _save_component_transform_entry(name, normalized)
 
     def _subscribe_rosout_logs(self):
         """Ensure we have a single /rosout subscription feeding the GUI."""
@@ -1736,6 +1805,17 @@ def _get_gui_component_name(gui) -> str:
                 print(f"Failed to fetch component selection from GUI: {exc}")
     return DEFAULT_COMPONENT_NAME
 
+
+def _get_gui_component_transform(gui) -> dict:
+    component_name = _get_gui_component_name(gui)
+    ros_iface = getattr(gui, "ros_interface", None)
+    if ros_iface is not None and hasattr(ros_iface, "get_component_transform"):
+        try:
+            return ros_iface.get_component_transform(component_name)
+        except Exception as exc:
+            print(f"Failed to fetch component transform for {component_name}: {exc}")
+    return _load_component_transform_entry(component_name)
+
 def parse_mir_path(gui):
     selected_robots = gui.get_selected_robots()
     if not selected_robots:
@@ -1743,8 +1823,12 @@ def parse_mir_path(gui):
         return
 
     component_name = _get_gui_component_name(gui)
+    transform = _get_gui_component_transform(gui)
     component_arg = shlex.quote(component_name)
-    command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg}"
+    transform_flags = " ".join(
+        f"{key}:={value}" for key, value in transform.items()
+    )
+    command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}"
 
     _run_remote_commands(
         gui,
@@ -1761,8 +1845,12 @@ def parse_ur_path(gui):
         return
 
     component_name = _get_gui_component_name(gui)
+    transform = _get_gui_component_transform(gui)
     component_arg = shlex.quote(component_name)
-    command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg}"
+    transform_flags = " ".join(
+        f"{key}:={value}" for key, value in transform.items()
+    )
+    command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}"
 
     _run_remote_commands(
         gui,
