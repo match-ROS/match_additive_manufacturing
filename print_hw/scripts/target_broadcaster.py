@@ -34,8 +34,8 @@ class TargetPoseBroadcaster(object):
         self.tf_br = tf.TransformBroadcaster()
 
         # Subscriber
-        rospy.Subscriber("/mir_path_original", Path, self.mir_path_cb, queue_size=1)
-        rospy.Subscriber("/ur_path_original", Path, self.ur_path_cb, queue_size=1)
+        rospy.Subscriber("/mir_path_transformed", Path, self.mir_path_cb, queue_size=1)
+        rospy.Subscriber("/ur_path_transformed", Path, self.ur_path_cb, queue_size=1)
         rospy.Subscriber("/path_index", Int32, self.index_cb, queue_size=1)
         rospy.Subscriber("/path_index_modified", Int32, self.index_modified_cb, queue_size=1)
 

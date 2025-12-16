@@ -1,4 +1,27 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QSlider, QLineEdit, QHBoxLayout, QPushButton, QLabel, QTableWidget, QCheckBox, QTableWidgetItem, QGroupBox, QTabWidget, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox, QDoubleSpinBox, QDialogButtonBox, QFormLayout, QDialog, QMessageBox
+from PyQt5.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QGridLayout,
+    QSlider,
+    QLineEdit,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QTableWidget,
+    QCheckBox,
+    QTableWidgetItem,
+    QGroupBox,
+    QTabWidget,
+    QSpinBox,
+    QDoubleSpinBox,
+    QTextEdit,
+    QComboBox,
+    QDoubleSpinBox,
+    QDialogButtonBox,
+    QFormLayout,
+    QDialog,
+    QMessageBox,
+)
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
 from typing import Any, cast
@@ -41,6 +64,7 @@ class ROSGui(QWidget):
         self.path_idx.connect(self._update_spinbox)
         self.medians.connect(self._update_medians)
         self.ros_interface = ROSInterface(self)
+        self._selected_component_name = self.ros_interface.get_cached_component_name()
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
         self.setGeometry(100, 100, 3200, 1700)
@@ -155,15 +179,21 @@ class ROSGui(QWidget):
         }
         for text, fn in controller_buttons.items(): btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); controller_layout.addWidget(btn)
         controller_group.setLayout(controller_layout); right_layout.addWidget(controller_group)
-        prepare_print_group = QGroupBox("Prepare Print Functions"); prepare_print_layout = QVBoxLayout(); prepare_print_buttons = {
-            "Parse MiR Path": lambda: parse_mir_path(self),
-            "Parse UR Path": lambda: parse_ur_path(self),
-            "Move MiR to Start Pose": lambda: move_mir_to_start_pose(self),
-            "Move UR to Start Pose": lambda: move_ur_to_start_pose(self),
-            "Broadcast Target Poses": lambda: target_broadcaster(self),
-            "Start Laser Profile Controller": lambda: self.ros_interface.launch_laser_orthogonal_controller(),
-        }
-        for text, fn in prepare_print_buttons.items():
+        prepare_print_group = QGroupBox("Prepare Print Functions"); prepare_print_layout = QVBoxLayout()
+        self.component_select_button = QPushButton()
+        self.component_select_button.setStyleSheet("text-align: left;")
+        self.component_select_button.clicked.connect(self._open_component_dialog)
+        prepare_print_layout.addWidget(self.component_select_button)
+        self._update_component_button_label()
+        prepare_print_buttons = [
+            ("Parse MiR Path", lambda: parse_mir_path(self)),
+            ("Parse UR Path", lambda: parse_ur_path(self)),
+            ("Move MiR to Start Pose", lambda: move_mir_to_start_pose(self)),
+            ("Move UR to Start Pose", lambda: move_ur_to_start_pose(self)),
+            ("Broadcast Target Poses", lambda: target_broadcaster(self)),
+            ("Start Laser Profile Controller", lambda: self.ros_interface.launch_laser_orthogonal_controller()),
+        ]
+        for text, fn in prepare_print_buttons:
             btn = QPushButton(text); btn.clicked.connect(lambda _, f=fn: f()); prepare_print_layout.addWidget(btn)
             if text=="Parse MiR Path": self.btn_parse_mir=btn
             if text=="Parse UR Path": self.btn_parse_ur=btn
@@ -195,8 +225,8 @@ class ROSGui(QWidget):
         # --- Rosbag recording ---
         self.topic_settings = {
             "/tf": {"local": False, "remote": False},
-            "/ur_path_original": {"local": True, "remote": False},
-            "/mir_path_original": {"local": True, "remote": False},
+            "/ur_path_transformed": {"local": True, "remote": False},
+            "/mir_path_transformed": {"local": True, "remote": False},
             "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
             "/profiles": {"local": False, "remote": True},
             "/path_index": {"local": False, "remote": True},
@@ -400,6 +430,90 @@ class ROSGui(QWidget):
             self.ros_interface.persist_servo_targets(left, right)
         except Exception as exc:
             print(f"Failed to persist servo targets: {exc}")
+
+    def _open_component_dialog(self):
+        components = self._list_available_components()
+        if not components:
+            QMessageBox.warning(self, "Component Selection", "No components found in the component directory.")
+            return
+
+        current_name = self.get_selected_component_name()
+        dlg = ComponentTransformDialog(
+            self,
+            component_names=components,
+            selected_component=current_name,
+            transform_loader=lambda name: self.ros_interface.get_component_transform(name),
+        )
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        selected_component, transform = dlg.get_selection()
+        if selected_component:
+            self._set_selected_component(selected_component)
+        try:
+            self.ros_interface.persist_component_transform(selected_component, transform)
+        except Exception as exc:
+            QMessageBox.warning(self, "Persist Transform Failed", f"Failed to save transform for {selected_component}:\n{exc}")
+
+    def _prompt_component_selection(self):
+        components = self._list_available_components()
+        if not components:
+            QMessageBox.warning(self, "Component Selection", "No components found in the component directory.")
+            return
+
+        current_name = self.get_selected_component_name()
+        try:
+            current_index = components.index(current_name)
+        except ValueError:
+            current_index = 0
+
+        choice, ok = QInputDialog.getItem(self, "Select Component", "Component:", components, current_index, False)
+        if ok and choice:
+            self._set_selected_component(choice)
+
+    def _list_available_components(self):
+        root = self._get_component_root()
+        try:
+            entries = sorted(
+                [entry for entry in os.listdir(root) if os.path.isdir(os.path.join(root, entry))]
+            )
+        except OSError as exc:
+            QMessageBox.critical(self, "Component Selection", f"Failed to read component directory:\n{exc}")
+            entries = []
+        return entries
+
+    def _get_component_root(self):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "component"))
+
+    def _set_selected_component(self, component_name):
+        normalized = (component_name or "").strip()
+        if not normalized:
+            return
+        self._selected_component_name = normalized
+        self._update_component_button_label()
+        try:
+            self.ros_interface.persist_component_choice(normalized)
+        except Exception as exc:
+            print(f"Failed to persist component choice: {exc}")
+
+    def _update_component_button_label(self):
+        button = getattr(self, "component_select_button", None)
+        if button is None:
+            return
+        name = getattr(self, "_selected_component_name", None)
+        if not name:
+            name = self.ros_interface.get_cached_component_name()
+            self._selected_component_name = name
+        button.setText(f"Component: {name}")
+
+    def get_selected_component_name(self):
+        name = getattr(self, "_selected_component_name", None)
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+        fallback = self.ros_interface.get_cached_component_name()
+        self._selected_component_name = fallback
+        self._update_component_button_label()
+        return fallback
 
     def update_start_signal_visual(self, active: bool):
         button = getattr(self, "btn_start_signal", None)
@@ -956,3 +1070,132 @@ class RosbagSettingsDialog(QDialog):
                 "remote": self.box_remote[topic].isChecked(),
             }
         return out
+
+
+class ComponentTransformDialog(QDialog):
+    TRANSLATION_KEYS = ("tx", "ty", "tz")
+    ROTATION_KEYS = ("rx", "ry", "rz")
+
+    def __init__(self, parent, component_names, selected_component, transform_loader=None):
+        super().__init__(parent)
+        self.setWindowTitle("Component Selection & Transform")
+        self._transform_loader = transform_loader
+        self._transform_cache = {}
+        self._blocking = False
+
+        layout = QVBoxLayout()
+        form = QFormLayout()
+
+        self.component_combo = QComboBox()
+        self.component_combo.addItems(component_names)
+        if selected_component and selected_component in component_names:
+            idx = component_names.index(selected_component)
+            self.component_combo.setCurrentIndex(idx)
+        elif component_names:
+            self.component_combo.setCurrentIndex(0)
+        form.addRow("Component", self.component_combo)
+
+        self.translation_fields = {}
+        for key, label in zip(self.TRANSLATION_KEYS, ("X Offset (m)", "Y Offset (m)", "Z Offset (m)")):
+            spin = QDoubleSpinBox()
+            spin.setRange(-10.0, 10.0)
+            spin.setDecimals(4)
+            spin.setSingleStep(0.001)
+            spin.setSuffix(" m")
+            self.translation_fields[key] = spin
+            form.addRow(label, spin)
+
+        self.rotation_fields = {}
+        for key, label in zip(self.ROTATION_KEYS, ("Roll (deg)", "Pitch (deg)", "Yaw (deg)")):
+            spin = QDoubleSpinBox()
+            spin.setRange(-360.0, 360.0)
+            spin.setDecimals(3)
+            spin.setSingleStep(1.0)
+            spin.setSuffix(" °")
+            self.rotation_fields[key] = spin
+            form.addRow(label, spin)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.setLayout(layout)
+
+        self._current_component = self.component_combo.currentText()
+        self.component_combo.currentTextChanged.connect(self._handle_component_changed)
+        self._load_component_values(self._current_component)
+
+    def _handle_component_changed(self, new_component):
+        self._store_current_values()
+        self._current_component = new_component
+        self._load_component_values(new_component)
+
+    def _normalize_transform(self, data):
+        normalized = {key: 0.0 for key in self.TRANSLATION_KEYS + self.ROTATION_KEYS}
+        if isinstance(data, dict):
+            for key in normalized.keys():
+                value = data.get(key)
+                try:
+                    normalized[key] = float(value)
+                except (TypeError, ValueError):
+                    normalized[key] = 0.0
+        return normalized
+
+    def _ensure_transform_cached(self, component_name):
+        name = component_name or ""
+        cached = self._transform_cache.get(name)
+        if cached is not None:
+            return cached
+
+        payload = {}
+        if callable(self._transform_loader):
+            try:
+                payload = self._transform_loader(name) or {}
+            except Exception as exc:
+                print(f"Failed to load transform for {name}: {exc}")
+                payload = {}
+
+        cached = self._normalize_transform(payload)
+        self._transform_cache[name] = cached
+        return cached
+
+    def _load_component_values(self, component_name):
+        if self._blocking:
+            return
+        transform = self._ensure_transform_cached(component_name)
+        self._blocking = True
+        for key, spin in self.translation_fields.items():
+            spin.setValue(transform.get(key, 0.0))
+        for key, spin in self.rotation_fields.items():
+            spin.setValue(math.degrees(transform.get(key, 0.0)))
+        self._blocking = False
+
+    def _collect_field_values(self):
+        values = {}
+        for key, spin in self.translation_fields.items():
+            values[key] = float(spin.value())
+        for key, spin in self.rotation_fields.items():
+            values[key] = math.radians(float(spin.value()))
+        return values
+
+    def _store_current_values(self):
+        name = self._current_component or ""
+        if not name:
+            return
+        self._transform_cache[name] = self._collect_field_values()
+
+    def accept(self):
+        self._store_current_values()
+        super().accept()
+
+    def get_selection(self):
+        name = (self._current_component or self.component_combo.currentText() or "").strip()
+        if not name and self.component_combo.count() > 0:
+            name = self.component_combo.itemText(0).strip()
+        transform = self._transform_cache.get(name)
+        if transform is None:
+            transform = self._collect_field_values()
+            self._transform_cache[name] = transform
+        return name, dict(transform)

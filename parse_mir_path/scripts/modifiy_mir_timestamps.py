@@ -19,8 +19,8 @@ class MirTimestampWarping(object):
         self.t_mod    = None      # np.array der modifizierten Timestamps
 
         # Subscriber
-        rospy.Subscriber("/mir_path_original", Path, self.cb_mir_path, queue_size=1)
-        rospy.Subscriber("/ur_path_original",  Path, self.cb_ur_path, queue_size=1)
+        rospy.Subscriber("/mir_path_transformed", Path, self.cb_mir_path, queue_size=1)
+        rospy.Subscriber("/ur_path_transformed",  Path, self.cb_ur_path, queue_size=1)
         rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_timestamps, queue_size=1)
 
         # Publisher (gelatched, damit neue Subscriber die Daten bekommen)

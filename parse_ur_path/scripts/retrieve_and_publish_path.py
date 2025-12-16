@@ -1,29 +1,29 @@
 #! /usr/bin/env python3
 import sys
 import os
+import importlib
+import math
 import rospy
 from geometry_msgs.msg import PoseStamped, Vector3
 from nav_msgs.msg import Path
 import tf.transformations as tf
-import math
 from additive_manufacturing_msgs.msg import Vector3Array
 
 # Add the parent directory to the Python path
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(parent_dir+ "/component/rectangleRoundedCorners")
 
 
-# Import mir_path to retrieve mirX and mirY
-# from path import ur_path
-from print_path import xTCP
-from print_path import yTCP
-from print_path import zTCP
-from print_path import t
+DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
 
 class PathTransfomer:
+    REQUIRED_MODULES = ("xTCP", "yTCP", "zTCP", "t")
+
     def __init__(self):
         rospy.init_node('path_transformer')
     
+        self.component_name = rospy.get_param('~component_name', DEFAULT_COMPONENT_NAME)
+        modules = self._load_component_modules(self.component_name)
+
         # Publishers for the original and transformed paths
         self.original_pub = rospy.Publisher('/ur_path_original', Path, queue_size=10)
         self.transformed_pub = rospy.Publisher('/ur_path_transformed', Path, queue_size=10)
@@ -31,13 +31,11 @@ class PathTransfomer:
         self.start_index = 10
 
         # Retrieve the original path
-        self.x_coords = xTCP.xTCP()
-        self.y_coords = yTCP.yTCP()
-        self.z_coords = zTCP.zTCP()
-        #try:
-        self.timestamps = [rospy.Time.from_sec(t) for t in t.t()]
-        #except AttributeError:
-        #    self.timestamps = None
+        self.x_coords = modules["xTCP"].xTCP()
+        self.y_coords = modules["yTCP"].yTCP()
+        self.z_coords = modules["zTCP"].zTCP()
+        t_values = modules["t"].t()
+        self.timestamps = [rospy.Time.from_sec(val) for val in t_values]
 
         
         # Get transformation parameters from ROS params
@@ -58,6 +56,26 @@ class PathTransfomer:
         
         # normals to the path
         self.normals = None
+
+    def _load_component_modules(self, component_name):
+        component_path = os.path.join(parent_dir, "component", component_name)
+        if not os.path.isdir(component_path):
+            rospy.logfatal("Component folder '%s' not found at %s", component_name, component_path)
+            raise rospy.ROSInitException("Invalid component folder")
+
+        if component_path not in sys.path:
+            sys.path.append(component_path)
+
+        loaded = {}
+        for module_name in self.REQUIRED_MODULES:
+            try:
+                loaded[module_name] = importlib.import_module(f"print_path.{module_name}")
+            except ImportError as exc:
+                rospy.logfatal("Failed to import %s from component '%s': %s", module_name, component_name, exc)
+                raise
+
+        rospy.loginfo("Loaded UR print_path component '%s'", component_name)
+        return loaded
     
     def compute_normals(self):
         normals = []

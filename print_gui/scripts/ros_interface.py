@@ -2,6 +2,7 @@ import os
 import subprocess
 import yaml
 import threading
+import shlex
 from typing import Optional, Iterable
 import signal
 import rospy
@@ -33,6 +34,8 @@ GUI_CACHE_PATH = os.path.abspath(
 
 DEFAULT_SPRAY_DISTANCE = 0.52
 DEFAULT_PATH_INDEX = 0
+DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
+COMPONENT_TRANSFORM_KEYS = ("tx", "ty", "tz", "rx", "ry", "rz")
 ROSCORE_HOST = "roscore"
 
 
@@ -383,6 +386,84 @@ def _format_ros_list_arg(values):
     return '"' + str(values).replace("'", '"') + '"'
 
 
+def _load_component_choice(default: str = DEFAULT_COMPONENT_NAME) -> str:
+    data = _load_gui_cache_payload()
+    name = None
+    if isinstance(data, dict):
+        entry = data.get("component")
+        if isinstance(entry, dict):
+            raw = entry.get("name") or entry.get("value")
+            if isinstance(raw, str) and raw.strip():
+                name = raw.strip()
+        elif isinstance(entry, str) and entry.strip():
+            name = entry.strip()
+        elif isinstance(data.get("component_name"), str):
+            candidate = data.get("component_name", "")
+            if candidate.strip():
+                name = candidate.strip()
+
+    return name if name else default
+
+
+def _save_component_choice(component_name: str):
+    normalized = (component_name or "").strip()
+    if not normalized:
+        return
+    payload = _load_gui_cache_payload()
+    payload["component"] = {
+        "name": normalized,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    payload["component_name"] = normalized
+    _save_gui_cache_payload(payload)
+
+
+def _default_component_transform():
+    return {key: 0.0 for key in COMPONENT_TRANSFORM_KEYS}
+
+
+def _coerce_float(value, fallback: float = 0.0) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _normalize_component_transform(block) -> dict:
+    normalized = _default_component_transform()
+    if isinstance(block, dict):
+        for key in COMPONENT_TRANSFORM_KEYS:
+            normalized[key] = _coerce_float(block.get(key), normalized[key])
+    return normalized
+
+
+def _load_component_transform_entry(component_name: Optional[str]) -> dict:
+    name = (component_name or DEFAULT_COMPONENT_NAME).strip() or DEFAULT_COMPONENT_NAME
+    payload = _load_gui_cache_payload()
+    transforms = payload.get("component_transforms") if isinstance(payload, dict) else None
+    entry = {}
+    if isinstance(transforms, dict):
+        entry = transforms.get(name, {})
+    return _normalize_component_transform(entry)
+
+
+def _save_component_transform_entry(component_name: str, transform: dict):
+    name = (component_name or "").strip()
+    if not name:
+        return
+    payload = _load_gui_cache_payload()
+    transforms = payload.setdefault("component_transforms", {})
+    normalized = _normalize_component_transform(transform)
+    stored = dict(normalized)
+    stored["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    transforms[name] = stored
+    _save_gui_cache_payload(payload)
+
+
 class _DriverControlSession:
     """Maintains a lightweight SSH shell per robot for reliable cleanup commands."""
 
@@ -504,6 +585,8 @@ class ROSInterface:
         self._cached_path_index = self.current_index
         self._cached_spray_distance = _load_spray_distance_cache()
         self._cached_servo_targets = _load_servo_targets_cache()
+        self._cached_component_name = _load_component_choice(DEFAULT_COMPONENT_NAME)
+        self._component_transform_cache = {}
         self._servo_state_lock = threading.Lock()
         self._latest_servo_positions = {}
         self._start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
@@ -517,8 +600,8 @@ class ROSInterface:
         # Rosbag config
         self.rosbag_topics = [
             # "/tf",
-            "/ur_path_original",
-            "/mir_path_original",
+            "/ur_path_transformed",
+            "/mir_path_transformed",
             "/profiles"
             "/path_index",
             "/laser_profile_offset_cmd_vel",
@@ -650,6 +733,42 @@ class ROSInterface:
         self._cached_path_index = normalized
         self.current_index = normalized
         _save_path_index_cache(normalized)
+
+    def get_cached_component_name(self) -> str:
+        cached = getattr(self, "_cached_component_name", None)
+        if isinstance(cached, str) and cached.strip():
+            return cached.strip()
+        resolved = _load_component_choice(DEFAULT_COMPONENT_NAME)
+        self._cached_component_name = resolved
+        return resolved
+
+    def persist_component_choice(self, component_name: str):
+        normalized = (component_name or "").strip()
+        if not normalized:
+            return
+        self._cached_component_name = normalized
+        _save_component_choice(normalized)
+
+    def get_component_transform(self, component_name: Optional[str] = None) -> dict:
+        name = (component_name or self.get_cached_component_name() or DEFAULT_COMPONENT_NAME).strip()
+        if not name:
+            name = DEFAULT_COMPONENT_NAME
+        cache = getattr(self, "_component_transform_cache", {}) or {}
+        if name not in cache:
+            cache[name] = _load_component_transform_entry(name)
+            self._component_transform_cache = cache
+        entry = cache.get(name, _default_component_transform())
+        return dict(entry)
+
+    def persist_component_transform(self, component_name: Optional[str], transform: dict):
+        name = (component_name or self.get_cached_component_name() or "").strip()
+        if not name:
+            return
+        normalized = _normalize_component_transform(transform)
+        cache = getattr(self, "_component_transform_cache", {}) or {}
+        cache[name] = normalized
+        self._component_transform_cache = cache
+        _save_component_transform_entry(name, normalized)
 
     def _subscribe_rosout_logs(self):
         """Ensure we have a single /rosout subscription feeding the GUI."""
@@ -1673,16 +1792,48 @@ def move_to_home_pose(gui, UR_prefix):
         print(f"Executing: {command}")
         _popen_with_debug(command, gui, shell=True)
 
+
+def _get_gui_component_name(gui) -> str:
+    if gui is not None and hasattr(gui, "get_selected_component_name"):
+        getter = getattr(gui, "get_selected_component_name")
+        if callable(getter):
+            try:
+                name = getter()
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+            except Exception as exc:
+                print(f"Failed to fetch component selection from GUI: {exc}")
+    return DEFAULT_COMPONENT_NAME
+
+
+def _get_gui_component_transform(gui) -> dict:
+    component_name = _get_gui_component_name(gui)
+    ros_iface = getattr(gui, "ros_interface", None)
+    if ros_iface is not None and hasattr(ros_iface, "get_component_transform"):
+        try:
+            return ros_iface.get_component_transform(component_name)
+        except Exception as exc:
+            print(f"Failed to fetch component transform for {component_name}: {exc}")
+    return _load_component_transform_entry(component_name)
+
 def parse_mir_path(gui):
     selected_robots = gui.get_selected_robots()
     if not selected_robots:
         print("No robot selected. Skipping MiR path parsing.")
         return
 
+    component_name = _get_gui_component_name(gui)
+    transform = _get_gui_component_transform(gui)
+    component_arg = shlex.quote(component_name)
+    transform_flags = " ".join(
+        f"{key}:={value}" for key, value in transform.items()
+    )
+    command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}"
+
     _run_remote_commands(
         gui,
         "Parsing MiR path",
-        ["roslaunch parse_mir_path parse_mir_path.launch"],
+        [command],
         use_workspace_debug=True,
         target_robots=selected_robots,
     )
@@ -1693,10 +1844,18 @@ def parse_ur_path(gui):
         print("No robot selected. Skipping UR path parsing.")
         return
 
+    component_name = _get_gui_component_name(gui)
+    transform = _get_gui_component_transform(gui)
+    component_arg = shlex.quote(component_name)
+    transform_flags = " ".join(
+        f"{key}:={value}" for key, value in transform.items()
+    )
+    command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}"
+
     _run_remote_commands(
         gui,
         "Parsing UR path",
-        ["roslaunch parse_ur_path parse_ur_path.launch"],
+        [command],
         use_workspace_debug=True,
         target_robots=selected_robots,
     )
