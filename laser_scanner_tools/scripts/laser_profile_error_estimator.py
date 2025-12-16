@@ -23,7 +23,7 @@ class LaserProfileErrorEstimator(object):
         # Filterparameter
         self.filter_half_width = rospy.get_param("~filter_half_width", 5)       # für Höhenfehler (symmetrisch)
         self.lateral_ma_window = rospy.get_param("~lateral_ma_window", 5)       # gleitender Mittelwert lateral
-        self.min_expected_height = rospy.get_param("~min_expected_height", -30.0)
+        self.min_expected_height = rospy.get_param("~min_expected_height", -100.0)
 
         # Geschwindigkeitsoverride
         self.velocity_override_topic = rospy.get_param(
