@@ -21,6 +21,8 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QDialog,
     QMessageBox,
+    QButtonGroup,
+    QRadioButton
 )
 from PyQt5 import QtCore
 from PyQt5.QtCore import QTimer, pyqtSignal, pyqtSlot
@@ -112,11 +114,27 @@ class ROSGui(QWidget):
         self.ros_interface.init_override_velocity_slider()
         self.ros_interface.init_nozzle_override_slider()
 
+        self.manual_override_radio = QRadioButton("Manual Override Control")
+        self.laser_override_radio = QRadioButton("Laser Override Control")
+        self.manual_override_radio.setChecked(True)
+
+        self.override_source_group = QButtonGroup(self)
+        self.override_source_group.setExclusive(True)
+        self.override_source_group.addButton(self.manual_override_radio)
+        self.override_source_group.addButton(self.laser_override_radio)
+
         override_layout.addWidget(override_label)
         override_layout.addWidget(self.override_slider)
         override_layout.addWidget(self.override_value_label)
-        override_layout.addWidget(self.turbo_mode_checkbox)
-        override_layout.addWidget(self.ludicrous_mode_checkbox)
+
+        override_mode_row = QHBoxLayout()
+        override_mode_row.addWidget(self.turbo_mode_checkbox)
+        override_mode_row.addWidget(self.ludicrous_mode_checkbox)
+        override_mode_row.addWidget(self.manual_override_radio)
+        override_mode_row.addWidget(self.laser_override_radio)
+
+        override_layout.addLayout(override_mode_row)
+
         override_layout.addWidget(nozzle_label)
         override_layout.addWidget(self.nozzle_override_slider)
         override_layout.addWidget(self.nozzle_override_value_label)

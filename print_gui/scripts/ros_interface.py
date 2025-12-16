@@ -833,12 +833,18 @@ class ROSInterface:
         return _remote_debug_prefix(self.gui, workspace)
 
     def init_override_velocity_slider(self):
-        self.velocity_override_pub = rospy.Publisher('/velocity_override_manual', Float32, queue_size=10, latch=True)
-        self.gui.override_slider.valueChanged.connect(
-            lambda value: self.gui.override_value_label.setText(f"{value}%")
-            # publish to /velocity_override as well:
-            or self.velocity_override_pub.publish(value / 100.0)  # Convert to a float between 0.0 and 1.0
-        )
+        self.velocity_override_manual_pub = rospy.Publisher('/velocity_override_manual', Float32, queue_size=10, latch=True)
+        self.velocity_override_pub = rospy.Publisher('/velocity_override', Float32, queue_size=10, latch=True)
+        
+        def _handle_override_change(value: int):
+            self.gui.override_value_label.setText(f"{value}%")
+            if not self.gui.laser_override_radio.isChecked():
+                self.velocity_override_pub.publish(value / 100.0)
+            else:
+                self.velocity_override_manual_pub.publish(value / 100.0)
+        
+        self.gui.override_slider.valueChanged.connect(_handle_override_change)
+        # publish to /velocity_override as well:
         # ensure the initial slider value is sent once
         self.velocity_override_pub.publish(self.gui.override_slider.value() / 100.0)
 
