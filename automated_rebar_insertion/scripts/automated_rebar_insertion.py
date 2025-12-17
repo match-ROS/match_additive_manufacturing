@@ -65,10 +65,7 @@ class RebarAutomationNode:
 
         # MoveIt init
         moveit_commander.roscpp_initialize([])
-        self.group = moveit_commander.MoveGroupCommander(
-            self.planning_group,
-            ns=self.move_group_ns
-        )
+        self.group = moveit_commander.MoveGroupCommander(self.planning_group , robot_description=self.robot_name + '/robot_description', ns=self.robot_name)
 
         rospy.loginfo("RebarAutomationNode ready. robot=%s start_index=%d step=%d up=%.3f down=%.3f",
                       self.robot_name, self.start_index, self.step,
