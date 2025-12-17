@@ -45,6 +45,12 @@ class RebarAutomationNode:
         self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
         self.mag_joints    = rospy.get_param("~magazine_joints", [-0.072, -0.909, 1.431, -2.132, -1.649, 2.328])
 
+        # MiR "stillstand" detection
+        self.mir_still_pos_eps = float(rospy.get_param("~mir_still_pos_eps", 0.003))  # [m] e.g. 3 mm
+        self.mir_still_time = float(rospy.get_param("~mir_still_time", 1.0))          # [s] must be stable this long
+        self.mir_pose_timeout = float(rospy.get_param("~mir_pose_timeout", 2.0))      # [s] wait for pose updates
+        self.mir_post_wait_max = float(rospy.get_param("~mir_post_wait_max", 30.0))   # [s] overall wait cap
+
         # UR I/O
         self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/{self.UR_prefix}/ur_hardware_interface/set_io")
         self.io_pin = int(rospy.get_param("~io_pin", 1))
@@ -118,6 +124,7 @@ class RebarAutomationNode:
             # "path_topic": "/mir_path_transformed"  # keep default from launch unless needed
         }
         self._run_launch_blocking(self.mir_launch, args, "MiR->index")
+        self._wait_mir_stopped() # ensure MiR is stable before continuing 
 
     def _run_ur_to_index(self, index: int, spray_distance: float):
         args = {
@@ -141,6 +148,49 @@ class RebarAutomationNode:
         self.group.clear_pose_targets()
         if not ok:
             raise RuntimeError("MoveIt failed to reach joint target")
+
+    def _wait_mir_stopped(self):
+        """
+        Wait until MiR pose is stable for mir_still_time seconds.
+        Uses position delta threshold to tolerate localization noise.
+        """
+        rospy.loginfo("MiR: waiting for standstill (eps=%.4fm for %.2fs)",
+                    self.mir_still_pos_eps, self.mir_still_time)
+
+        # wait for first pose
+        t_start = time.time()
+        while not rospy.is_shutdown() and self._mir_pose is None:
+            if time.time() - t_start > self.mir_pose_timeout:
+                raise TimeoutError("MiR: no pose received on mir_pose_topic")
+            rospy.sleep(0.05)
+
+        last_pose = self._mir_pose
+        last_change_t = time.time()
+        t0 = time.time()
+        rate = rospy.Rate(20)
+
+        while not rospy.is_shutdown():
+            cur = self._mir_pose
+            if cur is None:
+                rospy.sleep(0.05)
+                continue
+
+            dx = cur.position.x - last_pose.position.x
+            dy = cur.position.y - last_pose.position.y
+            d = (dx*dx + dy*dy) ** 0.5
+
+            if d > self.mir_still_pos_eps:
+                last_change_t = time.time()
+                last_pose = cur
+
+            if (time.time() - last_change_t) >= self.mir_still_time:
+                rospy.loginfo("MiR: standstill confirmed.")
+                return
+
+            if (time.time() - t0) > self.mir_post_wait_max:
+                raise TimeoutError("MiR: standstill not reached within mir_post_wait_max")
+
+            rate.sleep()
 
 
     def _set_ur_digital_out(self, pin: int, value: float):
