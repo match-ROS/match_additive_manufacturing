@@ -227,6 +227,7 @@ def main():
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
+    #plt.show()
     plt.savefig(args.out)
     print(f"Saved: {args.out}")
 

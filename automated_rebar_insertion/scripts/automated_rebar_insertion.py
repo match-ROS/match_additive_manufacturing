@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import time
+import rospy
+import roslaunch
+
+from geometry_msgs.msg import Pose, PoseStamped
+
+# MoveIt
+import moveit_commander
+
+# UR SetIO (ur_robot_driver / ur_msgs)
+try:
+    from ur_msgs.srv import SetIO, SetIORequest
+except Exception:
+    SetIO = None
+
+
+class RebarAutomationNode:
+    def __init__(self):
+        rospy.init_node("rebar_automation_node", anonymous=False)
+
+        # --- Params
+        self.robot_name = rospy.get_param("~robot_name", "mur620d")
+        self.start_index = int(rospy.get_param("~start_index", 600))
+        self.step = int(rospy.get_param("~step", 50))
+        self.max_cycles = int(rospy.get_param("~max_cycles", 999999))  # safety
+
+        self.spray_distance_up = float(rospy.get_param("~spray_distance_up", 0.65))
+        self.insert_delta = float(rospy.get_param("~insert_delta", 0.05))  # 50 mm
+        self.spray_distance_down = self.spray_distance_up - self.insert_delta
+
+        self.node_start_delay = float(rospy.get_param("~node_start_delay", 0.0))
+
+        # Launch files (absolute paths recommended)
+        self.mir_launch = rospy.get_param("~mir_launch_file", "move_mir_to_start_pose.launch")
+        self.ur_launch = rospy.get_param("~ur_launch_file", "move_ur_to_start_pose.launch")
+
+        # MoveIt
+        self.move_group_ns = rospy.get_param("~move_group_ns", f"/{self.robot_name}/move_group")
+        self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
+        self.named_prepos = rospy.get_param("~named_target_preposition", "Vorposition")
+        self.named_mag = rospy.get_param("~named_target_magazine", "Magazin")
+
+        # UR I/O
+        self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/ur_hardware_interface/set_io")
+        self.io_pin = int(rospy.get_param("~io_pin", 1))
+        self.io_close_value = float(rospy.get_param("~io_close_value", 1.0))
+        self.io_wait_s = float(rospy.get_param("~io_wait_s", 1.0))
+
+        # Optional: pose topics (currently not strictly required; kept for later checks)
+        self.mir_pose_topic = rospy.get_param("~mir_pose_topic", f"/{self.robot_name}/mir_pose_simple")
+        self.ur_tcp_topic = rospy.get_param("~ur_tcp_topic", f"/{self.robot_name}/UR10_r/global_tcp_pose")
+
+        self._mir_pose = None
+        self._ur_tcp = None
+        rospy.Subscriber(self.mir_pose_topic, Pose, self._cb_mir_pose, queue_size=1)
+        rospy.Subscriber(self.ur_tcp_topic, PoseStamped, self._cb_ur_tcp, queue_size=1)
+
+        # roslaunch UUID
+        self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        roslaunch.configure_logging(self.uuid)
+
+        # MoveIt init
+        moveit_commander.roscpp_initialize([])
+        self.group = moveit_commander.MoveGroupCommander(
+            self.planning_group,
+            ns=self.move_group_ns
+        )
+
+        rospy.loginfo("RebarAutomationNode ready. robot=%s start_index=%d step=%d up=%.3f down=%.3f",
+                      self.robot_name, self.start_index, self.step,
+                      self.spray_distance_up, self.spray_distance_down)
+
+    def _cb_mir_pose(self, msg: Pose):
+        self._mir_pose = msg
+
+    def _cb_ur_tcp(self, msg: PoseStamped):
+        self._ur_tcp = msg
+
+    def run(self):
+        idx = self.start_index
+
+        for cycle in range(self.max_cycles):
+            if rospy.is_shutdown():
+                break
+
+            rospy.loginfo("=== Cycle %d | index=%d ===", cycle, idx)
+
+            # 1) Move MiR to index
+            self._run_mir_to_index(idx)
+
+            # 2) Move UR to index (start pose)
+            self._run_ur_to_index(idx, self.spray_distance_up)
+
+            # 3) Insert: down in z via reduced spray_distance
+            self._run_ur_to_index(idx, self.spray_distance_down)
+
+            # 4) Retract: back up
+            self._run_ur_to_index(idx, self.spray_distance_up)
+
+            # 5) Go to magazine sequence + close gripper
+            self._moveit_named(self.named_prepos)
+            self._moveit_named(self.named_mag)
+            self._set_ur_digital_out(self.io_pin, self.io_close_value)
+            rospy.sleep(self.io_wait_s)
+            self._moveit_named(self.named_prepos)
+
+            # Next index
+            idx += self.step
+
+        rospy.loginfo("RebarAutomationNode finished.")
+
+    # ---------- Actions ----------
+    def _run_mir_to_index(self, index: int):
+        args = {
+            "robot_name": self.robot_name,
+            "initial_path_index": str(index),
+            # "path_topic": "/mir_path_transformed"  # keep default from launch unless needed
+        }
+        self._run_launch_blocking(self.mir_launch, args, "MiR->index")
+
+    def _run_ur_to_index(self, index: int, spray_distance: float):
+        args = {
+            "robot_name": self.robot_name,
+            "initial_path_index": str(index),
+            "spray_distance": f"{spray_distance:.3f}",
+            "node_start_delay": f"{self.node_start_delay:.3f}",
+            # "planning_group": self.planning_group,  # keep default unless needed
+        }
+        self._run_launch_blocking(self.ur_launch, args, f"UR->index (spray_distance={spray_distance:.3f})")
+
+    def _moveit_named(self, target: str, wait: bool = True):
+        rospy.loginfo("MoveIt: go named_target='%s'", target)
+        self.group.set_named_target(target)
+        ok = self.group.go(wait=wait)
+        self.group.stop()
+        self.group.clear_pose_targets()
+        if not ok:
+            raise RuntimeError(f"MoveIt failed to reach named target '{target}'")
+
+    def _set_ur_digital_out(self, pin: int, value: float):
+        if SetIO is None:
+            raise RuntimeError("ur_msgs/SetIO not available. Install ur_msgs or adjust to your driver interface.")
+
+        rospy.loginfo("UR IO: set DO%d=%.1f via %s", pin, value, self.io_service)
+        rospy.wait_for_service(self.io_service, timeout=10.0)
+        srv = rospy.ServiceProxy(self.io_service, SetIO)
+
+        req = SetIORequest()
+        req.fun = SetIORequest.FUN_SET_DIGITAL_OUT
+        req.pin = pin
+        req.state = value
+        srv(req)
+
+    # ---------- roslaunch helper ----------
+    def _run_launch_blocking(self, launch_file: str, args: dict, label: str, timeout_s: float = 300.0):
+        launch_file = os.path.expanduser(launch_file)
+        if not os.path.isabs(launch_file):
+            # Allow using $(find pkg)/... style by resolving via roslaunch
+            resolved = roslaunch.rlutil.resolve_launch_arguments([launch_file])[0]
+            launch_file = resolved
+
+        cli_args = [launch_file] + [f"{k}:={v}" for k, v in args.items()]
+        roslaunch_files = [(launch_file, cli_args[1:])]
+
+        parent = roslaunch.parent.ROSLaunchParent(self.uuid, roslaunch_files, is_core=False)
+
+        rospy.loginfo("Launch start: %s | %s", label, " ".join(cli_args))
+        parent.start()
+
+        t0 = time.time()
+        rate = rospy.Rate(10)
+        try:
+            while not rospy.is_shutdown():
+                # If the launched node exits, pm should have no alive processes
+                alive = True
+                try:
+                    alive = parent.pm.is_alive()
+                except Exception:
+                    # fallback: assume alive for a short while
+                    alive = True
+
+                if not alive:
+                    break
+
+                if (time.time() - t0) > timeout_s:
+                    raise TimeoutError(f"Timeout in launch '{label}' after {timeout_s}s")
+
+                rate.sleep()
+        finally:
+            rospy.loginfo("Launch shutdown: %s", label)
+            parent.shutdown()
+
+
+if __name__ == "__main__":
+    try:
+        node = RebarAutomationNode()
+        node.run()
+    except Exception as e:
+        rospy.logerr("RebarAutomationNode error: %s", str(e))
+        raise

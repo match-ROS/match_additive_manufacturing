@@ -1,0 +1,63 @@
+<launch>
+
+  <arg name="robot_name"             default="mur620d" />
+  <arg name="start_index"            default="600" />
+  <arg name="step"                   default="50" />
+  <arg name="max_cycles"             default="999999" />
+
+  <arg name="spray_distance_up"      default="0.65" />
+  <arg name="insert_delta"           default="0.05" />  <!-- 50 mm -->
+  <arg name="node_start_delay"       default="0.0" />
+
+  <!-- Paths to the two existing launch files -->
+  <arg name="mir_launch_file" default="$(find move_mir_to_start_pose)/launch/move_mir_to_start_pose.launch" />
+  <arg name="ur_launch_file"  default="$(find move_ur_to_start_pose)/launch/move_ur_to_start_pose.launch" />
+
+  <!-- MoveIt -->
+  <arg name="move_group_ns"          default="/$(arg robot_name)/move_group" />
+  <arg name="planning_group"         default="UR_arm_r" />
+  <arg name="named_target_preposition" default="Vorposition" />
+  <arg name="named_target_magazine"    default="Magazin" />
+
+  <!-- Topics -->
+  <arg name="mir_pose_topic"         default="/$(arg robot_name)/mir_pose_simple" />
+  <arg name="ur_tcp_topic"           default="/$(arg robot_name)/UR10_r/global_tcp_pose" />
+
+  <!-- UR IO -->
+  <arg name="io_service"             default="/$(arg robot_name)/ur_hardware_interface/set_io" />
+  <arg name="io_pin"                 default="1" />
+  <arg name="io_close_value"         default="1.0" />
+  <arg name="io_wait_s"              default="1.0" />
+
+
+  <node pkg="automated_rebar_insertion"
+        type="automated_rebar_insertion.py"
+        name="automated_rebar_insertion"
+        output="screen">
+
+    <param name="robot_name" value="$(arg robot_name)" />
+    <param name="start_index" value="$(arg start_index)" />
+    <param name="step" value="$(arg step)" />
+    <param name="max_cycles" value="$(arg max_cycles)" />
+
+    <param name="spray_distance_up" value="$(arg spray_distance_up)" />
+    <param name="insert_delta" value="$(arg insert_delta)" />
+    <param name="node_start_delay" value="$(arg node_start_delay)" />
+
+    <param name="mir_launch_file" value="$(arg mir_launch_file)" />
+    <param name="ur_launch_file" value="$(arg ur_launch_file)" />
+
+    <param name="move_group_ns" value="$(arg move_group_ns)" />
+    <param name="planning_group" value="$(arg planning_group)" />
+    <param name="named_target_preposition" value="$(arg named_target_preposition)" />
+    <param name="named_target_magazine" value="$(arg named_target_magazine)" />
+
+    <param name="mir_pose_topic" value="$(arg mir_pose_topic)" />
+    <param name="ur_tcp_topic" value="$(arg ur_tcp_topic)" />
+
+    <param name="io_service" value="$(arg io_service)" />
+    <param name="io_pin" value="$(arg io_pin)" />
+    <param name="io_close_value" value="$(arg io_close_value)" />
+    <param name="io_wait_s" value="$(arg io_wait_s)" />
+  </node>
+</launch>
