@@ -43,7 +43,7 @@ class RebarAutomationNode:
         self.move_group_ns = rospy.get_param("~move_group_ns", f"/{self.robot_name}/move_group")
         self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
         self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
-        self.mag_joints    = rospy.get_param("~magazine_joints", [-0.072, -0.909, 1.431, -2.132, -1.649, 2.328])
+        self.mag_joints    = rospy.get_param("~magazine_joints", [-0.072, -1.215, 1.372, -1.7, -1.63, 2.328])
 
         # MiR "stillstand" detection
         self.mir_still_pos_eps = float(rospy.get_param("~mir_still_pos_eps", 0.003))  # [m] e.g. 3 mm
@@ -55,7 +55,8 @@ class RebarAutomationNode:
         self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/{self.UR_prefix}/ur_hardware_interface/set_io")
         self.io_pin = int(rospy.get_param("~io_pin", 1))
         self.io_close_value = float(rospy.get_param("~io_close_value", 1.0))
-        self.io_wait_s = float(rospy.get_param("~io_wait_s", 1.0))
+        self.io_open_value = float(rospy.get_param("~io_open_value", 0.0))
+        self.io_wait_s = float(rospy.get_param("~io_wait_s", 10.0))
 
         # Optional: pose topics (currently not strictly required; kept for later checks)
         self.mir_pose_topic = rospy.get_param("~mir_pose_topic", f"/{self.robot_name}/mir_pose_simple")
@@ -92,6 +93,8 @@ class RebarAutomationNode:
                 break
 
             rospy.loginfo("=== Cycle %d | index=%d ===", cycle, idx)
+            # 0) Reset gripper to open
+            self._set_ur_digital_out(self.io_pin, self.io_open_value)
 
             # 1) Move MiR to index
             self._run_mir_to_index(idx)
@@ -109,7 +112,11 @@ class RebarAutomationNode:
             self._moveit_joints(self.prepos_joints)
             self._moveit_joints(self.mag_joints)
             self._set_ur_digital_out(self.io_pin, self.io_close_value)
-            rospy.sleep(self.io_wait_s)
+            rospy.sleep(1.0) 
+            self._set_ur_digital_out(self.io_pin, self.io_open_value)
+            rospy.sleep(10.0)
+            
+            # 6) Back to prepos
             self._moveit_joints(self.prepos_joints)
             # Next index
             idx += self.step

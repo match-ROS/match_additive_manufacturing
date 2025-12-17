@@ -28,7 +28,7 @@
   <arg name="io_service"             default="/$(arg robot_name)/$(arg UR_prefix)/ur_hardware_interface/set_io" />
   <arg name="io_pin"                 default="1" />
   <arg name="io_close_value"         default="1.0" />
-  <arg name="io_wait_s"              default="1.0" />
+  <arg name="io_wait_s"              default="10.0" />
 
 
   <node pkg="automated_rebar_insertion"
