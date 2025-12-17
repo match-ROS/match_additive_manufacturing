@@ -24,6 +24,7 @@ class RebarAutomationNode:
 
         # --- Params
         self.robot_name = rospy.get_param("~robot_name", "mur620d")
+        self.UR_prefix = rospy.get_param("~UR_prefix", "UR10_r")
         self.start_index = int(rospy.get_param("~start_index", 600))
         self.step = int(rospy.get_param("~step", 50))
         self.max_cycles = int(rospy.get_param("~max_cycles", 999999))  # safety
@@ -41,11 +42,11 @@ class RebarAutomationNode:
         # MoveIt
         self.move_group_ns = rospy.get_param("~move_group_ns", f"/{self.robot_name}/move_group")
         self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
-        self.named_prepos = rospy.get_param("~named_target_preposition", "Vorposition")
-        self.named_mag = rospy.get_param("~named_target_magazine", "Magazin")
+        self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
+        self.mag_joints    = rospy.get_param("~magazine_joints", [-0.072, -0.909, 1.431, -2.132, -1.649, 2.328])
 
         # UR I/O
-        self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/ur_hardware_interface/set_io")
+        self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/{self.UR_prefix}/ur_hardware_interface/set_io")
         self.io_pin = int(rospy.get_param("~io_pin", 1))
         self.io_close_value = float(rospy.get_param("~io_close_value", 1.0))
         self.io_wait_s = float(rospy.get_param("~io_wait_s", 1.0))
@@ -99,12 +100,11 @@ class RebarAutomationNode:
             self._run_ur_to_index(idx, self.spray_distance_up)
 
             # 5) Go to magazine sequence + close gripper
-            self._moveit_named(self.named_prepos)
-            self._moveit_named(self.named_mag)
+            self._moveit_joints(self.prepos_joints)
+            self._moveit_joints(self.mag_joints)
             self._set_ur_digital_out(self.io_pin, self.io_close_value)
             rospy.sleep(self.io_wait_s)
-            self._moveit_named(self.named_prepos)
-
+            self._moveit_joints(self.prepos_joints)
             # Next index
             idx += self.step
 
@@ -129,14 +129,19 @@ class RebarAutomationNode:
         }
         self._run_launch_blocking(self.ur_launch, args, f"UR->index (spray_distance={spray_distance:.3f})")
 
-    def _moveit_named(self, target: str, wait: bool = True):
-        rospy.loginfo("MoveIt: go named_target='%s'", target)
-        self.group.set_named_target(target)
+    def _moveit_joints(self, joint_values, wait: bool = True):
+        """
+        joint_values: list[float] in the MoveGroup joint order
+                    (use group.get_active_joints() to verify order)
+        """
+        rospy.loginfo("MoveIt: go joint target (%d joints)", len(joint_values))
+        self.group.set_joint_value_target(joint_values)
         ok = self.group.go(wait=wait)
         self.group.stop()
         self.group.clear_pose_targets()
         if not ok:
-            raise RuntimeError(f"MoveIt failed to reach named target '{target}'")
+            raise RuntimeError("MoveIt failed to reach joint target")
+
 
     def _set_ur_digital_out(self, pin: int, value: float):
         if SetIO is None:

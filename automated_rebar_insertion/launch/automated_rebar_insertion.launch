@@ -1,6 +1,7 @@
 <launch>
 
   <arg name="robot_name"             default="mur620d" />
+  <arg name="UR_prefix"              default="UR10_r" />
   <arg name="start_index"            default="600" />
   <arg name="step"                   default="50" />
   <arg name="max_cycles"             default="999999" />
@@ -24,7 +25,7 @@
   <arg name="ur_tcp_topic"           default="/$(arg robot_name)/UR10_r/global_tcp_pose" />
 
   <!-- UR IO -->
-  <arg name="io_service"             default="/$(arg robot_name)/ur_hardware_interface/set_io" />
+  <arg name="io_service"             default="/$(arg robot_name)/$(arg UR_prefix)/ur_hardware_interface/set_io" />
   <arg name="io_pin"                 default="1" />
   <arg name="io_close_value"         default="1.0" />
   <arg name="io_wait_s"              default="1.0" />
@@ -36,6 +37,7 @@
         output="screen">
 
     <param name="robot_name" value="$(arg robot_name)" />
+    <param name="UR_prefix" value="$(arg UR_prefix)" />
     <param name="start_index" value="$(arg start_index)" />
     <param name="step" value="$(arg step)" />
     <param name="max_cycles" value="$(arg max_cycles)" />
