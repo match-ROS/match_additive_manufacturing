@@ -61,7 +61,7 @@ class RebarAutomationNode:
         self.move_group_ns = rospy.get_param("~move_group_ns", f"/{self.robot_name}/move_group")
         self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
         self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
-        self.mag_joints    = rospy.get_param("~magazine_joints", [0.3, -1.308, 1.5, -1.764, -1.579, 0.0])
+        self.mag_joints    = rospy.get_param("~magazine_joints", [0.3, -1.308, 1.5, -1.764, -1.579])
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'base_footprint')
         self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'UR10_r/tool0')
 
@@ -102,7 +102,7 @@ class RebarAutomationNode:
 
         # MoveIt init
         moveit_commander.roscpp_initialize([])
-        self.group = moveit_commander.MoveGroupCommander(self.planning_group , robot_description=self.robot_name + '/robot_description', ns=self.robot_name)
+        self.group = moveit_commander.MoveGroupCommander(self.planning_group , robot_description= '/' + self.robot_name + '/robot_description', ns=self.robot_name)
 
         rospy.loginfo("RebarAutomationNode ready. robot=%s start_index=%d step=%d up=%.3f down=%.3f",
                       self.robot_name, self.start_index, self.step,
@@ -147,7 +147,7 @@ class RebarAutomationNode:
 
             # 5) Go to magazine sequence + close gripper
             #self._moveit_joints(self.prepos_joints)
-            self._moveit_joints(self.mag_joints)
+            self._moveit_joints_partial(self.mag_joints)
             self._set_ur_digital_out(self.io_pin, self.io_close_value)
             rospy.sleep(1.0) 
             self._set_ur_digital_out(self.io_pin, self.io_open_value)
@@ -190,6 +190,34 @@ class RebarAutomationNode:
         self.group.clear_pose_targets()
         if not ok:
             raise RuntimeError("MoveIt failed to reach joint target")
+
+    def _moveit_joints_partial(self, joint_values_first5, wait: bool = True):
+            """
+            Provide only the first 5 joint targets (in MoveGroup order).
+            Joint 6 stays at its current value.
+            """
+            if len(joint_values_first5) != 5:
+                raise ValueError("Expected exactly 5 joint values")
+
+            # print joint names for debugging
+            joint_names = self.group.get_active_joints()
+            rospy.loginfo("MoveIt: joint names: %s", ", ".join(joint_names))
+
+            current = list(self.group.get_current_joint_values())
+            if len(current) < 6:
+                raise RuntimeError(f"MoveGroup has only {len(current)} joints, expected >= 6")
+
+            target = current[:]                 # keep all as-is
+            target[:5] = joint_values_first5    # overwrite first 5
+
+            rospy.loginfo("MoveIt: go partial joint target (first 5 fixed, last kept)")
+            self.group.set_joint_value_target(target)
+            ok = self.group.go(wait=wait)
+            self.group.stop()
+            self.group.clear_pose_targets()
+            if not ok:
+                raise RuntimeError("MoveIt failed to reach partial joint target")
+
 
     def _minimum_jerk_v(self, t, T, dz):
         """C2: v(t) for minimum-jerk position from 0..dz in time T."""
