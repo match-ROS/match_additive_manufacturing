@@ -5,10 +5,14 @@ import os
 import time
 import rospy
 import roslaunch
+import numpy as np
+import tf
 
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, Quaternion
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Path
+import tf.transformations as tr
 
 # MoveIt
 import moveit_commander
@@ -36,7 +40,7 @@ class RebarAutomationNode:
         self.twist_cmd_topic = rospy.get_param("~twist_cmd_topic", f"/{self.robot_name}/{self.UR_prefix}/twist_controller/command_collision_free")
         self.twist_frame_id = rospy.get_param("~twist_frame_id", f"{self.robot_name}/base_link")
         self.twist_rate_hz = int(rospy.get_param("~twist_rate_hz", 250))
-
+        self.path_topic = rospy.get_param("~path_topic", "/ur_path_original")
 
         self.spray_distance_up = float(rospy.get_param("~spray_distance_up", 0.65))
         self.insert_delta = float(rospy.get_param("~insert_delta", 0.05))  # 50 mm
@@ -57,6 +61,8 @@ class RebarAutomationNode:
         self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
         self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
         self.mag_joints    = rospy.get_param("~magazine_joints", [0.3, -1.308, 1.5, -1.764, -1.579, 0.0])
+        self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'base_footprint')
+        self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'UR10_r/tool0')
 
         # MiR "stillstand" detection
         self.mir_still_pos_eps = float(rospy.get_param("~mir_still_pos_eps", 0.003))  # [m] e.g. 3 mm
@@ -77,9 +83,17 @@ class RebarAutomationNode:
 
         self._mir_pose = None
         self._ur_tcp = None
+        self.ur_path = None
         rospy.Subscriber(self.mir_pose_topic, Pose, self._cb_mir_pose, queue_size=1)
         rospy.Subscriber(self.ur_tcp_topic, PoseStamped, self._cb_ur_tcp, queue_size=1)
+        rospy.Subscriber(self.path_topic, Path, self._cb_path, queue_size=1)
         self.twist_pub = rospy.Publisher(self.twist_cmd_topic, Twist, queue_size=1)
+        self.tf_listener = tf.TransformListener()
+        
+        # Wait for initial messages / setup
+        rospy.loginfo("RebarAutomationNode: waiting for initial topics...")
+        rospy.wait_for_message(self.path_topic, Path, timeout=5.0)  # oder warten bis self.ur_path != None
+        rospy.loginfo("RebarAutomationNode: initial topics received.")
 
         # roslaunch UUID
         self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
@@ -99,6 +113,9 @@ class RebarAutomationNode:
     def _cb_ur_tcp(self, msg: PoseStamped):
         self._ur_tcp = msg
 
+    def _cb_path(self, msg: Path):
+        self.ur_path = msg
+
     def run(self):
         idx = self.start_index
 
@@ -112,7 +129,8 @@ class RebarAutomationNode:
 
             # 1) Move UR to index (start pose)
             self._wait_mir_stopped() # ensure MiR is stable before continuing 
-            self._run_ur_to_index(idx, self.spray_distance_up)
+            #self._run_ur_to_index(idx, self.spray_distance_up)
+            self.move_ur_to_index_fast(idx, self.spray_distance_up)
 
             # 2) Insert fast (down)
             self.move_relative_z_twist_c2(dz_m=-0.15, duration_s=1.35)  # 50 mm runter
@@ -194,7 +212,6 @@ class RebarAutomationNode:
         if not resp.ok:
             raise RuntimeError(f"Controller switch failed. start={start_list}, stop={stop_list}")
 
-
     def move_relative_z_twist_c2(self, dz_m: float, duration_s: float = 0.35):
         """
         Switch to twist controller, move dz in z with C2 profile, then switch back.
@@ -252,6 +269,53 @@ class RebarAutomationNode:
             stop_list=[self.twist_controller_name],
             timeout=5.0
         )
+
+    def _ur_target_pose_from_index(self, idx: int, spray_distance: float):
+        if self.ur_path is None:
+            raise RuntimeError("UR path not received")
+
+        p = self.ur_path.poses[idx].pose.position
+
+        # Zielpunkt in map (inkl. offsets)
+        target_map = np.array([p.x, p.y, p.z  + spray_distance])
+
+        # TF: map -> robot/base_link
+        now = rospy.Time(0)
+        base_tf = f"{self.robot_name}/{self.manipulator_base_link}"  
+        self.tf_listener.waitForTransform("map", base_tf, now, rospy.Duration(1.0))
+        trans, rot = self.tf_listener.lookupTransform("map", base_tf, now)
+
+        base_pos_map = np.array(trans)
+
+        # relative Position in map
+        rel_map = target_map - base_pos_map
+
+        # in Base-Frame rotieren (inverse rot)
+        R = tr.quaternion_matrix(tr.quaternion_inverse(rot))
+        rel_base = (R[:3, :3] @ rel_map.reshape(3, 1)).reshape(3)
+
+        # PoseStamped im Base-Frame
+        ps = PoseStamped()
+        ps.header.stamp = rospy.Time.now()
+        ps.header.frame_id = self.manipulator_base_link
+        ps.pose.position.x = float(rel_base[0])
+        ps.pose.position.y = float(rel_base[1])
+        ps.pose.position.z = float(rel_base[2])
+
+        # Orientation: konstant (Yaw egal)
+        # z.B. tool "nach unten": roll=pi, pitch=0, yaw=0
+        q = tr.quaternion_from_euler(np.pi, 0.0, 0.0)
+        ps.pose.orientation = Quaternion(*q)
+        return ps
+
+    def move_ur_to_index_fast(self, idx: int, spray_distance: float):
+        target = self._ur_target_pose_from_index(idx, spray_distance)
+        self.group.set_pose_target(target, end_effector_link=self.manipulator_tcp_link)
+        ok = self.group.go(wait=True)
+        self.group.stop()
+        self.group.clear_pose_targets()
+        if not ok:
+            raise RuntimeError("MoveIt failed to reach UR target pose")
 
 
     def _wait_mir_stopped(self):
