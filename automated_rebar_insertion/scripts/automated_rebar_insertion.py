@@ -7,6 +7,8 @@ import rospy
 import roslaunch
 
 from geometry_msgs.msg import Pose, PoseStamped
+from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest
+from geometry_msgs.msg import Twist
 
 # MoveIt
 import moveit_commander
@@ -28,10 +30,21 @@ class RebarAutomationNode:
         self.start_index = int(rospy.get_param("~start_index", 600))
         self.step = int(rospy.get_param("~step", 50))
         self.max_cycles = int(rospy.get_param("~max_cycles", 999999))  # safety
+        self.cm_switch_srv = f"/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller"
+        self.arm_controller_name = rospy.get_param("~arm_controller_name", "arm_controller")
+        self.twist_controller_name = rospy.get_param("~twist_controller_name", "twist_controller")
+        self.twist_cmd_topic = rospy.get_param("~twist_cmd_topic", f"/{self.robot_name}/{self.UR_prefix}/twist_controller/command_collision_free")
+        self.twist_frame_id = rospy.get_param("~twist_frame_id", f"{self.robot_name}/base_link")
+        self.twist_rate_hz = int(rospy.get_param("~twist_rate_hz", 250))
+
 
         self.spray_distance_up = float(rospy.get_param("~spray_distance_up", 0.65))
         self.insert_delta = float(rospy.get_param("~insert_delta", 0.05))  # 50 mm
         self.spray_distance_down = self.spray_distance_up - self.insert_delta
+
+        self.cart_step = float(rospy.get_param("~cart_step", 0.002))          # eef_step [m]
+        self.cart_jump_thresh = float(rospy.get_param("~cart_jump_thresh", 0.0))  # disable jump check
+        self.cart_fraction_min = float(rospy.get_param("~cart_fraction_min", 0.98))
 
         self.node_start_delay = float(rospy.get_param("~node_start_delay", 0.0))
 
@@ -66,6 +79,8 @@ class RebarAutomationNode:
         self._ur_tcp = None
         rospy.Subscriber(self.mir_pose_topic, Pose, self._cb_mir_pose, queue_size=1)
         rospy.Subscriber(self.ur_tcp_topic, PoseStamped, self._cb_ur_tcp, queue_size=1)
+        rospy.Subscriber(self.ur_local_pose_topic, PoseStamped, self._cb_ur_local_pose, queue_size=1)
+        self.twist_pub = rospy.Publisher(self.twist_cmd_topic, Twist, queue_size=1)
 
         # roslaunch UUID
         self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
@@ -102,11 +117,11 @@ class RebarAutomationNode:
             # 2) Move UR to index (start pose)
             self._run_ur_to_index(idx, self.spray_distance_up)
 
-            # 3) Insert: down in z via reduced spray_distance
-            self._run_ur_to_index(idx, self.spray_distance_down)
+            # 3) Insert fast (down)
+            self.move_relative_z_twist_c2(dz_m=-0.15, duration_s=1.35)  # 50 mm runter
 
-            # 4) Retract: back up
-            self._run_ur_to_index(idx, self.spray_distance_up)
+            # 4) Retract fast (up)
+            self.move_relative_z_twist_c2(dz_m=+0.15, duration_s=1.35)  # 50 mm hoch
 
             # 5) Go to magazine sequence + close gripper
             self._moveit_joints(self.prepos_joints)
@@ -155,6 +170,90 @@ class RebarAutomationNode:
         self.group.clear_pose_targets()
         if not ok:
             raise RuntimeError("MoveIt failed to reach joint target")
+
+    def _minimum_jerk_v(self, t, T, dz):
+        """C2: v(t) for minimum-jerk position from 0..dz in time T."""
+        s = max(0.0, min(1.0, t / T))
+        # x(s) = dz*(10s^3 - 15s^4 + 6s^5)
+        # v(s) = dz/T*(30s^2 - 60s^3 + 30s^4)
+        return (dz / T) * (30*s*s - 60*s*s*s + 30*s*s*s*s)
+
+    def _switch_controllers(self, start_list, stop_list, timeout=3.0):
+        rospy.wait_for_service(self.cm_switch_srv, timeout=timeout)
+        sw = rospy.ServiceProxy(self.cm_switch_srv, SwitchController)
+
+        req = SwitchControllerRequest()
+        req.start_controllers = start_list
+        req.stop_controllers = stop_list
+        req.strictness = 0 #SwitchControllerRequest.STRICT
+        req.start_asap = True
+
+        # FIX: timeout is float64 seconds in ROS1
+        req.timeout = float(timeout)
+
+        resp = sw(req)
+        if not resp.ok:
+            raise RuntimeError(f"Controller switch failed. start={start_list}, stop={stop_list}")
+
+
+    def move_relative_z_twist_c2(self, dz_m: float, duration_s: float = 0.35):
+        """
+        Switch to twist controller, move dz in z with C2 profile, then switch back.
+        dz_m: +up / -down (meters)
+        duration_s: total motion time
+        """
+
+        if duration_s <= 0.05:
+            duration_s = 0.05
+
+        # 1) switch to twist controller
+        self._switch_controllers(
+            start_list=[self.twist_controller_name],
+            stop_list=[self.arm_controller_name],
+            timeout=5.0
+        )
+
+        rospy.sleep(0.05)  # tiny settle
+
+        # 2) run minimum-jerk velocity profile
+        rate = rospy.Rate(self.twist_rate_hz)
+        t0 = rospy.Time.now()
+        last = t0
+
+        while not rospy.is_shutdown():
+            now = rospy.Time.now()
+            t = (now - t0).to_sec()
+            if t >= duration_s:
+                break
+
+            vz = self._minimum_jerk_v(t, duration_s, dz_m)
+
+            msg = Twist()
+            msg.linear.x = 0.0
+            msg.linear.y = 0.0
+            msg.linear.z = vz
+            msg.angular.x = 0.0
+            msg.angular.y = 0.0
+            msg.angular.z = 0.0
+
+            self.twist_pub.publish(msg)
+            last = now
+            rate.sleep()
+
+        # 3) send a few zero commands to stop cleanly
+        for _ in range(int(0.1 * self.twist_rate_hz)):
+            now = rospy.Time.now()
+            msg = Twist()
+            self.twist_pub.publish(msg)
+            rate.sleep()
+
+        # 4) switch back to arm controller (MoveIt continues)
+        self._switch_controllers(
+            start_list=[self.arm_controller_name],
+            stop_list=[self.twist_controller_name],
+            timeout=5.0
+        )
+
 
     def _wait_mir_stopped(self):
         """
