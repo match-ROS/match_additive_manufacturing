@@ -56,7 +56,7 @@ class RebarAutomationNode:
         self.move_group_ns = rospy.get_param("~move_group_ns", f"/{self.robot_name}/move_group")
         self.planning_group = rospy.get_param("~planning_group", "UR_arm_r")
         self.prepos_joints = rospy.get_param("~prepos_joints", [0.298, -0.764, 1.431, -2.741, -1.572, 2.328])
-        self.mag_joints    = rospy.get_param("~magazine_joints", [-0.072, -1.215, 1.372, -1.7, -1.63, 2.328])
+        self.mag_joints    = rospy.get_param("~magazine_joints", [0.3, -1.308, 1.5, -1.764, -1.579, 0.0])
 
         # MiR "stillstand" detection
         self.mir_still_pos_eps = float(rospy.get_param("~mir_still_pos_eps", 0.003))  # [m] e.g. 3 mm
@@ -79,7 +79,6 @@ class RebarAutomationNode:
         self._ur_tcp = None
         rospy.Subscriber(self.mir_pose_topic, Pose, self._cb_mir_pose, queue_size=1)
         rospy.Subscriber(self.ur_tcp_topic, PoseStamped, self._cb_ur_tcp, queue_size=1)
-        rospy.Subscriber(self.ur_local_pose_topic, PoseStamped, self._cb_ur_local_pose, queue_size=1)
         self.twist_pub = rospy.Publisher(self.twist_cmd_topic, Twist, queue_size=1)
 
         # roslaunch UUID
@@ -111,20 +110,22 @@ class RebarAutomationNode:
             # 0) Reset gripper to open
             self._set_ur_digital_out(self.io_pin, self.io_open_value)
 
-            # 1) Move MiR to index
-            self._run_mir_to_index(idx)
-
-            # 2) Move UR to index (start pose)
+            # 1) Move UR to index (start pose)
+            self._wait_mir_stopped() # ensure MiR is stable before continuing 
             self._run_ur_to_index(idx, self.spray_distance_up)
 
-            # 3) Insert fast (down)
+            # 2) Insert fast (down)
             self.move_relative_z_twist_c2(dz_m=-0.15, duration_s=1.35)  # 50 mm runter
 
-            # 4) Retract fast (up)
+            # 3) Retract fast (up)
             self.move_relative_z_twist_c2(dz_m=+0.15, duration_s=1.35)  # 50 mm hoch
 
+            # 4) Move MiR to next index
+            idx += self.step
+            self._run_mir_to_index(idx)
+
             # 5) Go to magazine sequence + close gripper
-            self._moveit_joints(self.prepos_joints)
+            #self._moveit_joints(self.prepos_joints)
             self._moveit_joints(self.mag_joints)
             self._set_ur_digital_out(self.io_pin, self.io_close_value)
             rospy.sleep(1.0) 
@@ -132,9 +133,8 @@ class RebarAutomationNode:
             rospy.sleep(10.0)
             
             # 6) Back to prepos
-            self._moveit_joints(self.prepos_joints)
-            # Next index
-            idx += self.step
+            #self._moveit_joints(self.prepos_joints)
+
 
         rospy.loginfo("RebarAutomationNode finished.")
 
@@ -146,7 +146,6 @@ class RebarAutomationNode:
             # "path_topic": "/mir_path_transformed"  # keep default from launch unless needed
         }
         self._run_launch_blocking(self.mir_launch, args, "MiR->index")
-        self._wait_mir_stopped() # ensure MiR is stable before continuing 
 
     def _run_ur_to_index(self, index: int, spray_distance: float):
         args = {
