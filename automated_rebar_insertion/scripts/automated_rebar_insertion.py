@@ -16,6 +16,7 @@ import tf.transformations as tr
 
 # MoveIt
 import moveit_commander
+from moveit_msgs.msg import Constraints, JointConstraint
 
 # UR SetIO (ur_robot_driver / ur_msgs)
 try:
@@ -118,6 +119,8 @@ class RebarAutomationNode:
 
     def run(self):
         idx = self.start_index
+        # Initial move MiR to start index
+        self._run_mir_to_index(idx)
 
         for cycle in range(self.max_cycles):
             if rospy.is_shutdown():
@@ -311,6 +314,40 @@ class RebarAutomationNode:
     def move_ur_to_index_fast(self, idx: int, spray_distance: float):
         target = self._ur_target_pose_from_index(idx, spray_distance)
         self.group.set_pose_target(target, end_effector_link=self.manipulator_tcp_link)
+
+        constraints = Constraints()
+        # Ellbogen oben (z. B. nahe -2.0 rad)
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/shoulder_lift_joint",
+            position=-0.5,
+            tolerance_above=1.0,
+            tolerance_below=1.0,
+            weight=1.0
+        ))
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/shoulder_pan_joint",
+            position=0.0,
+            tolerance_above=2.5,
+            tolerance_below=0.5,
+            weight=1.0
+        ))
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/wrist_1_joint",
+            position=-2.1,
+            tolerance_above=1.1,
+            tolerance_below=1.1,
+            weight=1.0
+        ))
+        constraints.joint_constraints.append(JointConstraint(
+            joint_name="UR10_r/wrist_2_joint",
+            position=-1.5,
+            tolerance_above=1.1,
+            tolerance_below=1.1,
+            weight=1.0
+        ))
+
+        self.group.set_path_constraints(constraints)
+
         ok = self.group.go(wait=True)
         self.group.stop()
         self.group.clear_pose_targets()
