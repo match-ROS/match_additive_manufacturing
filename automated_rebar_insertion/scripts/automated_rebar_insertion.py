@@ -9,6 +9,7 @@ import numpy as np
 import tf
 
 from geometry_msgs.msg import Pose, PoseStamped, Quaternion
+from sensor_msgs.msg import JointState
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path
@@ -199,11 +200,7 @@ class RebarAutomationNode:
             if len(joint_values_first5) != 5:
                 raise ValueError("Expected exactly 5 joint values")
 
-            # print joint names for debugging
-            joint_names = self.group.get_active_joints()
-            rospy.loginfo("MoveIt: joint names: %s", ", ".join(joint_names))
-
-            current = list(self.group.get_current_joint_values())
+            current = self.read_q_from_joint_states(f"/{self.robot_name}/joint_states", timeout=2.0)
             if len(current) < 6:
                 raise RuntimeError(f"MoveGroup has only {len(current)} joints, expected >= 6")
 
@@ -440,6 +437,38 @@ class RebarAutomationNode:
         req.pin = pin
         req.state = value
         srv(req)
+
+    def read_q_from_joint_states(self, joint_states_topic: str, timeout=2.0):
+        """
+        joint_names_order: e.g. self.group.get_active_joints() -> q1..q6 order
+        returns: list[float] of joint positions in that order
+        """
+        msg = rospy.wait_for_message(joint_states_topic, JointState, timeout=timeout)
+
+        # Build name -> index map
+        idx = {n: i for i, n in enumerate(msg.name)}
+
+        q = []
+        missing = []
+        joint_names = self.group.get_active_joints()
+        print("MoveIt: joint names:", ", ".join(joint_names))
+        for jn in joint_names:
+            i = idx.get(jn, None)
+            if i is None:
+                missing.append(jn)
+                q.append(float("nan"))
+            else:
+                # JointState position might be shorter in broken msgs; guard it
+                if i >= len(msg.position):
+                    missing.append(jn)
+                    q.append(float("nan"))
+                else:
+                    q.append(msg.position[i])
+
+        if missing:
+            rospy.logwarn("Missing joints in %s: %s", joint_states_topic, ", ".join(missing))
+
+        return q
 
     # ---------- roslaunch helper ----------
     def _run_launch_blocking(self, launch_file: str, args: dict, label: str, timeout_s: float = 300.0):
