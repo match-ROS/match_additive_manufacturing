@@ -17,6 +17,7 @@ from sensor_msgs.msg import BatteryState
 from rosgraph_msgs.msg import Log
 import rosnode
 import time
+import rospkg
 
 from dynamixel_workbench_msgs.msg import DynamixelStateList
 
@@ -1185,6 +1186,106 @@ class ROSInterface:
             self.gui,
             "Launching orthogonal controller",
             ["roslaunch laser_scanner_tools profile_orthogonal_controller.launch"],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
+
+    def _orth_pid_config_path(self) -> str:
+        try:
+            pkg_path = rospkg.RosPack().get_path("ur_trajectory_follower")
+            return os.path.join(pkg_path, "config", "pid_twist_controller_direction_orthogonal.yaml")
+        except Exception as exc:
+            print(f"Falling back to relative orthogonal PID path: {exc}")
+            return os.path.abspath(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "..",
+                    "..",
+                    "ur_trajectory_follower",
+                    "config",
+                    "pid_twist_controller_direction_orthogonal.yaml",
+                )
+            )
+
+    def _remote_orth_pid_config_path(self, workspace: Optional[str]) -> str:
+        workspace = (workspace or "").strip()
+        if workspace:
+            return f"~/{workspace}/src/match_additive_manufacturing/ur_trajectory_follower/config/pid_twist_controller_direction_orthogonal.yaml"
+        return self._orth_pid_config_path()
+
+    def load_orthogonal_pid_config(self) -> dict:
+        path = self._orth_pid_config_path()
+        with open(path, "r", encoding="utf-8") as stream:
+            data = yaml.safe_load(stream) or {}
+        return data if isinstance(data, dict) else {}
+
+    def _push_orth_pid_config_to_robots(self, local_path: str):
+        workspace = (self.gui.get_workspace_name() or "").strip()
+        robots = self.gui.get_selected_robots()
+        if not workspace or not robots:
+            return
+        remote_path = self._remote_orth_pid_config_path(workspace)
+        for robot in robots:
+            try:
+                subprocess.check_call(["scp", local_path, f"{robot}:{remote_path}"])
+            except subprocess.CalledProcessError as exc:
+                print(f"Failed to copy PID config to {robot}: {exc}")
+
+    def save_orthogonal_pid_config(self, payload: dict):
+        path = self._orth_pid_config_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(payload or {}, stream, default_flow_style=False, sort_keys=False)
+        self._push_orth_pid_config_to_robots(path)
+
+    def start_orthogonal_pid_controller(self):
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping orthogonal PID start.")
+            return
+
+        workspace = (self.gui.get_workspace_name() or "").strip()
+        if workspace:
+            cfg_arg = (
+                f"$HOME/{workspace}/src/match_additive_manufacturing/ur_trajectory_follower/config/"
+                "pid_twist_controller_direction_orthogonal.yaml"
+            )
+        else:
+            cfg_arg = "$(rospack find ur_trajectory_follower)/config/pid_twist_controller_direction_orthogonal.yaml"
+
+        def _launch_cmd(_robot):
+            return (
+                "roslaunch additive_manufacturing_helpers pid_twist_controller.launch "
+                "node_name:=pid_twist_controller_orthogonal "
+                "input_twist_topic:=/orthogonal_error "
+                "output_twist_topic:=/orthogonal_twist "
+                f"pid_values_path:={cfg_arg}"
+            )
+
+        _run_remote_commands(
+            self.gui,
+            "Starting orthogonal PID controller",
+            [_launch_cmd],
+            use_workspace_debug=True,
+            target_robots=selected_robots,
+        )
+
+    def stop_orthogonal_pid_controller(self):
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping orthogonal PID stop.")
+            return
+
+        stop_cmds = [
+            "rosnode kill /pid_twist_controller_orthogonal/pid_twist_controller_orthogonal || true",
+            "rosnode kill /pid_twist_controller_orthogonal || true",
+            "pkill -f pid_twist_controller_orthogonal || true",
+        ]
+
+        _run_remote_commands(
+            self.gui,
+            "Stopping orthogonal PID controller",
+            stop_cmds,
             use_workspace_debug=True,
             target_robots=selected_robots,
         )
