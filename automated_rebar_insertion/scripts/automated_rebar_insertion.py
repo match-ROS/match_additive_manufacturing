@@ -7,6 +7,7 @@ import rospy
 import roslaunch
 import numpy as np
 import tf
+import math
 
 from geometry_msgs.msg import Pose, PoseStamped, Quaternion
 from sensor_msgs.msg import JointState
@@ -33,7 +34,7 @@ class RebarAutomationNode:
         # --- Params
         self.robot_name = rospy.get_param("~robot_name", "mur620d")
         self.UR_prefix = rospy.get_param("~UR_prefix", "UR10_r")
-        self.start_index = int(rospy.get_param("~start_index", 600))
+        self.start_index = int(rospy.get_param("~start_index", 1200))
         self.step = int(rospy.get_param("~step", 50))
         self.max_cycles = int(rospy.get_param("~max_cycles", 999999))  # safety
         self.cm_switch_srv = f"/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller"
@@ -75,6 +76,8 @@ class RebarAutomationNode:
         # UR I/O
         self.io_service = rospy.get_param("~io_service", f"/{self.robot_name}/{self.UR_prefix}/ur_hardware_interface/set_io")
         self.io_pin = int(rospy.get_param("~io_pin", 1))
+        self.magnet_grip_pin = int(rospy.get_param("~magnet_grip_pin", 16))
+        self.magnet_release_pin = int(rospy.get_param("~magnet_release_pin", 17))
         self.io_close_value = float(rospy.get_param("~io_close_value", 1.0))
         self.io_open_value = float(rospy.get_param("~io_open_value", 0.0))
         self.io_wait_s = float(rospy.get_param("~io_wait_s", 10.0))
@@ -130,6 +133,9 @@ class RebarAutomationNode:
             rospy.loginfo("=== Cycle %d | index=%d ===", cycle, idx)
             # 0) Reset gripper to open
             self._set_ur_digital_out(self.io_pin, self.io_open_value)
+            self._set_ur_digital_out(self.magnet_grip_pin, 1.0)
+            rospy.sleep(self.io_close_value)
+            self._set_ur_digital_out(self.magnet_grip_pin, 0.0)
 
             # 1) Move UR to index (start pose)
             self._wait_mir_stopped() # ensure MiR is stable before continuing 
@@ -137,10 +143,15 @@ class RebarAutomationNode:
             self.move_ur_to_index_fast(idx, self.spray_distance_up)
 
             # 2) Insert fast (down)
-            self.move_relative_z_twist_c2(dz_m=-0.15, duration_s=1.35)  # 50 mm runter
+            self._set_ur_digital_out(self.magnet_release_pin, 1.0)
+            self.move_relative_z_twist_c2(dz_m=-self.insert_delta, duration_s=1.95)  # 50 mm runter
+            rospy.sleep(2.0)
+            # move sideways to loosen rebar
+            self.move_relative_xy_twist_c2(dx_m=0.04, dy_m=0.0, duration_s=0.5)  # 20 mm vor
+            self._set_ur_digital_out(self.magnet_release_pin, 0.0)
 
             # 3) Retract fast (up)
-            self.move_relative_z_twist_c2(dz_m=+0.15, duration_s=1.35)  # 50 mm hoch
+            self.move_relative_z_twist_c2(dz_m=self.insert_delta, duration_s=1.35)  # 50 mm hoch
 
             # 4) Move MiR to next index
             idx += self.step
@@ -152,8 +163,9 @@ class RebarAutomationNode:
             self._set_ur_digital_out(self.io_pin, self.io_close_value)
             rospy.sleep(1.0) 
             self._set_ur_digital_out(self.io_pin, self.io_open_value)
+            self._set_ur_digital_out(self.magnet_grip_pin, 1.0)
             rospy.sleep(10.0)
-            
+            self._set_ur_digital_out(self.magnet_grip_pin, 0.0)
             # 6) Back to prepos
             #self._moveit_joints(self.prepos_joints)
 
@@ -298,6 +310,66 @@ class RebarAutomationNode:
             timeout=5.0
         )
 
+    def move_relative_xy_twist_c2(self, dx_m: float, dy_m: float, duration_s: float = 0.35):
+        """
+        Switch to twist controller, move dx/dy in x/y with C2 profile, then switch back.
+        dx_m: +right / -left (meters)
+        dy_m: +forward / -backward (meters)
+        duration_s: total motion time
+        """
+
+        if duration_s <= 0.05:
+            duration_s = 0.05
+
+        # 1) switch to twist controller
+        self._switch_controllers(
+            start_list=[self.twist_controller_name],
+            stop_list=[self.arm_controller_name],
+            timeout=5.0
+        )
+
+        rospy.sleep(0.05)  # tiny settle
+
+        # 2) run minimum-jerk velocity profile
+        rate = rospy.Rate(self.twist_rate_hz)
+        t0 = rospy.Time.now()
+        last = t0
+
+        while not rospy.is_shutdown():
+            now = rospy.Time.now()
+            t = (now - t0).to_sec()
+            if t >= duration_s:
+                break
+
+            vx = self._minimum_jerk_v(t, duration_s, dx_m)
+            vy = self._minimum_jerk_v(t, duration_s, dy_m)
+
+            msg = Twist()
+            msg.linear.x = vx
+            msg.linear.y = vy
+            msg.linear.z = 0.0
+            msg.angular.x = 0.0
+            msg.angular.y = 0.0
+            msg.angular.z = 0.0
+
+            self.twist_pub.publish(msg)
+            last = now
+            rate.sleep()
+
+        # 3) send a few zero commands to stop cleanly
+        for _ in range(int(0.1 * self.twist_rate_hz)):
+            now = rospy.Time.now()
+            msg = Twist()
+            self.twist_pub.publish(msg)
+            rate.sleep()
+
+        # 4) switch back to arm controller (MoveIt continues)
+        self._switch_controllers(
+            start_list=[self.arm_controller_name],
+            stop_list=[self.twist_controller_name],
+            timeout=5.0
+        )
+
     def _ur_target_pose_from_index(self, idx: int, spray_distance: float):
         if self.ur_path is None:
             raise RuntimeError("UR path not received")
@@ -336,48 +408,89 @@ class RebarAutomationNode:
         ps.pose.orientation = Quaternion(*q)
         return ps
 
+
+    def _wrap_to_pi(self, a: float) -> float:
+        # returns angle in [-pi, pi]
+        return (a + math.pi) % (2.0 * math.pi) - math.pi
+
     def move_ur_to_index_fast(self, idx: int, spray_distance: float):
         target = self._ur_target_pose_from_index(idx, spray_distance)
         self.group.set_pose_target(target, end_effector_link=self.manipulator_tcp_link)
 
+        # --- your constraints (as before) ---
         constraints = Constraints()
-        # Ellbogen oben (z. B. nahe -2.0 rad)
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/shoulder_lift_joint",
-            position=-0.5,
-            tolerance_above=1.0,
-            tolerance_below=1.0,
-            weight=1.0
+            position=-0.5, tolerance_above=1.0, tolerance_below=1.0, weight=1.0
         ))
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/shoulder_pan_joint",
-            position=0.0,
-            tolerance_above=2.5,
-            tolerance_below=0.5,
-            weight=1.0
+            position=0.0, tolerance_above=2.5, tolerance_below=0.5, weight=1.0
         ))
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/wrist_1_joint",
-            position=-2.1,
-            tolerance_above=1.1,
-            tolerance_below=1.1,
-            weight=1.0
+            position=-2.1, tolerance_above=1.1, tolerance_below=1.1, weight=1.0
         ))
         constraints.joint_constraints.append(JointConstraint(
             joint_name="UR10_r/wrist_2_joint",
-            position=-1.5,
-            tolerance_above=1.1,
-            tolerance_below=1.1,
-            weight=1.0
+            position=-1.5, tolerance_above=1.1, tolerance_below=1.1, weight=1.0
         ))
-
         self.group.set_path_constraints(constraints)
 
-        ok = self.group.go(wait=True)
-        self.group.stop()
-        self.group.clear_pose_targets()
-        if not ok:
-            raise RuntimeError("MoveIt failed to reach UR target pose")
+        try:
+            # 1) plan
+            plan_result = self.group.plan()
+            if isinstance(plan_result, tuple):
+                success, traj = plan_result[0], plan_result[1]
+            else:
+                # some moveit_commander versions return RobotTrajectory directly
+                success, traj = True, plan_result
+
+            if not success or traj is None or not traj.joint_trajectory.points:
+                raise RuntimeError("MoveIt planning failed or returned empty trajectory")
+
+            jt = traj.joint_trajectory
+            final_positions = jt.points[-1].positions
+            joint_goal = dict(zip(jt.joint_names, final_positions))
+
+            # 2) wrap last joint from plan to [-pi, pi] (avoid long spin)
+            active = self.group.get_active_joints()
+            if active:
+                last_joint = active[-1]
+                if last_joint in joint_goal:
+                    q6 = float(joint_goal[last_joint])
+                    q6_wrapped = self._wrap_to_pi(q6)
+
+                    if abs(q6_wrapped - q6) > 1e-6:
+                        rospy.loginfo("Wrapping %s: %.3f -> %.3f", last_joint, q6, q6_wrapped)
+                        joint_goal[last_joint] = q6_wrapped
+
+                        # 3) replan with corrected joint target (all joints fixed, incl wrapped q6)
+                        self.group.clear_pose_targets()
+                        self.group.set_joint_value_target(joint_goal)
+
+                        plan2 = self.group.plan()
+                        if isinstance(plan2, tuple):
+                            success2, traj2 = plan2[0], plan2[1]
+                        else:
+                            success2, traj2 = True, plan2
+
+                        if success2 and traj2 and traj2.joint_trajectory.points:
+                            traj = traj2
+                        else:
+                            rospy.logwarn("Replan with wrapped wrist failed; executing original plan.")
+
+            # 4) execute
+            ok = self.group.execute(traj, wait=True)
+            self.group.stop()
+            self.group.clear_pose_targets()
+
+            if not ok:
+                raise RuntimeError("MoveIt execute failed")
+
+        finally:
+            # IMPORTANT: don’t leak constraints into later motions
+            self.group.clear_path_constraints()
 
 
     def _wait_mir_stopped(self):
