@@ -219,8 +219,27 @@ class ROSGui(QWidget):
             if text=="Start Laser Profile Controller": self.btn_laser_ctrl=btn
         prepare_print_group.setLayout(prepare_print_layout); right_layout.addWidget(prepare_print_group)
 
-        print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout(); print_function_buttons = {
-            "MiR follow Trajectory": lambda: mir_follow_trajectory(self),
+        print_functions_group = QGroupBox("Print Functions"); print_functions_layout = QVBoxLayout();
+
+        # Orthogonal PID row at top of controls
+        orth_pid_row = QHBoxLayout()
+        self.btn_orth_pid_settings = QPushButton("Set PID")
+        self.btn_orth_pid_settings.setToolTip("Edit and persist orthogonal PID gains")
+        self.btn_orth_pid_settings.clicked.connect(self._open_orth_pid_settings)
+        orth_pid_row.addWidget(self.btn_orth_pid_settings)
+
+        self.orth_pid_toggle = QCheckBox("Enable Orthogonal PID")
+        self.orth_pid_toggle.setChecked(False)
+        self.orth_pid_toggle.toggled.connect(self._handle_orth_pid_toggle)
+        orth_pid_row.addWidget(self.orth_pid_toggle)
+
+        self.orth_pid_state_label = QLabel("Off")
+        orth_pid_row.addWidget(self.orth_pid_state_label)
+
+        print_functions_layout.addLayout(orth_pid_row)
+
+        # Remaining print function buttons
+        print_function_buttons = {
             "Increment Path Index": lambda: increment_path_index(self),
             "Stop MiR Motion": lambda: stop_mir_motion(self),
             "Stop UR Motion": lambda: stop_ur_motion(self),
@@ -238,6 +257,10 @@ class ROSGui(QWidget):
         self.btn_start_signal.clicked.connect(self._handle_start_signal_button)
         print_functions_layout.addWidget(self.btn_start_signal)
         self.update_start_signal_visual(False)
+        
+        mir_btn = QPushButton("MiR follow Trajectory")
+        mir_btn.clicked.connect(lambda _, f=mir_follow_trajectory: f(self))
+        print_functions_layout.addWidget(mir_btn)
 
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
@@ -844,6 +867,17 @@ class ROSGui(QWidget):
         if dlg.exec_() == QDialog.Accepted:
             self.topic_settings = dlg.get_settings()
 
+    def _handle_orth_pid_toggle(self, enabled: bool):
+        self.orth_pid_state_label.setText("On" if enabled else "Off")
+        if enabled:
+            self.ros_interface.start_orthogonal_pid_controller()
+        else:
+            self.ros_interface.stop_orthogonal_pid_controller()
+
+    def _open_orth_pid_settings(self):
+        dlg = OrthogonalPIDDialog(self, self.ros_interface)
+        dlg.exec_()
+
 
 class URFollowSettingsDialog(QDialog):
     def __init__(self, parent=None, initial_settings=None):
@@ -1208,6 +1242,102 @@ class ComponentTransformDialog(QDialog):
         for key, spin in self.rotation_fields.items():
             values[key] = math.radians(float(spin.value()))
         return values
+
+
+class OrthogonalPIDDialog(QDialog):
+    FIELD_SPECS = [
+        ("stamped", "Stamped Twist", "bool"),
+        ("Kp_linear_x", "Kp linear x", "float"),
+        ("Ki_linear_x", "Ki linear x", "float"),
+        ("Kd_linear_x", "Kd linear x", "float"),
+        ("Kp_linear_y", "Kp linear y", "float"),
+        ("Ki_linear_y", "Ki linear y", "float"),
+        ("Kd_linear_y", "Kd linear y", "float"),
+        ("Kp_linear_z", "Kp linear z", "float"),
+        ("Ki_linear_z", "Ki linear z", "float"),
+        ("Kd_linear_z", "Kd linear z", "float"),
+        ("Kp_angular_x", "Kp angular x", "float"),
+        ("Ki_angular_x", "Ki angular x", "float"),
+        ("Kd_angular_x", "Kd angular x", "float"),
+        ("Kp_angular_y", "Kp angular y", "float"),
+        ("Ki_angular_y", "Ki angular y", "float"),
+        ("Kd_angular_y", "Kd angular y", "float"),
+        ("Kp_angular_z", "Kp angular z", "float"),
+        ("Ki_angular_z", "Ki angular z", "float"),
+        ("Kd_angular_z", "Kd angular z", "float"),
+    ]
+
+    def __init__(self, parent, ros_interface):
+        super().__init__(parent)
+        self.setWindowTitle("Orthogonal PID Settings")
+        self.ros_interface = ros_interface
+        self._raw_config = {}
+        self._controls = {}
+
+        layout = QVBoxLayout()
+        form = QFormLayout()
+
+        for key, label, kind in self.FIELD_SPECS:
+            if kind == "bool":
+                widget = QCheckBox()
+            else:
+                spin = QDoubleSpinBox()
+                spin.setRange(-50.0, 50.0)
+                spin.setDecimals(4)
+                spin.setSingleStep(0.01)
+                widget = spin
+            self._controls[key] = widget
+            form.addRow(label, widget)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.btn_save = buttons.addButton("Save", QDialogButtonBox.ActionRole)
+        self.btn_reload = buttons.addButton("Reload", QDialogButtonBox.ActionRole)
+        self.btn_save.clicked.connect(self._handle_save)
+        self.btn_reload.clicked.connect(self._load_values)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setLayout(layout)
+        self._load_values()
+
+    def _load_values(self):
+        try:
+            cfg = self.ros_interface.load_orthogonal_pid_config()
+        except Exception as exc:
+            QMessageBox.critical(self, "Load Failed", f"Could not read PID config:\n{exc}")
+            cfg = {}
+
+        self._raw_config = cfg if isinstance(cfg, dict) else {}
+        for key, widget in self._controls.items():
+            value = self._raw_config.get(key)
+            if isinstance(widget, QCheckBox):
+                widget.setChecked(bool(value))
+            elif isinstance(widget, QDoubleSpinBox):
+                try:
+                    widget.setValue(float(value))
+                except (TypeError, ValueError):
+                    widget.setValue(0.0)
+
+    def _collect_values(self):
+        values = {}
+        for key, widget in self._controls.items():
+            if isinstance(widget, QCheckBox):
+                values[key] = bool(widget.isChecked())
+            elif isinstance(widget, QDoubleSpinBox):
+                values[key] = float(widget.value())
+        return values
+
+    def _handle_save(self):
+        updated = dict(self._raw_config)
+        updated.update(self._collect_values())
+        try:
+            self.ros_interface.save_orthogonal_pid_config(updated)
+        except Exception as exc:
+            QMessageBox.critical(self, "Save Failed", f"Could not write PID config:\n{exc}")
+            return
+        QMessageBox.information(self, "Saved", "Orthogonal PID parameters have been saved.")
 
     def _store_current_values(self):
         name = self._current_component or ""

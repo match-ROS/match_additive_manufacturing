@@ -66,9 +66,9 @@
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
         <arg name="initial_path_index" value="$(arg initial_path_index)" />
     </include>
-    <!-- <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
-    </include> -->
+    </include>
 
     <!-- PID controllers: -->
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
@@ -78,12 +78,11 @@
         <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_ff.yaml" />
     </include>
     
-    <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
+    <!-- <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
         <arg name="node_name" value="pid_twist_controller_orthogonal" />
         <arg name="input_twist_topic" value="/orthogonal_error" />
-        <!-- <arg name="output_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" /> -->
         <arg name="output_twist_topic" value="/orthogonal_twist" />
         <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_orthogonal.yaml" />
-    </include>
+    </include> -->
 
 </launch>
