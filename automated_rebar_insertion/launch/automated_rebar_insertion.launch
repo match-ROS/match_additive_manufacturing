@@ -2,12 +2,12 @@
 
   <arg name="robot_name"             default="mur620d" />
   <arg name="UR_prefix"              default="UR10_r" />
-  <arg name="start_index"            default="600" />
-  <arg name="step"                   default="50" />
+  <arg name="start_index"            default="1300" />
+  <arg name="step"                   default="300" />
   <arg name="max_cycles"             default="999999" />
 
-  <arg name="spray_distance_up"      default="0.65" />
-  <arg name="insert_delta"           default="0.05" />  <!-- 50 mm -->
+  <arg name="spray_distance_up"      default="1.05" />
+  <arg name="insert_delta"           default="0.2" />  <!-- 200 mm -->
   <arg name="node_start_delay"       default="0.0" />
 
   <!-- Paths to the two existing launch files -->
@@ -28,7 +28,7 @@
   <arg name="io_service"             default="/$(arg robot_name)/$(arg UR_prefix)/ur_hardware_interface/set_io" />
   <arg name="io_pin"                 default="1" />
   <arg name="io_close_value"         default="1.0" />
-  <arg name="io_wait_s"              default="10.0" />
+  <arg name="io_wait_s"              default="15.0" />
 
 
   <node pkg="automated_rebar_insertion"
