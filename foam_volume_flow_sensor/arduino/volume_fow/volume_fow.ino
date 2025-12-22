@@ -14,6 +14,7 @@ int PIN_ADC_1 = A0; // Mess-Pin Kanal 1
 int PIN_ADC_2 = A1; // Mess-Pin Kanal 2
 float SHUNT_OHM = 220.0; // Shunt-Widerstand in Ohm
 float VREF = 5.00; // Tatsächliche 5V am Board messen (z. B. 4.96) und hier eintragen
+float V04mA = 0.0; // Spannung bei 4 mA (Kalibrierung)
 unsigned int SAMPLES = 16; // Mittelung über n Messungen
 float ALPHA = 0.15; // Glättung (0..1): höher = schneller
 // Optional: auf reale Einheit (z. B. l/min) mappen
@@ -52,10 +53,15 @@ float voltage = raw * (VREF / 1023.0);
 float current_mA = (voltage / SHUNT_OHM) * 1000.0;
 // 4) Sanft glätten (IIR)
 filt_mA += ALPHA * (current_mA - filt_mA);
-// 5) Prozent (4–20 mA -> 0..100 %)
-float percent = (filt_mA - 4.0) / 16.0 * 100.0;
+// // 5) Prozent (4–20 mA -> 0..100 %)
+// float percent = (filt_mA - 4.0) / 16.0 * 100.0;
+// if (percent < 0) percent = 0;
+// if (percent > 100) percent = 100;
+// 5) using voltage 0-5V for percentage instead of current
+float percent = (voltage-V04mA) / (VREF-V04mA) * 100.0;
 if (percent < 0) percent = 0;
 if (percent > 100) percent = 100;
+
 // 6) Optional: Engineering-Unit
 // 7) Ausgabe
 Serial.print(millis()); Serial.print(',');
