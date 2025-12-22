@@ -1,8 +1,12 @@
 <launch>
     <arg name="initial_path_index" default="0" />
+    <arg name="mir_path_topic" default="/mir_path_transformed" />
+    <arg name="ur_path_topic" default="/ur_path_transformed" />
 
     <node name="target_broadcaster" pkg="print_hw" type="target_broadcaster.py" output="screen">
         <param name="initial_path_index" value="$(arg initial_path_index)" />
+        <param name="mir_path_topic" value="$(arg mir_path_topic)" />
+        <param name="ur_path_topic" value="$(arg ur_path_topic)" />
     </node>
 
 </launch>

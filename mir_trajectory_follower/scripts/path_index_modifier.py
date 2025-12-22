@@ -30,18 +30,20 @@ class TimeWarpingIndex:
         self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
 
         # subs
-        rospy.Subscriber("/mir_path_transformed", Path, self.cb_path)
-        rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_time)
+            self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_transformed")
+            self.mir_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
+            rospy.Subscriber(self.mir_path_topic, Path, self.cb_path)
+            rospy.Subscriber(self.mir_timestamps_topic, Float32MultiArray, self.cb_time)
         rospy.Subscriber(self.path_index_topic, Int32, self.cb_ur_index)
         rospy.Subscriber("/velocity_override", Float32, self.velocity_override_cb)
 
         # wait for initial data
         rospy.loginfo("Waiting for initial data...")
-        rospy.wait_for_message("/mir_path_transformed", Path)
+            rospy.wait_for_message(self.mir_path_topic, Path)
         rospy.loginfo("Received MiR path.")
         rospy.wait_for_message("/velocity_override", Float32)
         rospy.loginfo("Received velocity override.")
-        rospy.wait_for_message("/mir_path_timestamps", Float32MultiArray)
+        rospy.wait_for_message(self.mir_timestamps_topic, Float32MultiArray)
         rospy.loginfo("Received MiR timestamps.")
 
         # compute global average speed
@@ -86,8 +88,9 @@ class TimeWarpingIndex:
             self.ur_index = idx
             return idx
 
-        rospy.loginfo(f"Waiting for first path index on {self.path_index_topic}")
-        current_index = rospy.wait_for_message(self.path_index_topic, Int32).data
+        # rospy.loginfo(f"Waiting for first path index on {self.path_index_topic}")
+        # current_index = rospy.wait_for_message(self.path_index_topic, Int32).data
+        current_index = self.initial_path_index if self.initial_path_index is not None else rospy.wait_for_message(self.path_index_topic, Int32).data
         self.ur_index = current_index
         return current_index
 

@@ -67,6 +67,7 @@ class ROSGui(QWidget):
         self.medians.connect(self._update_medians)
         self.ros_interface = ROSInterface(self)
         self._selected_component_name = self.ros_interface.get_cached_component_name()
+        self._path_namespace = self.ros_interface.get_cached_path_namespace()
         self.setWindowTitle("Additive Manufacturing GUI")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), '../img/Logo.png')))
         self.setGeometry(100, 100, 3200, 1700)
@@ -264,10 +265,11 @@ class ROSGui(QWidget):
 
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
+        path_topics = self.ros_interface.get_path_topics()
         self.topic_settings = {
             "/tf": {"local": False, "remote": False},
-            "/ur_path_transformed": {"local": True, "remote": False},
-            "/mir_path_transformed": {"local": True, "remote": False},
+            path_topics.get("ur_path_transformed", "/ur_path_transformed"): {"local": True, "remote": False},
+            path_topics.get("mir_path_transformed", "/mir_path_transformed"): {"local": True, "remote": False},
             "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
             "/profiles": {"local": False, "remote": True},
             "/path_index": {"local": False, "remote": True},
@@ -484,13 +486,15 @@ class ROSGui(QWidget):
             component_names=components,
             selected_component=current_name,
             transform_loader=lambda name: self.ros_interface.get_component_transform(name),
+            path_namespace=self.get_path_namespace(),
         )
         if dlg.exec_() != QDialog.Accepted:
             return
 
-        selected_component, transform = dlg.get_selection()
+        selected_component, transform, path_namespace = dlg.get_selection()
         if selected_component:
             self._set_selected_component(selected_component)
+        self._set_path_namespace(path_namespace)
         try:
             self.ros_interface.persist_component_transform(selected_component, transform)
         except Exception as exc:
@@ -545,7 +549,9 @@ class ROSGui(QWidget):
         if not name:
             name = self.ros_interface.get_cached_component_name()
             self._selected_component_name = name
-        button.setText(f"Component: {name}")
+        ns = self.get_path_namespace()
+        ns_display = ns if ns else "(no ns)"
+        button.setText(f"Component: {name}  |  Path ns: {ns_display}")
 
     def get_selected_component_name(self):
         name = getattr(self, "_selected_component_name", None)
@@ -555,6 +561,35 @@ class ROSGui(QWidget):
         self._selected_component_name = fallback
         self._update_component_button_label()
         return fallback
+
+    def get_path_namespace(self) -> str:
+        ns = getattr(self, "_path_namespace", None)
+        if isinstance(ns, str):
+            return ns
+        resolved = self.ros_interface.get_cached_path_namespace()
+        self._path_namespace = resolved
+        self._update_component_button_label()
+        return resolved
+
+    def _set_path_namespace(self, namespace: str):
+        normalized = (namespace or "").strip()
+        if normalized and not normalized.startswith("/"):
+            normalized = f"/{normalized.strip('/')}"
+        elif normalized == "/":
+            normalized = ""
+
+        self._path_namespace = normalized
+
+        try:
+            # Persist and refresh from cache so future launches use the normalized value.
+            self.ros_interface.persist_path_namespace(normalized)
+            cached = self.ros_interface.get_cached_path_namespace()
+            if isinstance(cached, str):
+                self._path_namespace = cached
+        except Exception as exc:
+            print(f"Failed to persist path namespace: {exc}")
+
+        self._update_component_button_label()
 
     def update_start_signal_visual(self, active: bool):
         button = getattr(self, "btn_start_signal", None)
@@ -1139,12 +1174,13 @@ class ComponentTransformDialog(QDialog):
     TRANSLATION_KEYS = ("tx", "ty", "tz")
     ROTATION_KEYS = ("rx", "ry", "rz")
 
-    def __init__(self, parent, component_names, selected_component, transform_loader=None):
+    def __init__(self, parent, component_names, selected_component, transform_loader=None, path_namespace: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Component Selection & Transform")
         self._transform_loader = transform_loader
         self._transform_cache = {}
         self._blocking = False
+        self._path_namespace = (path_namespace or "").strip()
 
         layout = QVBoxLayout()
         form = QFormLayout()
@@ -1157,6 +1193,11 @@ class ComponentTransformDialog(QDialog):
         elif component_names:
             self.component_combo.setCurrentIndex(0)
         form.addRow("Component", self.component_combo)
+
+        self.namespace_edit = QLineEdit()
+        self.namespace_edit.setPlaceholderText("e.g. mur620c or /mur620c")
+        self.namespace_edit.setText(self._path_namespace)
+        form.addRow("Path namespace", self.namespace_edit)
 
         self.translation_fields = {}
         for key, label in zip(self.TRANSLATION_KEYS, ("X Offset (m)", "Y Offset (m)", "Z Offset (m)")):
@@ -1242,6 +1283,17 @@ class ComponentTransformDialog(QDialog):
         for key, spin in self.rotation_fields.items():
             values[key] = math.radians(float(spin.value()))
         return values
+
+    def get_selection(self):
+        name = (self._current_component or self.component_combo.currentText() or "").strip()
+        if not name and self.component_combo.count() > 0:
+            name = self.component_combo.itemText(0).strip()
+
+        transform = self._collect_field_values()
+        self._transform_cache[name] = transform
+
+        namespace = (self.namespace_edit.text() if hasattr(self, "namespace_edit") else "").strip()
+        return name, dict(transform), namespace
 
 
 class OrthogonalPIDDialog(QDialog):
@@ -1357,4 +1409,5 @@ class OrthogonalPIDDialog(QDialog):
         if transform is None:
             transform = self._collect_field_values()
             self._transform_cache[name] = transform
-        return name, dict(transform)
+        namespace = (self.namespace_edit.text() if hasattr(self, "namespace_edit") else "").strip()
+        return name, dict(transform), namespace

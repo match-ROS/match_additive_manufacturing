@@ -3,10 +3,12 @@
     <arg name="start_condition_topic" default="/start_condition" />
     <arg name="wait_for_start_condition" default="true" />
     <arg name="initial_path_index" default="-1" />
+    <arg name="mir_path_topic" default="/mir_path_transformed" />
+    <arg name="mir_path_timestamps_topic" default="/mir_path_timestamps" />
     <!-- Node that runs the path transformer script -->
     <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower.py" output="screen">
         <!-- Transformation parameters -->
-        <param name="mir_path_topic" value="/mir_path_transformed" />
+        <param name="mir_path_topic" value="$(arg mir_path_topic)" />
         <param name="mir_pose_topic" value="/$(arg robot_name)/mir_pose_simple" />
         <param name="cmd_vel_topic" value="$(arg robot_name)/cmd_vel" />
         <param name="trajectory_index_topic" value="/path_index_modified" />
@@ -18,6 +20,8 @@
 
     <node name="path_index_modifier" pkg="mir_trajectory_follower" type="path_index_modifier.py" output="screen">
         <param name="initial_path_index" value="$(arg initial_path_index)" />
+        <param name="mir_path_topic" value="$(arg mir_path_topic)" />
+        <param name="mir_path_timestamps_topic" value="$(arg mir_path_timestamps_topic)" />
     </node>
 </launch>
 

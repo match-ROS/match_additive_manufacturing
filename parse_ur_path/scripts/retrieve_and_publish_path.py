@@ -19,15 +19,33 @@ class PathTransfomer:
     REQUIRED_MODULES = ("xTCP", "yTCP", "zTCP", "t")
 
     def __init__(self):
-        rospy.init_node('path_transformer')
+        rospy.init_node('retrieve_and_publish_ur_path', anonymous=False)
     
         self.component_name = rospy.get_param('~component_name', DEFAULT_COMPONENT_NAME)
         modules = self._load_component_modules(self.component_name)
 
+        param_namespace = rospy.get_param('~path_namespace', "") if rospy.has_param('~path_namespace') else ""
+        resolved_namespace = param_namespace.strip('/') if isinstance(param_namespace, str) else ""
+        node_name = rospy.get_name()
+        node_namespace = rospy.get_namespace()
+        if not resolved_namespace:
+            resolved_namespace = node_namespace.strip('/')
+        rospy.loginfo(
+            "UR path node '%s' using namespace '%s' (param '%s')",
+            node_name,
+            node_namespace,
+            param_namespace if param_namespace else "/",
+        )
+
+        def _ns_topic(base: str) -> str:
+            name = base.strip('/')
+            ns = resolved_namespace
+            return f"/{ns}/{name}" if ns else f"/{name}"
+
         # Publishers for the original and transformed paths
-        self.original_pub = rospy.Publisher('/ur_path_original', Path, queue_size=10)
-        self.transformed_pub = rospy.Publisher('/ur_path_transformed', Path, queue_size=10)
-        self.normals_pub = rospy.Publisher('/ur_path_normals', Vector3Array, queue_size=10)
+        self.original_pub = rospy.Publisher(_ns_topic('ur_path_original'), Path, queue_size=10)
+        self.transformed_pub = rospy.Publisher(_ns_topic('ur_path_transformed'), Path, queue_size=10)
+        self.normals_pub = rospy.Publisher(_ns_topic('ur_path_normals'), Vector3Array, queue_size=10)
         self.start_index = 10
 
         # Retrieve the original path

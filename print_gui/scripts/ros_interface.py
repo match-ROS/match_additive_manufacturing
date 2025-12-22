@@ -382,6 +382,31 @@ def _save_path_index_cache(value: int):
     _save_gui_cache_payload(payload)
 
 
+def _normalize_path_namespace(value: Optional[str]) -> str:
+    raw = (value or "").strip()
+    raw = raw.strip("/")
+    if not raw:
+        return ""
+    return "/" + raw
+
+
+def _load_path_namespace_cache(default: str = "") -> str:
+    data = _load_gui_cache_payload()
+    if isinstance(data, dict):
+        entry = data.get("path_namespace")
+        if isinstance(entry, str):
+            normalized = _normalize_path_namespace(entry)
+            if normalized or entry.strip() == "":
+                return normalized
+    return _normalize_path_namespace(default)
+
+
+def _save_path_namespace_cache(value: str):
+    payload = _load_gui_cache_payload()
+    payload["path_namespace"] = _normalize_path_namespace(value)
+    _save_gui_cache_payload(payload)
+
+
 def _format_ros_list_arg(values):
     """Format Python list as double-quoted string literal for roslaunch args."""
     return '"' + str(values).replace("'", '"') + '"'
@@ -599,10 +624,11 @@ class ROSInterface:
         self._start_signal_timer.timeout.connect(self._deactivate_start_signal)
 
         # Rosbag config
+        path_topics = self.get_path_topics()
         self.rosbag_topics = [
             # "/tf",
-            "/ur_path_transformed",
-            "/mir_path_transformed",
+            path_topics.get("ur_path_transformed", "/ur_path_transformed"),
+            path_topics.get("mir_path_transformed", "/mir_path_transformed"),
             "/profiles"
             "/path_index",
             "/laser_profile_offset_cmd_vel",
@@ -734,6 +760,37 @@ class ROSInterface:
         self._cached_path_index = normalized
         self.current_index = normalized
         _save_path_index_cache(normalized)
+
+    def get_cached_path_namespace(self) -> str:
+        cached = getattr(self, "_cached_path_namespace", None)
+        if isinstance(cached, str):
+            return cached
+        resolved = _load_path_namespace_cache("")
+        self._cached_path_namespace = resolved
+        return resolved
+
+    def persist_path_namespace(self, namespace: str):
+        normalized = _normalize_path_namespace(namespace)
+        self._cached_path_namespace = normalized
+        _save_path_namespace_cache(normalized)
+
+    def resolve_path_topic(self, base_name: str) -> str:
+        cleaned = (base_name or "").strip("/")
+        if not cleaned:
+            return ""
+        ns = self.get_cached_path_namespace()
+        return f"{ns}/{cleaned}" if ns else f"/{cleaned}"
+
+    def get_path_topics(self) -> dict:
+        return {
+            "mir_path_transformed": self.resolve_path_topic("mir_path_transformed"),
+            "mir_path_original": self.resolve_path_topic("mir_path_original"),
+            "mir_path_velocity": self.resolve_path_topic("mir_path_velocity"),
+            "mir_path_timestamps": self.resolve_path_topic("mir_path_timestamps"),
+            "ur_path_transformed": self.resolve_path_topic("ur_path_transformed"),
+            "ur_path_original": self.resolve_path_topic("ur_path_original"),
+            "ur_path_normals": self.resolve_path_topic("ur_path_normals"),
+        }
 
     def get_cached_component_name(self) -> str:
         cached = getattr(self, "_cached_component_name", None)
@@ -1935,7 +1992,14 @@ def parse_mir_path(gui):
     transform_flags = " ".join(
         f"{key}:={value}" for key, value in transform.items()
     )
-    command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}"
+    ns = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns = gui.get_path_namespace()
+        except Exception:
+            ns = ""
+    ns_flag = f" path_namespace:={ns}" if ns is not None else ""
+    command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
         gui,
@@ -1957,7 +2021,14 @@ def parse_ur_path(gui):
     transform_flags = " ".join(
         f"{key}:={value}" for key, value in transform.items()
     )
-    command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}"
+    ns = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns = gui.get_path_namespace()
+        except Exception:
+            ns = ""
+    ns_flag = f" path_namespace:={ns}" if ns is not None else ""
+    command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
         gui,
@@ -2040,10 +2111,17 @@ def mir_follow_trajectory(gui):
         return
     _persist_gui_index_setting(gui)
     initial_idx = gui.idx_spin.value()
+    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
+    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
+    mir_timestamps_topic = path_topics.get("mir_path_timestamps", "/mir_path_timestamps")
     _run_remote_commands(
         gui,
         "Launching MiR trajectory follower",
-        [lambda robot: f"roslaunch mir_trajectory_follower mir_trajectory_follower.launch robot_name:={robot} initial_path_index:={initial_idx}"],
+        [lambda robot: (
+            "roslaunch mir_trajectory_follower mir_trajectory_follower.launch "
+            f"robot_name:={robot} initial_path_index:={initial_idx} "
+            f"mir_path_topic:={mir_path_topic} mir_path_timestamps_topic:={mir_timestamps_topic}"
+        )],
         use_workspace_debug=True,
         target_robots=selected_robots,
     )
@@ -2136,6 +2214,9 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
     threshold = ur_follow_settings.get("threshold")
     initial_path_index = gui.idx_spin.value()
     spray_distance = gui.get_spray_distance()
+    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
+    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
+    ur_normals_topic = path_topics.get("ur_path_normals", "/ur_path_normals")
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
@@ -2153,7 +2234,8 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
         "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
         "robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
         "threshold:={threshold} initial_path_index:={initial_path_index} "
-        "nozzle_height_default:={spray_distance}"
+        "nozzle_height_default:={spray_distance} "
+        "ur_path_topic:={ur_path_topic} ur_path_normals_topic:={ur_normals_topic}"
     )
 
     _run_remote_commands(
@@ -2167,6 +2249,8 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
                 threshold=threshold,
                 initial_path_index=initial_path_index,
                 spray_distance=spray_distance,
+                ur_path_topic=ur_path_topic,
+                ur_normals_topic=ur_normals_topic,
             )
         ],
         use_workspace_debug=True,
@@ -2187,6 +2271,13 @@ def stop_idx_advancer(gui):
 
 def target_broadcaster(gui):
     """Broadcasts Target Poses."""
-    command = f"roslaunch print_hw target_broadcaster.launch initial_path_index:={gui.idx_spin.value()}"
+    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
+    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
+    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
+    command = (
+        "roslaunch print_hw target_broadcaster.launch "
+        f"initial_path_index:={gui.idx_spin.value()} "
+        f"mir_path_topic:={mir_path_topic} ur_path_topic:={ur_path_topic}"
+    )
     print(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)

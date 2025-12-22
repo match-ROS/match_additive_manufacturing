@@ -18,14 +18,21 @@ class MirTimestampWarping(object):
         self.t_orig   = None      # np.array der Original-Timestamps
         self.t_mod    = None      # np.array der modifizierten Timestamps
 
+        self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_transformed")
+        self.ur_path_topic = rospy.get_param("~ur_path_topic", "/ur_path_transformed")
+        self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
+        self.mir_path_timestamps_modified_topic = rospy.get_param(
+            "~mir_path_timestamps_modified_topic", "/mir_path_timestamps_modified"
+        )
+
         # Subscriber
-        rospy.Subscriber("/mir_path_transformed", Path, self.cb_mir_path, queue_size=1)
-        rospy.Subscriber("/ur_path_transformed",  Path, self.cb_ur_path, queue_size=1)
-        rospy.Subscriber("/mir_path_timestamps", Float32MultiArray, self.cb_timestamps, queue_size=1)
+        rospy.Subscriber(self.mir_path_topic, Path, self.cb_mir_path, queue_size=1)
+        rospy.Subscriber(self.ur_path_topic,  Path, self.cb_ur_path, queue_size=1)
+        rospy.Subscriber(self.mir_path_timestamps_topic, Float32MultiArray, self.cb_timestamps, queue_size=1)
 
         # Publisher (gelatched, damit neue Subscriber die Daten bekommen)
         self.pub_t_mod = rospy.Publisher(
-            "/mir_path_timestamps_modified",
+            self.mir_path_timestamps_modified_topic,
             Float32MultiArray,
             queue_size=1,
             latch=True

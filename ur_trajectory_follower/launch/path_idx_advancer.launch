@@ -11,6 +11,7 @@
 
     <!-- Subscribers -->
     <arg name="path_topic" default="/ur_path_transformed"/>
+    <arg name="normals_topic" default="/ur_path_normals"/>
     <!-- <arg name="current_pose_topic" default="/global_nozzle_pose"/> -->
     <arg name="current_pose_topic" default="/mur620a/UR10_r/global_tcp_pose"/>
     <!-- Publishers -->
@@ -27,6 +28,8 @@
         <param name="metric" value="$(arg metric)"/>
         <param name="use_virtual_bisector" value="$(arg use_virtual_bisector)"/>
         <param name="initial_path_index" value="$(arg initial_path_index)"/>
+        <param name="path_topic" value="$(arg path_topic)"/>
+        <param name="normals_topic" value="$(arg normals_topic)"/>
         
         <!-- Topic remapping -->
         <!-- Subscribers: -->

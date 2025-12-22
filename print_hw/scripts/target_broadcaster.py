@@ -19,6 +19,8 @@ class TargetPoseBroadcaster(object):
         self.ur_child_frame = rospy.get_param("~ur_child_frame", "ur_target")
         self.publish_rate = rospy.get_param("~publish_rate", 10.0)  # Hz
         self.initial_path_index = rospy.get_param("~initial_path_index", 150)
+        self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_transformed")
+        self.ur_path_topic = rospy.get_param("~ur_path_topic", "/ur_path_transformed")
 
         # interne Zustände
         self.mir_path = None          # nav_msgs/Path
@@ -34,8 +36,8 @@ class TargetPoseBroadcaster(object):
         self.tf_br = tf.TransformBroadcaster()
 
         # Subscriber
-        rospy.Subscriber("/mir_path_transformed", Path, self.mir_path_cb, queue_size=1)
-        rospy.Subscriber("/ur_path_transformed", Path, self.ur_path_cb, queue_size=1)
+        rospy.Subscriber(self.mir_path_topic, Path, self.mir_path_cb, queue_size=1)
+        rospy.Subscriber(self.ur_path_topic, Path, self.ur_path_cb, queue_size=1)
         rospy.Subscriber("/path_index", Int32, self.index_cb, queue_size=1)
         rospy.Subscriber("/path_index_modified", Int32, self.index_modified_cb, queue_size=1)
 

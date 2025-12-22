@@ -6,17 +6,21 @@
     <arg name="rx" default="0.0" />
     <arg name="ry" default="0.0" />
     <arg name="rz" default="0.0" />
-    <!-- Node that runs the path transformer script -->
-    <node name="retrieve_and_publish_ur_path" pkg="parse_ur_path" type="retrieve_and_publish_path.py" output="screen">
-        <param name="component_name" value="$(arg component_name)" />
-        <!-- Transformation parameters -->
-        <!-- <param name="tx" value="-51.615323" />
-        <param name="ty" value="-39.752500" /> -->
-        <param name="tx" value="$(arg tx)" />
-        <param name="ty" value="$(arg ty)" />
-        <param name="tz" value="$(arg tz)" />
-        <param name="rx" value="$(arg rx)" />
-        <param name="ry" value="$(arg ry)" />
-        <param name="rz" value="$(arg rz)" />
-    </node>
+    <arg name="path_namespace" default="" />
+    <group ns="$(arg path_namespace)">
+        <!-- Node that runs the path transformer script -->
+        <node name="retrieve_and_publish_ur_path" pkg="parse_ur_path" type="retrieve_and_publish_path.py" output="screen">
+            <param name="component_name" value="$(arg component_name)" />
+            <!-- Transformation parameters -->
+            <!-- <param name="tx" value="-51.615323" />
+            <param name="ty" value="-39.752500" /> -->
+            <param name="tx" value="$(arg tx)" />
+            <param name="ty" value="$(arg ty)" />
+            <param name="tz" value="$(arg tz)" />
+            <param name="rx" value="$(arg rx)" />
+            <param name="ry" value="$(arg ry)" />
+            <param name="rz" value="$(arg rz)" />
+            <param name="path_namespace" value="$(arg path_namespace)" />
+        </node>
+    </group>
 </launch>

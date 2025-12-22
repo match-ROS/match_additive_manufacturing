@@ -51,12 +51,15 @@ class PathIndexAdvancer:
             rospy.loginfo("Using 'virtual line' metric.")
             self.check_condition = self.check_virtual_line_condition
 
-        # Get the path from the topic /ur_path_transformed
-        self.path = rospy.wait_for_message("/ur_path_transformed", Path)
+        self.path_topic = rospy.get_param("~path_topic", "/ur_path_transformed")
+        self.normals_topic = rospy.get_param("~normals_topic", "/ur_path_normals")
+
+        # Get the path from the configured topic
+        self.path = rospy.wait_for_message(self.path_topic, Path)
         self.path_length = len(self.path.poses)
 
         rospy.loginfo(f"Received path with {self.path_length} waypoints")
-        self.normals = rospy.wait_for_message("/ur_path_normals", Vector3Array)       
+        self.normals = rospy.wait_for_message(self.normals_topic, Vector3Array)       
         rospy.loginfo(f"Received normals with {len(self.normals.vectors)} vectors")
 
         # Create subscriber to your robot's current pose

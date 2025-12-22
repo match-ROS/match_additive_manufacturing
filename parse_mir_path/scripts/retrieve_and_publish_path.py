@@ -81,16 +81,34 @@ def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
     return transformed_poses
 
 def publish_paths():
-    rospy.init_node('path_transformer')
-    
+    rospy.init_node('retrieve_and_publish_mir_path', anonymous=False)
+
+    param_namespace = rospy.get_param('~path_namespace', "") if rospy.has_param('~path_namespace') else ""
+    normalized_ns = param_namespace.strip('/') if isinstance(param_namespace, str) else ""
+
+    node_name = rospy.get_name()
+    node_namespace = rospy.get_namespace()
+    resolved_namespace = normalized_ns if normalized_ns else node_namespace.strip('/')
+    rospy.loginfo(
+        "MiR path node '%s' using namespace '%s' (param '%s')",
+        node_name,
+        node_namespace,
+        normalized_ns or "/",
+    )
+
     component_name = rospy.get_param('~component_name', DEFAULT_COMPONENT_NAME)
     modules = _load_component_modules(component_name)
 
+    def _ns_topic(base: str) -> str:
+        name = base.strip('/')
+        ns = resolved_namespace
+        return f"/{ns}/{name}" if ns else f"/{name}"
+
     # Publishers for the original and transformed paths
-    original_pub = rospy.Publisher('/mir_path_original', Path, queue_size=10)
-    transformed_pub = rospy.Publisher('/mir_path_transformed', Path, queue_size=10)
-    velocity_pub = rospy.Publisher('/mir_path_velocity', Path, queue_size=10)
-    timestamps_pub = rospy.Publisher('/mir_path_timestamps', Float32MultiArray, queue_size=10)
+    original_pub = rospy.Publisher(_ns_topic('mir_path_original'), Path, queue_size=10)
+    transformed_pub = rospy.Publisher(_ns_topic('mir_path_transformed'), Path, queue_size=10)
+    velocity_pub = rospy.Publisher(_ns_topic('mir_path_velocity'), Path, queue_size=10)
+    timestamps_pub = rospy.Publisher(_ns_topic('mir_path_timestamps'), Float32MultiArray, queue_size=10)
 
     
     # Retrieve the original path
@@ -165,7 +183,7 @@ def publish_paths():
     # Transform and fill transformed Path message
     transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
     
-    set_metadata(layer_numbers)
+    set_metadata(layer_numbers, resolved_namespace)
 
     rate = rospy.Rate(1)  # Publish at 1 Hz
     while not rospy.is_shutdown():
@@ -181,7 +199,7 @@ def publish_paths():
         timestamps_pub.publish(timestamps_msg)
         rate.sleep()
 
-def set_metadata(layer_numbers):
+def set_metadata(layer_numbers, path_namespace=""):
     if not layer_numbers:
         rospy.logwarn("No layer metadata available to publish")
         return
@@ -194,7 +212,11 @@ def set_metadata(layer_numbers):
         if 0 <= idx < len(points_per_layer):
             points_per_layer[idx] += 1
 
+    ns = path_namespace.strip('/') if isinstance(path_namespace, str) else ""
+    # Always populate the legacy global parameter to avoid breaking consumers.
     rospy.set_param("/points_per_layer", points_per_layer)
+    if ns:
+        rospy.set_param(f"/{ns}/points_per_layer", points_per_layer)
 
 
 
