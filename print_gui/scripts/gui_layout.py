@@ -718,7 +718,18 @@ class ROSGui(QWidget):
 
             html_lines.append(escaped)
 
+        hsb = self.ros_log_text.horizontalScrollBar()
+        prev_h_value = hsb.value() if hsb is not None else 0
+        h_was_at_end = bool(hsb and prev_h_value >= hsb.maximum())
+
         self.ros_log_text.setHtml("<br>".join(html_lines))
+
+        if hsb is not None:
+            if h_was_at_end:
+                hsb.setValue(hsb.maximum())
+            else:
+                hsb.setValue(min(prev_h_value, hsb.maximum()))
+
         sb = self.ros_log_text.verticalScrollBar()
         if sb is not None:
             sb.setValue(sb.maximum())
