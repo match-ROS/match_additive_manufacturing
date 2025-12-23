@@ -1285,9 +1285,14 @@ class ComponentTransformDialog(QDialog):
         return values
 
     def get_selection(self):
-        name = (self._current_component or self.component_combo.currentText() or "").strip()
-        if not name and self.component_combo.count() > 0:
+        # Always capture the currently shown component, even if the user only changed
+        # the combo box without touching any transform fields.
+        name = (self.component_combo.currentText() or "").strip()
+        if name:
+            self._current_component = name
+        elif self.component_combo.count() > 0:
             name = self.component_combo.itemText(0).strip()
+            self._current_component = name
 
         transform = self._collect_field_values()
         self._transform_cache[name] = transform

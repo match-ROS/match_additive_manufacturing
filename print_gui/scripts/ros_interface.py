@@ -1998,7 +1998,8 @@ def parse_mir_path(gui):
             ns = gui.get_path_namespace()
         except Exception:
             ns = ""
-    ns_flag = f" path_namespace:={ns}" if ns is not None else ""
+    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
+    ns_flag = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
     command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
@@ -2027,7 +2028,8 @@ def parse_ur_path(gui):
             ns = gui.get_path_namespace()
         except Exception:
             ns = ""
-    ns_flag = f" path_namespace:={ns}" if ns is not None else ""
+    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
+    ns_flag = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
     command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
