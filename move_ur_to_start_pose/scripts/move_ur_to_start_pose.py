@@ -22,17 +22,28 @@ class MoveManipulatorToTarget:
     def __init__(self):
         rospy.init_node('move_manipulator_to_target', anonymous=True)
 
-
         # Initialize parameters
-        self.path_topic = rospy.get_param('~path_topic', '/ur_path')
+        raw_path_topic = rospy.get_param('~path_topic', 'ur_path_transformed')
+        ns_param = rospy.get_param('~path_namespace', '')
+        ns_clean = ns_param.strip('/') if isinstance(ns_param, str) else ''
+        self.path_topic = raw_path_topic if isinstance(raw_path_topic, str) else str(raw_path_topic)
+        if ns_clean and not self.path_topic.startswith('/'):
+            self.path_topic = f"/{ns_clean}/{self.path_topic}"
+        elif not self.path_topic.startswith('/'):
+            self.path_topic = f"/{self.path_topic}"
+
         self.initial_path_index = rospy.get_param('~initial_path_index', 0)
-        self.robot_name = rospy.get_param('~robot_name', 'mur620a')
+
+        robot_name_param = rospy.get_param('~robot_name', 'mur620a')
+        robot_clean = robot_name_param if isinstance(robot_name_param, str) else ''
+        self.robot_name = f"/{robot_clean}" if not robot_clean.startswith('/') else robot_clean
+
         self.manipulator_base_link = rospy.get_param('~manipulator_base_link', 'UR10_r/base_link')
-        self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'mur620a/UR10_r/tool0')
+        self.manipulator_tcp_link = rospy.get_param('~manipulator_tcp_link', 'UR10_r/tool0')
         self.planning_group = rospy.get_param('~planning_group', 'UR_arm_r')
         self.UR_prefix = rospy.get_param('~UR_prefix', 'UR10_r')
 
-        param_path = f'/{self.robot_name}/{self.UR_prefix}/ur_calibrated_pose_pub_node/tcp_offset'
+        param_path = f'{self.robot_name}/{self.UR_prefix}/ur_calibrated_pose_pub_node/tcp_offset'
         self.tcp_offset = rospy.get_param(param_path, [0.0,0.0,0.0,0.0,0.0,0.0])
         self.spray_distance = rospy.get_param('~spray_distance', 0.15)  # distance from TCP to spray point along z-axis
         self.nozzle_height_override = 0.0
@@ -44,7 +55,7 @@ class MoveManipulatorToTarget:
 
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
-        self.move_group = MoveGroupCommander(self.planning_group, ns=self.robot_name, robot_description=self.robot_name+"/robot_description")
+        self.move_group = MoveGroupCommander(self.planning_group, ns=self.robot_name, robot_description=f"{self.robot_name}/robot_description")
         self.move_group.set_pose_reference_frame(self.manipulator_base_link)
         rospy.loginfo(f"MoveIt MoveGroup for {self.planning_group} initialized.")
 

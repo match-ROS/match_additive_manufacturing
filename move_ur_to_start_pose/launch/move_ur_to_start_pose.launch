@@ -3,21 +3,26 @@
     <arg name="node_start_delay" default="0.0" /> 
     <arg name="robot_name" default="mur620c" />
     <arg name="manipulator_base_link" default="base_footprint" />
-    <arg  name="manipulator_tcp_link" default="UR10_r/tool0" />
+    <arg name="manipulator_tcp_link" default="UR10_r/tool0" />
     <arg name="planning_group" default="UR_arm_r" />
     <arg name="initial_path_index" default="0" />
     <arg name="spray_distance" default="0.65" />
+    <arg name="path_topic" default="ur_path_transformed" />
+    <arg name="path_namespace" default="" />
 
-    <!-- Node that runs the path transformer script -->
-    <node name="move_ur_to_start_pose" pkg="move_ur_to_start_pose" type="move_ur_to_start_pose.py" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
-        <!-- Transformation parameters -->
-        <param name="path_topic" value="/ur_path_transformed" />
-        <param name="robot_name" value="$(arg robot_name)" />
-        <!-- <param name="manipulator_base_link" value="mur620/UR10_l/base_link" /> -->
-        <param name="manipulator_base_link" value="$(arg manipulator_base_link)" />
-        <param name="manipulator_tcp_link" value="$(arg manipulator_tcp_link)" />
-        <param name="planning_group" value="$(arg planning_group)" />
-        <param name="initial_path_index" value="$(arg initial_path_index)" />
-        <param name="spray_distance" value="$(arg spray_distance)" />
-    </node>
+    <group ns="$(arg path_namespace)">
+        <!-- Node that runs the path transformer script -->
+        <node name="move_ur_to_start_pose" pkg="move_ur_to_start_pose" type="move_ur_to_start_pose.py" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
+            <!-- Transformation parameters -->
+            <param name="path_topic" value="$(arg path_topic)" />
+            <param name="path_namespace" value="$(arg path_namespace)" />
+            <param name="robot_name" value="$(arg robot_name)" />
+            <!-- <param name="manipulator_base_link" value="mur620/UR10_l/base_link" /> -->
+            <param name="manipulator_base_link" value="$(arg manipulator_base_link)" />
+            <param name="manipulator_tcp_link" value="$(arg manipulator_tcp_link)" />
+            <param name="planning_group" value="$(arg planning_group)" />
+            <param name="initial_path_index" value="$(arg initial_path_index)" />
+            <param name="spray_distance" value="$(arg spray_distance)" />
+        </node>
+    </group>
 </launch>

@@ -2066,7 +2066,21 @@ def move_mir_to_start_pose(gui):
         print("Please select only the MIR robot to move to the start pose.")
         return
     _persist_gui_index_setting(gui)
-    command = f"roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()}"
+    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
+    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
+    ns = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns = gui.get_path_namespace()
+        except Exception:
+            ns = ""
+    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
+    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+    command = (
+        "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch "
+        f"robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()} "
+        f"path_topic:={mir_path_topic}{ns_arg}"
+    )
     rospy.loginfo(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)
 
@@ -2094,10 +2108,25 @@ def move_ur_to_start_pose(gui):
 
     spray_distance = gui.get_spray_distance()
 
+    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
+    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
+    ns = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns = gui.get_path_namespace()
+        except Exception:
+            ns = ""
+    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
+    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+
     _persist_gui_index_setting(gui)
     for robot in selected_robots:
         for ur in selected_urs:
-            command = f"roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch robot_name:={robot} initial_path_index:={gui.idx_spin.value()} spray_distance:={spray_distance}"
+            command = (
+                "roslaunch move_ur_to_start_pose move_ur_to_start_pose.launch "
+                f"robot_name:={robot} initial_path_index:={gui.idx_spin.value()} spray_distance:={spray_distance} "
+                f"path_topic:={ur_path_topic}{ns_arg}"
+            )
             print(f"Executing: {command}")
             _popen_with_debug(command, gui, shell=True)
 

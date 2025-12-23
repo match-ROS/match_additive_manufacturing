@@ -14,11 +14,23 @@ class MoveToFirstPathPoint:
         rospy.init_node('move_to_first_path_point', anonymous=True)
 
         # Load parameters
-        self.robot_name = rospy.get_param('~robot_name', 'mur620a')
-        self.path_topic = rospy.get_param('~path_topic', '/mir_path')
+        robot_name = rospy.get_param('~robot_name', 'mur620a')
+        robot_name = robot_name if isinstance(robot_name, str) else ''
+        self.robot_name = "/" + robot_name if not robot_name.startswith('/') else robot_name
+        raw_topic = rospy.get_param('~path_topic', 'mir_path_transformed')
+        ns_param = rospy.get_param('~path_namespace', '')
+        # Normalize namespace and topic to ensure namespaced subscription.
+        ns_clean = ns_param.strip('/') if isinstance(ns_param, str) else ''
+        # self.path_topic = raw_topic.lstrip('/') if isinstance(raw_topic, str) else str(raw_topic)
+        self.path_topic = raw_topic if isinstance(raw_topic, str) else str(raw_topic)
+        if ns_clean and not self.path_topic.startswith('/'):
+            self.path_topic = f"/{ns_clean}/{self.path_topic}"
+        elif not self.path_topic.startswith('/'):
+            self.path_topic = f"/{self.path_topic}"
         self.initial_path_index = rospy.get_param('~initial_path_index', 0)
-        self.robot_pose_topic = rospy.get_param('~robot_pose_topic', f'/{self.robot_name}/mir_pose_simple')
-        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'/{self.robot_name}/cmd_vel')
+        self.robot_pose_topic = rospy.get_param('~robot_pose_topic', f'{self.robot_name}/mir_pose_simple')
+        self.cmd_vel_topic = rospy.get_param('~cmd_vel_topic', f'{self.robot_name}/cmd_vel')
+
 
         # Action client for 'move_base'
         self.move_base_client = actionlib.SimpleActionClient(self.robot_name + '/move_base', MoveBaseAction)
@@ -35,6 +47,7 @@ class MoveToFirstPathPoint:
 
         # Subscriber to 'mir_path' topic
         #self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
+        rospy.loginfo(f"Waiting for path message on topic: {self.path_topic}")
         path = rospy.wait_for_message(self.path_topic, Path)
         self.path_callback(path)
         
