@@ -7,8 +7,10 @@
     <arg name="nozzle_height_default" default="0.1" />
     <arg name="start_condition_topic" default="/start_condition" />
     <arg name="wait_for_start_condition" default="true" />
-    <arg name="ur_path_topic" default="/ur_path_transformed" />
-    <arg name="ur_path_normals_topic" default="/ur_path_normals" />
+    <arg name="path_ns" default="" doc="Namespace prefix for UR path/trajectory topics (with or without leading slash)." />
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
+    <arg name="ur_path_topic" default="$(arg path_ns_prefix)/ur_path_transformed" />
+    <arg name="ur_path_normals_topic" default="$(arg path_ns_prefix)/ur_path_normals" />
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
     <group ns="$(arg robot_name)/UR10_r">
@@ -47,6 +49,7 @@
         <arg name="threshold" value="$(arg threshold)" />
         <arg name="current_pose_topic" value="$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
         <arg name="initial_path_index" value="$(arg initial_path_index)" />
+        <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="path_topic" value="$(arg ur_path_topic)" />
         <arg name="normals_topic" value="$(arg ur_path_normals_topic)" />
     </include>
@@ -55,6 +58,7 @@
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
+        <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="ff_only" value="true" />
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
         <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
@@ -63,14 +67,15 @@
         <!-- <remap from="/ur_twist_world_offset" to="/ur_error_world" /> -->
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
+        <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="path_topic" value="$(arg ur_path_topic)" />
         <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
-        <arg name="path_index_topic" value="/path_index" />
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_rotation_twist_world" />
         <arg name="initial_path_index" value="$(arg initial_path_index)" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
+        <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
     </include>
 

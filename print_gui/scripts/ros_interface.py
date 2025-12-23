@@ -412,6 +412,26 @@ def _format_ros_list_arg(values):
     return '"' + str(values).replace("'", '"') + '"'
 
 
+def _resolve_topic_for_gui(gui, base_name: str) -> str:
+    """Resolve a component-scoped topic using the GUI's current namespace."""
+    cleaned = (base_name or "").strip("/")
+    if not cleaned:
+        return "/"
+
+    ros_iface = getattr(gui, "ros_interface", None)
+    if ros_iface is None or not hasattr(ros_iface, "resolve_path_topic"):
+        return f"/{cleaned}"
+
+    namespace = None
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            namespace = gui.get_path_namespace()
+        except Exception:
+            namespace = None
+
+    return ros_iface.resolve_path_topic(cleaned, namespace)
+
+
 def _load_component_choice(default: str = DEFAULT_COMPONENT_NAME) -> str:
     data = _load_gui_cache_payload()
     name = None
@@ -654,8 +674,11 @@ class ROSInterface:
             rospy.init_node("additive_manufacturing_gui", anonymous=True, disable_signals=True)
 
         # Subscriptions and publishers used by the GUI
-        rospy.Subscriber('/path_index', Int32, self._path_idx_cb, queue_size=10)
-        self._path_index_pub = rospy.Publisher('/path_index', Int32, queue_size=10, latch=False)
+        self._path_index_sub = None
+        self._path_index_sub_topic = None
+        self._path_index_pub = None
+        self._path_index_pub_topic = None
+        self._refresh_path_index_subscription()
         self._init_dynamixel_publishers()
         self._init_servo_state_listener()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
@@ -773,13 +796,28 @@ class ROSInterface:
         normalized = _normalize_path_namespace(namespace)
         self._cached_path_namespace = normalized
         _save_path_namespace_cache(normalized)
+        publisher = getattr(self, "_path_index_pub", None)
+        if publisher is not None:
+            try:
+                publisher.unregister()
+            except Exception as exc:
+                rospy.logwarn(f"Failed to unregister path index publisher: {exc}")
+        self._path_index_pub = None
+        self._path_index_pub_topic = None
+        self._refresh_path_index_subscription()
 
-    def resolve_path_topic(self, base_name: str) -> str:
+    def resolve_path_topic(self, base_name: str, namespace: Optional[str] = None) -> str:
         cleaned = (base_name or "").strip("/")
         if not cleaned:
-            return ""
-        ns = self.get_cached_path_namespace()
-        return f"{ns}/{cleaned}" if ns else f"/{cleaned}"
+            return base_name or "/"
+
+        ns_value = namespace
+        if ns_value is None:
+            ns_value = self.get_cached_path_namespace()
+        else:
+            ns_value = _normalize_path_namespace(ns_value)
+
+        return f"{ns_value}/{cleaned}" if ns_value else f"/{cleaned}"
 
     def get_path_topics(self) -> dict:
         return {
@@ -970,33 +1008,67 @@ class ROSInterface:
             if hasattr(self.gui, "update_start_signal_visual"):
                 self.gui.update_start_signal_visual(False)
     
+    def _refresh_path_index_subscription(self):
+        """Ensure the path index subscriber follows the configured namespace."""
+        topic = self.resolve_path_topic("path_index")
+        current_topic = getattr(self, "_path_index_sub_topic", None)
+        if current_topic == topic and getattr(self, "_path_index_sub", None) is not None:
+            return
+
+        subscriber = getattr(self, "_path_index_sub", None)
+        if subscriber is not None:
+            try:
+                subscriber.unregister()
+            except Exception as exc:
+                rospy.logwarn(f"Failed to unregister path index subscriber: {exc}")
+            finally:
+                self._path_index_sub = None
+                self._path_index_sub_topic = None
+
+        try:
+            self._path_index_sub = rospy.Subscriber(topic, Int32, self._path_idx_cb, queue_size=10)
+            self._path_index_sub_topic = topic
+            rospy.loginfo(f"Subscribed to path index topic {topic}")
+        except Exception as exc:
+            rospy.logerr(f"Failed to subscribe to path index topic {topic}: {exc}")
+            self._path_index_sub = None
+            self._path_index_sub_topic = None
+
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
         self._cached_path_index = self.current_index
         self.gui.path_idx.emit(self.current_index)  # Update the GUI with the new index
 
     def publish_path_index(self, value: int):
-        """Publish the provided index on /path_index so downstream nodes follow the change."""
+        """Publish the provided index on the namespaced path_index topic."""
         try:
             normalized = int(value)
         except (TypeError, ValueError):
             rospy.logwarn(f"Ignoring invalid path index value: {value}")
             return
 
+        topic = self.resolve_path_topic("path_index")
         publisher = getattr(self, "_path_index_pub", None)
-        if publisher is None:
+        current_topic = getattr(self, "_path_index_pub_topic", None)
+        if publisher is None or current_topic != topic:
+            if publisher is not None:
+                try:
+                    publisher.unregister()
+                except Exception as exc:
+                    rospy.logwarn(f"Failed to unregister old path index publisher: {exc}")
             try:
-                publisher = rospy.Publisher('/path_index', Int32, queue_size=10, latch=True)
+                publisher = rospy.Publisher(topic, Int32, queue_size=10, latch=True)
                 self._path_index_pub = publisher
+                self._path_index_pub_topic = topic
             except Exception as exc:
-                rospy.logerr(f"Failed to create path index publisher: {exc}")
+                rospy.logerr(f"Failed to create path index publisher for {topic}: {exc}")
                 return
 
         try:
             publisher.publish(Int32(data=normalized))
             self.current_index = normalized
             self._cached_path_index = normalized
-            rospy.loginfo(f"Published path index {normalized}")
+            rospy.loginfo(f"Published path index {normalized} on {topic}")
         except Exception as exc:
             rospy.logerr(f"Failed to publish path index {normalized}: {exc}")
 
@@ -2066,16 +2138,15 @@ def move_mir_to_start_pose(gui):
         print("Please select only the MIR robot to move to the start pose.")
         return
     _persist_gui_index_setting(gui)
-    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
-    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
-    ns = ""
+    mir_path_topic = _resolve_topic_for_gui(gui, "mir_path_transformed")
+    ns_value = ""
     if hasattr(gui, "get_path_namespace"):
         try:
-            ns = gui.get_path_namespace()
+            ns_value = gui.get_path_namespace()
         except Exception:
-            ns = ""
-    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
-    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+            ns_value = ""
+    ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
+    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns_value == "" else ""
     command = (
         "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch "
         f"robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()} "
@@ -2108,16 +2179,15 @@ def move_ur_to_start_pose(gui):
 
     spray_distance = gui.get_spray_distance()
 
-    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
-    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
-    ns = ""
+    ur_path_topic = _resolve_topic_for_gui(gui, "ur_path_transformed")
+    ns_value = ""
     if hasattr(gui, "get_path_namespace"):
         try:
-            ns = gui.get_path_namespace()
+            ns_value = gui.get_path_namespace()
         except Exception:
-            ns = ""
-    ns_clean = ns.strip("/") if isinstance(ns, str) else ""
-    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+            ns_value = ""
+    ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
+    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns_value == "" else ""
 
     _persist_gui_index_setting(gui)
     for robot in selected_robots:
@@ -2142,16 +2212,17 @@ def mir_follow_trajectory(gui):
         return
     _persist_gui_index_setting(gui)
     initial_idx = gui.idx_spin.value()
-    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
-    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
-    mir_timestamps_topic = path_topics.get("mir_path_timestamps", "/mir_path_timestamps")
+    mir_path_topic = _resolve_topic_for_gui(gui, "mir_path_transformed")
+    mir_timestamps_topic = _resolve_topic_for_gui(gui, "mir_path_timestamps")
+    mir_velocity_topic = _resolve_topic_for_gui(gui, "mir_path_velocity")
     _run_remote_commands(
         gui,
         "Launching MiR trajectory follower",
         [lambda robot: (
             "roslaunch mir_trajectory_follower mir_trajectory_follower.launch "
             f"robot_name:={robot} initial_path_index:={initial_idx} "
-            f"mir_path_topic:={mir_path_topic} mir_path_timestamps_topic:={mir_timestamps_topic}"
+            f"mir_path_topic:={mir_path_topic} mir_path_timestamps_topic:={mir_timestamps_topic} "
+            f"mir_path_velocity_topic:={mir_velocity_topic}"
         )],
         use_workspace_debug=True,
         target_robots=selected_robots,
@@ -2245,9 +2316,8 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
     threshold = ur_follow_settings.get("threshold")
     initial_path_index = gui.idx_spin.value()
     spray_distance = gui.get_spray_distance()
-    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
-    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
-    ur_normals_topic = path_topics.get("ur_path_normals", "/ur_path_normals")
+    ur_path_topic = _resolve_topic_for_gui(gui, "ur_path_transformed")
+    ur_normals_topic = _resolve_topic_for_gui(gui, "ur_path_normals")
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
@@ -2302,9 +2372,8 @@ def stop_idx_advancer(gui):
 
 def target_broadcaster(gui):
     """Broadcasts Target Poses."""
-    path_topics = gui.ros_interface.get_path_topics() if hasattr(gui, "ros_interface") else {}
-    mir_path_topic = path_topics.get("mir_path_transformed", "/mir_path_transformed")
-    ur_path_topic = path_topics.get("ur_path_transformed", "/ur_path_transformed")
+    mir_path_topic = _resolve_topic_for_gui(gui, "mir_path_transformed")
+    ur_path_topic = _resolve_topic_for_gui(gui, "ur_path_transformed")
     command = (
         "roslaunch print_hw target_broadcaster.launch "
         f"initial_path_index:={gui.idx_spin.value()} "

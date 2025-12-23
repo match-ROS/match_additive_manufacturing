@@ -10,9 +10,11 @@
 
 
     <!-- Topics -->
-    <arg name="path_topic" default="/ur_path_transformed"/>
+    <arg name="path_ns" default="" doc="Namespace prefix for UR path topics (with or without leading slash)."/>
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')"/>
+    <arg name="path_topic" default="$(arg path_ns_prefix)/ur_path_transformed"/>
     <arg name="current_pose_topic" default="/mur620c/UR10_r/global_tcp_pose"/>
-    <arg name="path_index_topic" default="/path_index"/>
+    <arg name="path_index_topic" default="$(arg path_ns_prefix)/path_index"/>
     <arg name="velocity_override_topic" default="/velocity_override"/>
     <arg name="twist_topic" default="/ur_rotation_twist_world"/>
     

@@ -1,7 +1,9 @@
 <launch>
+    <arg name="path_ns" default="" doc="Namespace prefix for path-derived topics (with or without leading slash)."/>
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')"/>
     <arg name="current_endeffector_pose_topic" default="/global_nozzle_pose"/>
-    <arg name="goal_endeffector_pose_topic" default="/next_goal"/>
-    <arg name="normal_vector_topic" default="/normal_vector"/>
+    <arg name="goal_endeffector_pose_topic" default="$(arg path_ns_prefix)/next_goal"/>
+    <arg name="normal_vector_topic" default="$(arg path_ns_prefix)/normal_vector"/>
     <arg name="orthogonal_error_correction_topic" default="/orthogonal_twist"/>
     <node
         pkg="ur_trajectory_follower"

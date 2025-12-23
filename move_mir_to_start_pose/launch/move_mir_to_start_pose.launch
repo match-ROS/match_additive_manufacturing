@@ -1,6 +1,8 @@
 <launch>
     <arg name="robot_name" default="mur620a" />
-    <arg name="path_topic" default="mir_path_transformed" />
+    <arg name="path_ns" default="" doc="Namespace prefix for MIR path topics (with or without leading slash)." />
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
+    <arg name="path_topic" default="$(arg path_ns_prefix)/mir_path_transformed" />
     <arg name="path_namespace" default="" />
     <arg name="initial_path_index" default="0" />
 

@@ -10,13 +10,15 @@
     <arg name="use_virtual_bisector" default="true"/> <!-- Options: true (bisector), false (segment) -->
 
     <!-- Subscribers -->
-    <arg name="path_topic" default="/ur_path_transformed"/>
-    <arg name="normals_topic" default="/ur_path_normals"/>
+    <arg name="path_ns" default="" doc="Namespace prefix for UR path-related topics (with or without leading slash)."/>
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')"/>
+    <arg name="path_topic" default="$(arg path_ns_prefix)/ur_path_transformed"/>
+    <arg name="normals_topic" default="$(arg path_ns_prefix)/ur_path_normals"/>
     <!-- <arg name="current_pose_topic" default="/global_nozzle_pose"/> -->
     <arg name="current_pose_topic" default="/mur620a/UR10_r/global_tcp_pose"/>
     <!-- Publishers -->
-    <arg name="path_index_topic" default="/path_index"/>
-    <arg name="next_goal_topic" default="/next_goal"/>
+    <arg name="path_index_topic" default="$(arg path_ns_prefix)/path_index"/>
+    <arg name="next_goal_topic" default="$(arg path_ns_prefix)/next_goal"/>
 
     <node name="path_index_advancer" pkg="ur_trajectory_follower" type="path_idx_advancer.py" output="screen">
         <!-- Parameters -->

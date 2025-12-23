@@ -47,24 +47,24 @@ class PurePursuitNode:
         self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
         self.K_orientation = rospy.get_param("~K_orientation", 0.3)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.02)  # Index error multiplier
-        self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_transformed")
-        self.mir_pose_topic = rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple")
-        self.mir_path_velocity_topic = rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity")
-        self.cmd_vel_topic = rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel")
-        self.trajectory_index_topic = rospy.get_param("~trajectory_index_topic", "/trajectory_index")
-        self.layer_progress_topic = rospy.get_param("~layer_progress_topic", "/layer_progress")
+        self.mir_path_topic = self._normalize_topic(rospy.get_param("~mir_path_topic", "/mir_path_transformed"))
+        self.mir_pose_topic = self._normalize_topic(rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple"))
+        self.mir_path_velocity_topic = self._normalize_topic(rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity"))
+        self.cmd_vel_topic = self._normalize_topic(rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel"))
+        self.trajectory_index_topic = self._normalize_topic(rospy.get_param("~trajectory_index_topic", "/trajectory_index"))
+        self.layer_progress_topic = self._normalize_topic(rospy.get_param("~layer_progress_topic", "/layer_progress"))
         self.control_rate = rospy.get_param("~control_rate", 100)
         self.dT = rospy.get_param("~dT", 0.3)  # Time between trajectory points in seconds
-        self.target_pose_topic = rospy.get_param("~target_pose_topic", "/mir_target_pose")
-        self.actual_pose_topic = rospy.get_param("~actual_pose_topic", "/mir_actual_pose")
+        self.target_pose_topic = self._normalize_topic(rospy.get_param("~target_pose_topic", "/mir_target_pose"))
+        self.actual_pose_topic = self._normalize_topic(rospy.get_param("~actual_pose_topic", "/mir_actual_pose"))
         self.points_per_layer = rospy.get_param("/points_per_layer", [0])
-        self.override_topic = rospy.get_param("~override_topic", "/velocity_override")
+        self.override_topic = self._normalize_topic(rospy.get_param("~override_topic", "/velocity_override"))
         self.velocity_filter_coeff = rospy.get_param("~velocity_filter_coeff", 0.90)
         self.smooth_window_sec = rospy.get_param("~vel_smooth_window_sec", 2.0)  # Glättungsfenster in Sekunden für Pfadgeschwindigkeit
         self.linear_velocity_limit = rospy.get_param("~linear_velocity_limit", 0.7)  # Maximale lineare Geschwindigkeit
         self.angular_velocity_limit = rospy.get_param("~angular_velocity_limit", 1.2)  # Maximale Winkelgeschwindigkeit
-        self.mir_path_timestamps_topic = rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps")
-        self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
+        self.mir_path_timestamps_topic = self._normalize_topic(rospy.get_param("~mir_path_timestamps_topic", "/mir_path_timestamps"))
+        self.start_condition_topic = self._normalize_topic(rospy.get_param("~start_condition_topic", "/start_condition"))
         self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
         self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
 
@@ -75,21 +75,6 @@ class PurePursuitNode:
 
         self.dt_ctrl = 1.0/float(self.control_rate)
 
-        # Publisher
-        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
-        self.target_pose_pub = rospy.Publisher(self.target_pose_topic, PoseStamped, queue_size=1)
-        self.actual_pose_pub = rospy.Publisher(self.actual_pose_topic, PoseStamped, queue_size=1)
-        self.layer_progress = rospy.Publisher(self.layer_progress_topic, Float32, queue_size=1)
-        
-        # Subscriber
-        rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
-        rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
-        rospy.Subscriber(self.override_topic, Float32, self.override_callback)
-        rospy.Subscriber(self.mir_path_velocity_topic, Path, self.velocity_path_callback)
-        rospy.Subscriber(self.start_condition_topic, Bool, self.start_condition_callback, queue_size=1)
-        
-        # Start und Status
-        self.completion_pub = rospy.Publisher("/path_following_complete", Bool, queue_size=1)
         
         # Init
         self.current_pose = None
@@ -114,6 +99,22 @@ class PurePursuitNode:
         ts_msg = rospy.wait_for_message(self.mir_path_timestamps_topic, Float32MultiArray)
         self.timestamps = list(ts_msg.data)
         rospy.loginfo("Got timestamp vector with {} entries.".format(len(self.timestamps)))
+        
+        # Publisher
+        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=1)
+        self.target_pose_pub = rospy.Publisher(self.target_pose_topic, PoseStamped, queue_size=1)
+        self.actual_pose_pub = rospy.Publisher(self.actual_pose_topic, PoseStamped, queue_size=1)
+        self.layer_progress = rospy.Publisher(self.layer_progress_topic, Float32, queue_size=1)
+        
+        # Subscriber
+        rospy.Subscriber(self.mir_pose_topic, Pose, self.pose_callback)
+        rospy.Subscriber(self.trajectory_index_topic, Int32, self.trajectory_index_callback)
+        rospy.Subscriber(self.override_topic, Float32, self.override_callback)
+        rospy.Subscriber(self.mir_path_velocity_topic, Path, self.velocity_path_callback)
+        rospy.Subscriber(self.start_condition_topic, Bool, self.start_condition_callback, queue_size=1)
+        
+        # Start und Status
+        self.completion_pub = rospy.Publisher("path_following_complete", Bool, queue_size=1)
 
         # Start
         self.path = rospy.wait_for_message(self.mir_path_topic, Path).poses
@@ -123,6 +124,11 @@ class PurePursuitNode:
         self.current_mir_path_index = self.ur_trajectory_index
         self._update_active_state()
         self.follow_path()
+
+    @staticmethod
+    def _normalize_topic(name):
+        value = str(name or "")
+        return value if value.startswith('/') else f"/{value}" if value else value
         
 
     def reached_target(self, target_position):
