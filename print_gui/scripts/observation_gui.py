@@ -12,6 +12,7 @@ from geometry_msgs.msg import Twist
 from python_qt_binding import QtCore, QtWidgets  # type: ignore[attr-defined]
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from rosgraph import masterapi
 
 # Available twist components that can be plotted
 TWIST_COMPONENTS = (
@@ -108,6 +109,7 @@ class ObservationGUI(QtWidgets.QWidget):
         self.config_path = Path(str(config_param))
 
         self.buffers = {topic: TwistBuffer(self.max_points) for topic in self.twist_topics}
+        self._master = masterapi.Master(rospy.get_name())
 
         self._subscribers = [
             rospy.Subscriber(topic, Twist, self._make_callback(topic), queue_size=10)
@@ -196,6 +198,10 @@ class ObservationGUI(QtWidgets.QWidget):
         self.load_config_button = QtWidgets.QPushButton("Load Config")
         self.load_config_button.clicked.connect(lambda: self._load_config())
         button_layout.addWidget(self.load_config_button)
+
+        self.overview_button = QtWidgets.QPushButton("Topic Overview")
+        self.overview_button.clicked.connect(self._show_overview)
+        button_layout.addWidget(self.overview_button)
         button_layout.addStretch()
         controls_layout.addLayout(button_layout)
 
@@ -342,6 +348,41 @@ class ObservationGUI(QtWidgets.QWidget):
         self.axes.grid(True)
         self.canvas.draw_idle()
 
+    def _collect_topic_overview(self):
+        try:
+            publishers, subscribers, _ = self._master.getSystemState()
+            topic_types = dict(self._master.getTopicTypes())
+        except masterapi.Error as exc:
+            rospy.logerr("Failed to query ROS master: %s", exc)
+            return None
+
+        pub_dict = {topic: nodes for topic, nodes in publishers}
+        sub_dict = {topic: nodes for topic, nodes in subscribers}
+
+        overview = []
+        for topic in self.twist_topics:
+            overview.append(
+                {
+                    "topic": topic,
+                    "type": topic_types.get(topic, "unknown"),
+                    "publishers": sorted(pub_dict.get(topic, [])),
+                    "subscribers": sorted(sub_dict.get(topic, [])),
+                }
+            )
+        return overview
+
+    def _show_overview(self):
+        overview = self._collect_topic_overview()
+        if overview is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Topic Overview",
+                "Failed to query ROS master. Ensure roscore is running.",
+            )
+            return
+        dialog = TopicOverviewDialog(self, overview)
+        dialog.exec_()
+
     def _update_plot(self):
         if rospy.is_shutdown():
             QtWidgets.QApplication.quit()
@@ -379,6 +420,49 @@ class ObservationGUI(QtWidgets.QWidget):
             self.axes.set_title("Waiting for data...")
 
         self.canvas.draw_idle()
+
+
+class TopicOverviewDialog(QtWidgets.QDialog):
+    def __init__(self, parent, overview):
+        super().__init__(parent)
+        self.setWindowTitle("Topic Overview")
+        self.resize(750, 400)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        info_label = QtWidgets.QLabel(
+            "Overview for currently configured twist topics."
+        )
+        layout.addWidget(info_label)
+
+        table = QtWidgets.QTableWidget(self)
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["Topic", "Type", "Publishers", "Subscribers"])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        table.setRowCount(len(overview))
+
+        for row, entry in enumerate(overview):
+            topic_item = QtWidgets.QTableWidgetItem(entry["topic"])
+            type_item = QtWidgets.QTableWidgetItem(entry["type"])
+            pub_text = ", ".join(entry["publishers"]) or "-"
+            sub_text = ", ".join(entry["subscribers"]) or "-"
+            pub_item = QtWidgets.QTableWidgetItem(pub_text)
+            sub_item = QtWidgets.QTableWidgetItem(sub_text)
+            for item in (topic_item, type_item, pub_item, sub_item):
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
+            table.setItem(row, 0, topic_item)
+            table.setItem(row, 1, type_item)
+            table.setItem(row, 2, pub_item)
+            table.setItem(row, 3, sub_item)
+
+        table.resizeColumnsToContents()
+        layout.addWidget(table)
+
+        close_button = QtWidgets.QPushButton("Close")
+        close_button.clicked.connect(self.accept)
+        layout.addWidget(close_button)
 
 
 def main():

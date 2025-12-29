@@ -151,25 +151,28 @@ class MoveManipulatorToTarget:
         # rotate the relative position
         relative_position = np.dot(rot_matrix[:3, :3], relative_position)
 
-        # relative orientation around the z-axis
+        # derive full relative orientation using tf rotation matrix
         target_tcp_pose = path_msg.poses[self.initial_path_index+1]
-        # get path orientation
-        path_orientation = tr.euler_from_quaternion([target_tcp_pose.pose.orientation.x,
-                                                     target_tcp_pose.pose.orientation.y,
-                                                     target_tcp_pose.pose.orientation.z,
-                                                     target_tcp_pose.pose.orientation.w])
-        mir_orientation = tr.euler_from_quaternion(rot)[2]
-        
+        path_quat = [target_tcp_pose.pose.orientation.x,
+                 target_tcp_pose.pose.orientation.y,
+                 target_tcp_pose.pose.orientation.z,
+                 target_tcp_pose.pose.orientation.w]
 
         relative_pose = [0.0,0.0,0.0,0.0,0.0,0.0]
         relative_pose[0] = relative_position[0]
         relative_pose[1] = relative_position[1]
         relative_pose[2] = relative_position[2]
-        relative_pose[3] = math.pi
-        relative_pose[4] = 0.0
-        # Apply GUI-configured TCP yaw offset instead of hard-coded value
-        relative_pose[5] = mir_orientation - path_orientation[2] + self.tcp_offset[5]
-        relative_pose[5] = np.arctan2(np.sin(relative_pose[5]), np.cos(relative_pose[5]))  # normalize angle to [-pi, pi]
+
+        path_rot_matrix = tr.quaternion_matrix(path_quat)
+        relative_rot_matrix = np.dot(rot_matrix, path_rot_matrix)
+        flip_x_rot = tr.euler_matrix(math.pi, 0.0, 0.0)
+        relative_rot_matrix = np.dot(relative_rot_matrix, flip_x_rot)
+        flip_z_rot = tr.euler_matrix(0.0, 0.0, math.pi)
+        relative_rot_matrix = np.dot(relative_rot_matrix, flip_z_rot)
+        tcp_offset_rot = tr.euler_matrix(self.tcp_offset[3], self.tcp_offset[4], self.tcp_offset[5])
+        relative_rot_matrix = np.dot(relative_rot_matrix, tcp_offset_rot)
+        relative_quat = tr.quaternion_from_matrix(relative_rot_matrix)
+        relative_pose[3], relative_pose[4], relative_pose[5] = tr.euler_from_quaternion(relative_quat)
         
         # Set the target pose for MoveIt
         self.move_group.set_pose_target(relative_pose, end_effector_link=self.manipulator_tcp_link)

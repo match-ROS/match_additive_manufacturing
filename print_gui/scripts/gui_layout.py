@@ -302,7 +302,19 @@ class ROSGui(QWidget):
         self.idx_spin.setRange(0, 10000)
         self.idx_spin.setValue(default_idx)
         idx_box.addWidget(self.idx_spin)
-        publish_idx_btn = QPushButton("Publish Index"); publish_idx_btn.clicked.connect(self._publish_current_index); idx_box.addWidget(publish_idx_btn); stop_idx_btn = QPushButton("Stop Index Advancer"); stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self)); idx_box.addWidget(stop_idx_btn); print_functions_layout.addLayout(idx_box)
+        publish_idx_btn = QPushButton("Publish Index")
+        publish_idx_btn.clicked.connect(self._publish_current_index)
+        idx_box.addWidget(publish_idx_btn)
+
+        publish_poses_btn = QPushButton("Publish Poses")
+        publish_poses_btn.clicked.connect(self._publish_current_poses)
+        idx_box.addWidget(publish_poses_btn)
+
+        stop_idx_btn = QPushButton("Stop Index Advancer")
+        stop_idx_btn.clicked.connect(lambda: stop_idx_advancer(self))
+        idx_box.addWidget(stop_idx_btn)
+
+        print_functions_layout.addLayout(idx_box)
         
         # Servo section
         servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
@@ -439,6 +451,12 @@ class ROSGui(QWidget):
         if not hasattr(self, "idx_spin"):
             return
         self.ros_interface.publish_path_index(self.idx_spin.value())
+
+    def _publish_current_poses(self):
+        """Publish MiR and UR poses for the currently selected index."""
+        if not hasattr(self, "idx_spin") or not hasattr(self, "ros_interface"):
+            return
+        self.ros_interface.publish_path_poses_for_index(self.idx_spin.value())
 
     def _handle_spray_distance_changed(self, value: float):
         self._pending_spray_distance = value

@@ -19,6 +19,7 @@
     <!-- Publishers -->
     <arg name="path_index_topic" default="$(arg path_ns_prefix)/path_index"/>
     <arg name="next_goal_topic" default="$(arg path_ns_prefix)/next_goal"/>
+    <arg name="normal_vector_topic" default="$(arg path_ns_prefix)/normal_vector"/>
 
     <node name="path_index_advancer" pkg="ur_trajectory_follower" type="path_idx_advancer.py" output="screen">
         <!-- Parameters -->
@@ -40,5 +41,6 @@
         <!-- Publishers: -->
         <remap from="/path_index" to="$(arg path_index_topic)"/>
         <remap from="/next_goal" to="$(arg next_goal_topic)"/>
+        <remap from="/normal_vector" to="$(arg normal_vector_topic)"/>
     </node>
 </launch>
