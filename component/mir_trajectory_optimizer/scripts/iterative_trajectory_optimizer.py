@@ -320,6 +320,86 @@ class LocalRetimingOptimizerNode:
         plt.savefig(self.plot_path, dpi=160)
         rospy.loginfo(f"Saved plot: {self.plot_path}")
 
+    def _interp_index_at_times(self,t_query: np.ndarray, t_grid: np.ndarray) -> np.ndarray:
+        """
+        Map times -> continuous path index via 1D interpolation.
+        Returns u in [0, N-1].
+        """
+        N = len(t_grid)
+        idx = np.arange(N, dtype=np.float64)
+        tq = np.clip(t_query, float(t_grid[0]), float(t_grid[-1]))
+        return np.interp(tq, t_grid, idx)
+
+    def _ur_tcp_xy_at_times(self,t_query: np.ndarray, ts0: np.ndarray, ur_p: np.ndarray) -> np.ndarray:
+        """
+        UR is FIXED. Interpolate TCP position at given times, return (N,2) XY.
+        """
+        tq = np.clip(t_query, float(ts0[0]), float(ts0[-1]))
+        x = np.interp(tq, ts0, ur_p[:, 0].astype(np.float64))
+        y = np.interp(tq, ts0, ur_p[:, 1].astype(np.float64))
+        return np.stack([x, y], axis=1)
+
+    def compute_reach_xy(self,ts0: np.ndarray,
+                        t_opt: np.ndarray,
+                        ur_p: np.ndarray,
+                        ur_base_world: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Returns:
+        d0_xy[k] = reach XY at original time t0[k]
+        d1_xy[k] = reach XY at optimized time t_opt[k]
+        ur_base_world is at MiR sample k (same indexing as paths).
+        """
+        tcp0_xy = self._ur_tcp_xy_at_times(ts0, ts0, ur_p)
+        tcp1_xy = self._ur_tcp_xy_at_times(t_opt, ts0, ur_p)
+
+        base_xy = ur_base_world[:, :2].astype(np.float64)
+        d0 = np.linalg.norm(tcp0_xy - base_xy, axis=1)
+        d1 = np.linalg.norm(tcp1_xy - base_xy, axis=1)
+        return d0, d1
+
+    def compute_mir_index_deviation(self,ts0: np.ndarray, t_opt: np.ndarray) -> np.ndarray:
+        """
+        For each original global index k (time ts0[k]),
+        compute continuous MiR index reached under optimized timing minus k.
+        """
+        i_opt_at_t0 = self._interp_index_at_times(ts0, t_opt)
+        k = np.arange(len(ts0), dtype=np.float64)
+        return i_opt_at_t0 - k
+
+    def plot_reach_and_index_offset(self,ts0: np.ndarray,
+                                t_opt: np.ndarray,
+                                ur_p: np.ndarray,
+                                ur_base_world: np.ndarray,
+                                max_reach_xy: float = 1.10):
+        d0_xy, d1_xy = self.compute_reach_xy(ts0, t_opt, ur_p, ur_base_world)
+        di = self.compute_mir_index_deviation(ts0, t_opt)
+
+        plt.figure()
+        plt.plot(d0_xy, label="reach XY (orig timing)")
+        plt.plot(d1_xy, label="reach XY (optimized timing)")
+        plt.axhline(max_reach_xy, linestyle="--", label="max_reach_xy")
+        plt.xlabel("global index k")
+        plt.ylabel("distance in XY [m]")
+        plt.grid(True)
+        plt.legend()
+
+        # Save reach plot
+        plot_path1 = self.plot_path.replace(".png", "_reach_xy.png")
+        plt.savefig(plot_path1, dpi=160)
+
+        plt.figure()
+        plt.plot(di, label="MiR index deviation at original time: i_opt(t0[k]) - k")
+        plt.axhline(0.0, linestyle="--")
+        plt.xlabel("global index k (original)")
+        plt.ylabel("index deviation [idx]")
+        plt.grid(True)
+        plt.legend()
+
+        # Save combined plot
+        plot_path2 = self.plot_path.replace(".png", "_reach_index.png")
+        plt.savefig(plot_path2, dpi=160)
+
+
     def run(self):
         mir_path, ur_path, mir_ts0 = self.wait_inputs()
 
@@ -335,6 +415,33 @@ class LocalRetimingOptimizerNode:
 
         self.publish(ts_opt)
         self.plot_debug(mir_xyz, mir_ts0, ts_opt)
+ 
+
+        # --- Reach + index deviation plots (needs matplotlib + save_plot enabled) ---
+        if self.save_plot and HAS_PLOT:
+            ts0 = mir_ts0                 # original MiR timestamps (absolute)
+            t_opt = ts_opt                # optimized MiR timestamps (absolute!)
+            ur_p = ur_tcp_xyz             # UR TCP path (fixed)
+
+            # UR base world at each MiR knot: mir_xy + R(yaw)*mount_xy
+            c = np.cos(mir_yaw)
+            s = np.sin(mir_yaw)
+            off_x = self.mount_x * c - self.mount_y * s
+            off_y = self.mount_x * s + self.mount_y * c
+
+            ur_base_world = np.zeros_like(mir_xyz)
+            ur_base_world[:, 0] = mir_xyz[:, 0] + off_x
+            ur_base_world[:, 1] = mir_xyz[:, 1] + off_y
+            ur_base_world[:, 2] = mir_xyz[:, 2]  # z egal für reach, aber ok zu setzen
+
+            self.plot_reach_and_index_offset(
+                ts0=ts0,
+                t_opt=t_opt,
+                ur_p=ur_p,
+                ur_base_world=ur_base_world,
+                max_reach_xy=self.reach_xy_max
+            )
+
 
 
 if __name__ == "__main__":
