@@ -14,6 +14,7 @@ try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
     HAS_PLOT = True
 except Exception:
     HAS_PLOT = False
@@ -105,6 +106,15 @@ class LocalRetimingOptimizerNode:
         # Plotting
         self.save_plot = bool(rospy.get_param("~save_plot", True))
         self.plot_path = rospy.get_param("~plot_path", "/tmp/mir_retiming.png")
+
+        # CSV exports
+        self.export_csv = bool(rospy.get_param("~export_csv", True))
+        self.csv_timestamps_path = rospy.get_param("~csv_timestamps_path", "/tmp/mir_timestamps_optimized.csv")
+        self.csv_index_offset_path = rospy.get_param("~csv_index_offset_path", "/tmp/mir_index_offset.csv")
+
+        # XY path plot (first layer)
+        self.xy_plot_path = rospy.get_param("~xy_plot_path", "/tmp/mir_ur_xy_first_layer.png")
+        self.layer_z_eps = float(rospy.get_param("~layer_z_eps", 1e-4))
 
         # Publishers
         self.pub_ts = rospy.Publisher(self.out_ts_topic, Float32MultiArray, queue_size=1, latch=True)
@@ -317,8 +327,94 @@ class LocalRetimingOptimizerNode:
         plt.ylabel("speed [m/s]")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(self.plot_path, dpi=160)
+        plt.savefig(self.plot_path, dpi=1600)
         rospy.loginfo(f"Saved plot: {self.plot_path}")
+
+    def compute_ur_base_world_at_mir_samples(self, mir_xyz: np.ndarray, mir_yaw: np.ndarray) -> np.ndarray:
+        """UR base position in world at each MiR sample (same indexing as MiR path)."""
+        c = np.cos(mir_yaw)
+        s = np.sin(mir_yaw)
+        off_x = self.mount_x * c - self.mount_y * s
+        off_y = self.mount_x * s + self.mount_y * c
+        ur_base = mir_xyz.copy()
+        ur_base[:, 0] = mir_xyz[:, 0] + off_x
+        ur_base[:, 1] = mir_xyz[:, 1] + off_y
+        return ur_base
+
+    def export_csv_lines(self, ts_opt: np.ndarray, index_offset: np.ndarray):
+        if not self.export_csv:
+            return
+        try:
+            # 1) timestamps
+            with open(self.csv_timestamps_path, "w", encoding="utf-8") as f:
+                f.write(",".join([f"{float(x):.9f}" for x in ts_opt]))
+
+            # 2) index offset with explicit sign
+            with open(self.csv_index_offset_path, "w", encoding="utf-8") as f:
+                f.write(",".join([f"{float(x):+.6f}" for x in index_offset]))
+
+            rospy.loginfo(f"Exported CSV: {self.csv_timestamps_path} and {self.csv_index_offset_path}")
+        except Exception as e:
+            rospy.logwarn(f"CSV export failed: {e}")
+
+    def _first_layer_end_index(self, z: np.ndarray, eps_z: float = 1e-4) -> int:
+        """Return end index (exclusive) for the first layer, based on first significant z-change."""
+        if len(z) < 2:
+            return len(z)
+        z0 = float(z[0])
+        dz = np.abs(z - z0)
+        idx = np.where(dz > eps_z)[0]
+        if len(idx) == 0:
+            return len(z)
+        return int(idx[0])
+
+    def plot_xy_first_layer(self,
+                            mir_xyz: np.ndarray,
+                            ur_xyz: np.ndarray,
+                            mir_ts0: np.ndarray,
+                            ts_opt: np.ndarray):
+        """Plot MiR & UR XY (first layer only). MiR colored by speed ratio (opt vs orig)."""
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(2, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz)))
+
+        mir_xy = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+
+        # speed ratio per segment (XY)
+        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)
+        dt0 = np.diff(mir_ts0[:n])
+        dt1 = np.diff(ts_opt[:n])
+        v0 = dp / np.maximum(dt0, 1e-9)
+        v1 = dp / np.maximum(dt1, 1e-9)
+        ratio = v1 / np.maximum(v0, 1e-12)
+
+        # Map ratio -> diverging colormap centered at 1.0
+        r = np.clip(np.log(ratio + 1e-12), -1.0, 1.0)  # symmetric around 0
+        r_norm = (r - (-1.0)) / (2.0)  # [0,1]
+
+        # Build colored segments for MiR
+        segs = np.stack([mir_xy[:-1], mir_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=r_norm, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("MiR speed change: red=slower, blue=faster (log ratio)")
+        plt.tight_layout()
+        plt.savefig(self.xy_plot_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer): {self.xy_plot_path}")
 
     def _interp_index_at_times(self,t_query: np.ndarray, t_grid: np.ndarray) -> np.ndarray:
         """
@@ -366,6 +462,16 @@ class LocalRetimingOptimizerNode:
         k = np.arange(len(ts0), dtype=np.float64)
         return i_opt_at_t0 - k
 
+    def compute_index_offset_mir_vs_ur(self, ts_opt: np.ndarray, ur_ts: np.ndarray) -> np.ndarray:
+        """At MiR index k (time ts_opt[k]), compute offset = k - u_ur(ts_opt[k]).
+
+        Positive => MiR is ahead (larger index) compared to UR at that time.
+        Negative => MiR is behind.
+        """
+        u = self._interp_index_at_times(ts_opt, ur_ts)
+        k = np.arange(len(ts_opt), dtype=np.float64)
+        return k - u
+
     def plot_reach_and_index_offset(self,ts0: np.ndarray,
                                 t_opt: np.ndarray,
                                 ur_p: np.ndarray,
@@ -385,7 +491,7 @@ class LocalRetimingOptimizerNode:
 
         # Save reach plot
         plot_path1 = self.plot_path.replace(".png", "_reach_xy.png")
-        plt.savefig(plot_path1, dpi=160)
+        plt.savefig(plot_path1, dpi=1600)
 
         plt.figure()
         plt.plot(di, label="MiR index deviation at original time: i_opt(t0[k]) - k")
@@ -397,7 +503,7 @@ class LocalRetimingOptimizerNode:
 
         # Save combined plot
         plot_path2 = self.plot_path.replace(".png", "_reach_index.png")
-        plt.savefig(plot_path2, dpi=160)
+        plt.savefig(plot_path2, dpi=1600)
 
 
     def run(self):
@@ -414,34 +520,20 @@ class LocalRetimingOptimizerNode:
         ts_opt = self.optimize(mir_xyz, mir_yaw, mir_ts0, ur_tcp_xyz, ur_ts)
 
         self.publish(ts_opt)
+
+        # Derived quantities for debugging / exports
+        ur_base_world = self.compute_ur_base_world_at_mir_samples(mir_xyz, mir_yaw)
+        index_offset = self.compute_index_offset_mir_vs_ur(ts_opt, ur_ts)  # + => MiR ahead, - => behind
+
+        # 1) Export CSVs (single comma-separated line)
+        self.export_csv_lines(ts_opt, index_offset)
+
+        # 2) Plots
         self.plot_debug(mir_xyz, mir_ts0, ts_opt)
- 
-
-        # --- Reach + index deviation plots (needs matplotlib + save_plot enabled) ---
         if self.save_plot and HAS_PLOT:
-            ts0 = mir_ts0                 # original MiR timestamps (absolute)
-            t_opt = ts_opt                # optimized MiR timestamps (absolute!)
-            ur_p = ur_tcp_xyz             # UR TCP path (fixed)
-
-            # UR base world at each MiR knot: mir_xy + R(yaw)*mount_xy
-            c = np.cos(mir_yaw)
-            s = np.sin(mir_yaw)
-            off_x = self.mount_x * c - self.mount_y * s
-            off_y = self.mount_x * s + self.mount_y * c
-
-            ur_base_world = np.zeros_like(mir_xyz)
-            ur_base_world[:, 0] = mir_xyz[:, 0] + off_x
-            ur_base_world[:, 1] = mir_xyz[:, 1] + off_y
-            ur_base_world[:, 2] = mir_xyz[:, 2]  # z egal für reach, aber ok zu setzen
-
-            self.plot_reach_and_index_offset(
-                ts0=ts0,
-                t_opt=t_opt,
-                ur_p=ur_p,
-                ur_base_world=ur_base_world,
-                max_reach_xy=self.reach_xy_max
-            )
-
+            self.plot_reach_and_index_offset(mir_ts0, ts_opt, ur_tcp_xyz, ur_base_world=ur_base_world,
+                                             max_reach_xy=self.reach_xy_max)
+            self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, ts_opt)
 
 
 if __name__ == "__main__":
