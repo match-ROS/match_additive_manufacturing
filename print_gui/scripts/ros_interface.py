@@ -37,7 +37,7 @@ DEFAULT_SPRAY_DISTANCE = 0.52
 DEFAULT_PATH_INDEX = 0
 DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
 COMPONENT_TRANSFORM_KEYS = ("tx", "ty", "tz", "rx", "ry", "rz")
-ROSCORE_HOST = "roscore"
+ROSCORE_HOST = "localhost"
 
 
 def _deploy_gui_cache_to_robot(robot: str, workspace: Optional[str]):
