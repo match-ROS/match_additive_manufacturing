@@ -2215,6 +2215,14 @@ def mir_follow_trajectory(gui):
     mir_path_topic = _resolve_topic_for_gui(gui, "mir_path_transformed")
     mir_timestamps_topic = _resolve_topic_for_gui(gui, "mir_path_timestamps")
     mir_velocity_topic = _resolve_topic_for_gui(gui, "mir_path_velocity")
+    ns_value = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns_value = gui.get_path_namespace()
+        except Exception:
+            ns_value = ""
+    ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
+    path_ns_arg = f" path_ns:={ns_clean}" if ns_clean else ""
     _run_remote_commands(
         gui,
         "Launching MiR trajectory follower",
@@ -2222,7 +2230,7 @@ def mir_follow_trajectory(gui):
             "roslaunch mir_trajectory_follower mir_trajectory_follower.launch "
             f"robot_name:={robot} initial_path_index:={initial_idx} "
             f"mir_path_topic:={mir_path_topic} mir_path_timestamps_topic:={mir_timestamps_topic} "
-            f"mir_path_velocity_topic:={mir_velocity_topic}"
+            f"mir_path_velocity_topic:={mir_velocity_topic}{path_ns_arg}"
         )],
         use_workspace_debug=True,
         target_robots=selected_robots,
@@ -2318,6 +2326,14 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
     spray_distance = gui.get_spray_distance()
     ur_path_topic = _resolve_topic_for_gui(gui, "ur_path_transformed")
     ur_normals_topic = _resolve_topic_for_gui(gui, "ur_path_normals")
+    ns_value = ""
+    if hasattr(gui, "get_path_namespace"):
+        try:
+            ns_value = gui.get_path_namespace()
+        except Exception:
+            ns_value = ""
+    ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
+    path_ns_arg = f" path_ns:={ns_clean}" if ns_clean else ""
     rospy.loginfo(f"Selected metric: {metric}")
 
     if not selected_robots or not selected_urs:
@@ -2343,7 +2359,7 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
         gui,
         "Launching UR trajectory follower",
         [
-            lambda robot, template=cmd_template: template.format(
+            lambda robot, template=cmd_template, extra=path_ns_arg: template.format(
                 robot=robot,
                 ur=ur,
                 metric=metric,
@@ -2352,7 +2368,7 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
                 spray_distance=spray_distance,
                 ur_path_topic=ur_path_topic,
                 ur_normals_topic=ur_normals_topic,
-            )
+            ) + extra
         ],
         use_workspace_debug=True,
         target_robots=selected_robots,
