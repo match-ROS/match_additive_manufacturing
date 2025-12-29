@@ -7,6 +7,7 @@ from typing import Optional, Iterable
 import signal
 import rospy
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer
 import rospy
@@ -38,6 +39,8 @@ DEFAULT_PATH_INDEX = 0
 DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
 COMPONENT_TRANSFORM_KEYS = ("tx", "ty", "tz", "rx", "ry", "rz")
 ROSCORE_HOST = "roscore"
+MIR_TARGET_TOPIC = "/mir_target_pose"
+UR_TARGET_TOPIC = "/ur_target_pose"
 
 
 def _deploy_gui_cache_to_robot(robot: str, workspace: Optional[str]):
@@ -679,6 +682,15 @@ class ROSInterface:
         self._path_index_pub = None
         self._path_index_pub_topic = None
         self._refresh_path_index_subscription()
+        self._mir_path_sub = None
+        self._mir_path_sub_topic = None
+        self._ur_path_sub = None
+        self._ur_path_sub_topic = None
+        self._mir_path_msg = None
+        self._ur_path_msg = None
+        self._mir_target_pose_pub = None
+        self._ur_target_pose_pub = None
+        self._refresh_path_subscriptions()
         self._init_dynamixel_publishers()
         self._init_servo_state_listener()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
@@ -805,6 +817,7 @@ class ROSInterface:
         self._path_index_pub = None
         self._path_index_pub_topic = None
         self._refresh_path_index_subscription()
+        self._refresh_path_subscriptions()
 
     def resolve_path_topic(self, base_name: str, namespace: Optional[str] = None) -> str:
         cleaned = (base_name or "").strip("/")
@@ -1034,6 +1047,56 @@ class ROSInterface:
             self._path_index_sub = None
             self._path_index_sub_topic = None
 
+    def _refresh_path_subscriptions(self):
+        """Subscribe to the MiR and UR path topics for the active namespace."""
+        topics = self.get_path_topics()
+        self._update_path_subscription(
+            "_mir_path_sub",
+            "_mir_path_sub_topic",
+            topics.get("mir_path_transformed"),
+            self._mir_path_cb,
+        )
+        self._update_path_subscription(
+            "_ur_path_sub",
+            "_ur_path_sub_topic",
+            topics.get("ur_path_transformed"),
+            self._ur_path_cb,
+        )
+
+    def _update_path_subscription(self, sub_attr: str, topic_attr: str, topic_name: Optional[str], callback=None):
+        subscriber = getattr(self, sub_attr, None)
+        current_topic = getattr(self, topic_attr, None)
+        if topic_name and current_topic == topic_name and subscriber is not None:
+            return
+
+        if subscriber is not None:
+            try:
+                subscriber.unregister()
+            except Exception as exc:
+                rospy.logwarn(f"Failed to unregister path subscriber for {current_topic}: {exc}")
+            finally:
+                setattr(self, sub_attr, None)
+                setattr(self, topic_attr, None)
+
+        if not topic_name:
+            return
+
+        try:
+            subscriber = rospy.Subscriber(topic_name, Path, callback, queue_size=1)
+            setattr(self, sub_attr, subscriber)
+            setattr(self, topic_attr, topic_name)
+            rospy.loginfo(f"Subscribed to path topic {topic_name}")
+        except Exception as exc:
+            rospy.logwarn(f"Failed to subscribe to path topic {topic_name}: {exc}")
+            setattr(self, sub_attr, None)
+            setattr(self, topic_attr, None)
+
+    def _mir_path_cb(self, msg: Path):
+        self._mir_path_msg = msg
+
+    def _ur_path_cb(self, msg: Path):
+        self._ur_path_msg = msg
+
     def _path_idx_cb(self, msg: Int32):
         self.current_index = msg.data
         self._cached_path_index = self.current_index
@@ -1071,6 +1134,76 @@ class ROSInterface:
             rospy.loginfo(f"Published path index {normalized} on {topic}")
         except Exception as exc:
             rospy.logerr(f"Failed to publish path index {normalized}: {exc}")
+
+    def _extract_pose_from_path(self, path_msg: Optional[Path], index: int) -> Optional[PoseStamped]:
+        if path_msg is None or not path_msg.poses:
+            return None
+        if index is None:
+            return None
+        clamped_index = max(0, min(index, len(path_msg.poses) - 1))
+        pose = PoseStamped()
+        pose.header.stamp = rospy.Time.now()
+        pose.header.frame_id = path_msg.header.frame_id or "map"
+        pose.pose = path_msg.poses[clamped_index].pose
+        return pose
+
+    def _get_or_create_pose_publisher(self, attr_name: str, topic: str):
+        publisher = getattr(self, attr_name, None)
+        if publisher is not None:
+            return publisher
+        try:
+            publisher = rospy.Publisher(topic, PoseStamped, queue_size=1, latch=False)
+            setattr(self, attr_name, publisher)
+            return publisher
+        except Exception as exc:
+            rospy.logerr(f"Failed to create target pose publisher for {topic}: {exc}")
+            return None
+
+    def publish_path_poses_for_index(self, value: Optional[int] = None):
+        """Publish MiR and UR poses for the requested path index."""
+        target_index = value if value is not None else self.current_index
+        normalized = _normalize_path_index(target_index)
+        if normalized is None:
+            rospy.logwarn(f"Cannot publish path poses for invalid index: {value}")
+            return
+
+        mir_pose = self._extract_pose_from_path(getattr(self, "_mir_path_msg", None), normalized)
+        ur_pose = self._extract_pose_from_path(getattr(self, "_ur_path_msg", None), normalized)
+
+        if mir_pose is None and ur_pose is None:
+            rospy.logwarn("MiR/UR path data unavailable; parse the paths before publishing poses.")
+            return
+
+        published_any = False
+        if mir_pose is not None:
+            publisher = self._get_or_create_pose_publisher("_mir_target_pose_pub", MIR_TARGET_TOPIC)
+            if publisher is not None:
+                try:
+                    publisher.publish(mir_pose)
+                    published_any = True
+                    rospy.loginfo(f"Published MiR pose for index {normalized}")
+                except Exception as exc:
+                    rospy.logerr(f"Failed to publish MiR pose for index {normalized}: {exc}")
+        else:
+            rospy.logwarn("MiR path message missing; cannot publish MiR pose.")
+
+        if ur_pose is not None:
+            publisher = self._get_or_create_pose_publisher("_ur_target_pose_pub", UR_TARGET_TOPIC)
+            if publisher is not None:
+                try:
+                    publisher.publish(ur_pose)
+                    published_any = True
+                    rospy.loginfo(f"Published UR pose for index {normalized}")
+                except Exception as exc:
+                    rospy.logerr(f"Failed to publish UR pose for index {normalized}: {exc}")
+        else:
+            rospy.logwarn("UR path message missing; cannot publish UR pose.")
+
+        if published_any:
+            self.current_index = normalized
+            self._cached_path_index = normalized
+        else:
+            rospy.logwarn("No target poses were published; ensure path topics are available.")
 
     def start_roscore(self):
         """Starts roscore on the roscore PC."""
