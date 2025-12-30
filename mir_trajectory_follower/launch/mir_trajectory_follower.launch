@@ -25,12 +25,20 @@
         <param name="initial_path_index" value="$(arg initial_path_index)" />
     </node>
 
-    <node name="path_index_modifier" pkg="mir_trajectory_follower" type="path_index_modifier.py" output="screen">
+    <!-- <node name="path_index_modifier" pkg="mir_trajectory_follower" type="path_index_modifier.py" output="screen">
         <param name="initial_path_index" value="$(arg initial_path_index)" />
         <param name="mir_path_topic" value="$(arg mir_path_topic)" />
         <param name="mir_path_timestamps_topic" value="$(arg mir_path_timestamps_topic)" />
         <param name="path_index_topic" value="$(arg path_index_topic)" />
         <param name="path_index_modified_topic" value="$(arg trajectory_index_topic)" />
+    </node> -->
+
+    <node name="mir_index_offset_applier" pkg="mir_trajectory_follower" type="mir_index_offset_applier.py" output="screen">
+        <param name="gain" value="0.4" />
+        <param name="rounding" value="round" />
+        <param name="offset_topic" value="$(arg path_ns_prefix)/mir_index_offset" />
+        <param name="ur_index_topic" value="$(arg path_index_topic)" />
+        <param name="out_topic" value="$(arg trajectory_index_topic)" />
     </node>
 </launch>
 
