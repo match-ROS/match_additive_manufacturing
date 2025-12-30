@@ -9,6 +9,7 @@
         <param name="initial_path_index" value="$(arg initial_path_index)" />
         <param name="mir_path_topic" value="$(arg mir_path_topic)" />
         <param name="ur_path_topic" value="$(arg ur_path_topic)" />
+        <param name="path_ns_prefix" value="$(arg path_ns_prefix)" />
     </node>
 
 </launch>

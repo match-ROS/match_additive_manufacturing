@@ -8,6 +8,7 @@ class MirIndexOffsetApplier:
         self.offset_topic = rospy.get_param("~offset_topic", f"{self.ns}/mir_index_offset")
         self.ur_index_topic = rospy.get_param("~ur_index_topic", f"{self.ns}/path_index")
         self.out_topic = rospy.get_param("~out_topic", f"{self.ns}/path_index_modified")
+        self.start_signal_topic = rospy.get_param("~start_signal_topic", "/start_condition")
 
         self.gain = float(rospy.get_param("~gain", 0.2))  # start with 10%
         self.rounding = rospy.get_param("~rounding", "round")  # round|floor|ceil
@@ -19,6 +20,7 @@ class MirIndexOffsetApplier:
 
         rospy.Subscriber(self.offset_topic, Float32MultiArray, self._cb_offset, queue_size=1)
         rospy.Subscriber(self.ur_index_topic, Int32, self._cb_ur_index, queue_size=50)
+        rospy.Subscriber(self.start_signal_topic, Int32, self._cb_start_signal, queue_size=1)
 
         rospy.loginfo("MirIndexOffsetApplier up. offset=%s ur_index=%s out=%s gain=%.3f rounding=%s",
                       self.offset_topic, self.ur_index_topic, self.out_topic, self.gain, self.rounding)
@@ -36,6 +38,11 @@ class MirIndexOffsetApplier:
             return int(math.ceil(x))
         # default: round to nearest int
         return int(round(x))
+
+    def _cb_start_signal(self, msg: Int32):
+        # Reset last published on start signal
+        rospy.loginfo("Received start signal, resetting last published index.")
+        self.last_published = None
 
     def _cb_ur_index(self, msg: Int32):
         ur_idx = int(msg.data)

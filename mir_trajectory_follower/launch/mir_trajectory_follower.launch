@@ -34,11 +34,12 @@
     </node> -->
 
     <node name="mir_index_offset_applier" pkg="mir_trajectory_follower" type="mir_index_offset_applier.py" output="screen">
-        <param name="gain" value="0.4" />
+        <param name="gain" value="0.8" />
         <param name="rounding" value="round" />
         <param name="offset_topic" value="$(arg path_ns_prefix)/mir_index_offset" />
         <param name="ur_index_topic" value="$(arg path_index_topic)" />
         <param name="out_topic" value="$(arg trajectory_index_topic)" />
+        <param name="start_signal_topic" value="$(arg start_condition_topic)" />
     </node>
 </launch>
 

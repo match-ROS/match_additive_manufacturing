@@ -21,6 +21,7 @@ class TargetPoseBroadcaster(object):
         self.initial_path_index = rospy.get_param("~initial_path_index", 150)
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mir_path_transformed")
         self.ur_path_topic = rospy.get_param("~ur_path_topic", "/ur_path_transformed")
+        self.path_ns_prefix = rospy.get_param("~path_ns_prefix", "")  # optional namespace prefix
 
         # interne Zustände
         self.mir_path = None          # nav_msgs/Path
@@ -38,8 +39,8 @@ class TargetPoseBroadcaster(object):
         # Subscriber
         rospy.Subscriber(self.mir_path_topic, Path, self.mir_path_cb, queue_size=1)
         rospy.Subscriber(self.ur_path_topic, Path, self.ur_path_cb, queue_size=1)
-        rospy.Subscriber("/path_index", Int32, self.index_cb, queue_size=1)
-        rospy.Subscriber("/path_index_modified", Int32, self.index_modified_cb, queue_size=1)
+        rospy.Subscriber(f"{self.path_ns_prefix}/path_index", Int32, self.index_cb, queue_size=1)
+        rospy.Subscriber(f"{self.path_ns_prefix}/path_index_modified", Int32, self.index_modified_cb, queue_size=1)
 
         # Timer für zyklisches Publizieren
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.publish_rate), self.timer_cb)
