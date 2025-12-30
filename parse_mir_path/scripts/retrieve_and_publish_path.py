@@ -27,6 +27,11 @@ REQUIRED_MODULES = (
     "t",
 )
 
+OPTIONAL_MODULES = (
+    "t_optimized",
+    "mir_index_offset",
+)
+
 
 def _load_component_modules(component_name):
     component_path = os.path.join(parent_dir, "component", component_name)
@@ -44,6 +49,11 @@ def _load_component_modules(component_name):
         except ImportError as exc:
             rospy.logfatal("Failed to import %s from component '%s': %s", module_name, component_name, exc)
             raise
+    for module_name in OPTIONAL_MODULES:
+        try:
+            modules[module_name] = importlib.import_module(f"print_path.{module_name}")
+        except ImportError:
+            rospy.logwarn("Optional module %s not found in component '%s'", module_name, component_name)
 
     rospy.loginfo("Loaded MiR print_path component '%s'", component_name)
     return modules
@@ -109,6 +119,7 @@ def publish_paths():
     transformed_pub = rospy.Publisher(_ns_topic('mir_path_transformed'), Path, queue_size=10)
     velocity_pub = rospy.Publisher(_ns_topic('mir_path_velocity'), Path, queue_size=10)
     timestamps_pub = rospy.Publisher(_ns_topic('mir_path_timestamps'), Float32MultiArray, queue_size=10)
+    index_offset_pub = rospy.Publisher(_ns_topic('mir_index_offset'), Float32MultiArray, queue_size=1)
 
     
     # Retrieve the original path
@@ -121,6 +132,16 @@ def publish_paths():
     layer_numbers = modules["nL"].nL()
     t_coords = modules["t"].t()
     
+    try:
+        mir_index_offset = modules["mir_index_offset"].mir_index_offset()
+        t_coords = modules["t_optimized"].t_optimized()
+    except KeyError:
+        mir_index_offset = None
+        pass
+
+    index_offset_msg = Float32MultiArray()
+    index_offset_msg.data = list(mir_index_offset)
+
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
     ty = rospy.get_param('~ty', 0.0)
@@ -197,6 +218,7 @@ def publish_paths():
         transformed_pub.publish(transformed_path)
         velocity_pub.publish(velocity_path)
         timestamps_pub.publish(timestamps_msg)
+        index_offset_pub.publish(index_offset_msg)
         rate.sleep()
 
 def set_metadata(layer_numbers, path_namespace=""):
