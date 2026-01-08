@@ -519,21 +519,28 @@ class LocalRetimingOptimizerNode:
 
         ts_opt = self.optimize(mir_xyz, mir_yaw, mir_ts0, ur_tcp_xyz, ur_ts)
 
+        # 1) Optimierte Timestamps kannst du weiter plotten/debuggen,
+        #    aber für die eigentliche Anwendung interessieren uns jetzt
+        #    die Offsets bei den ORIGINALZEITEN ts0:
+        mir_index_offset_at_ts0 = self.compute_mir_index_deviation(mir_ts0, ts_opt)
+        # di[k] > 0 heißt: bei Zeit ts0[k] sollte die MiR weiter vorne auf der Bahn sein.
+
+        # Optional: weiterhin publish der optimierten Zeitstempel (nur zu Debugzwecken)
         self.publish(ts_opt)
 
-        # Derived quantities for debugging / exports
+        # UR base für Reach-Plot
         ur_base_world = self.compute_ur_base_world_at_mir_samples(mir_xyz, mir_yaw)
-        index_offset = self.compute_index_offset_mir_vs_ur(ts_opt, ur_ts)  # + => MiR ahead, - => behind
 
-        # 1) Export CSVs (single comma-separated line)
-        self.export_csv_lines(ts_opt, index_offset)
+        # CSV-Export jetzt mit ORIGINALZEITEN und Index-Offset bei diesen Zeiten:
+        self.export_csv_lines(mir_ts0, mir_index_offset_at_ts0)
 
-        # 2) Plots
+        # Plots wie bisher, nur aufpassen, welche Zeitachse du für was nimmst
         self.plot_debug(mir_xyz, mir_ts0, ts_opt)
         if self.save_plot and HAS_PLOT:
             self.plot_reach_and_index_offset(mir_ts0, ts_opt, ur_tcp_xyz, ur_base_world=ur_base_world,
-                                             max_reach_xy=self.reach_xy_max)
+                                            max_reach_xy=self.reach_xy_max)
             self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, ts_opt)
+
 
 
 if __name__ == "__main__":

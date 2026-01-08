@@ -134,7 +134,7 @@ def publish_paths():
     
     try:
         mir_index_offset = modules["mir_index_offset"].mir_index_offset()
-        t_coords = modules["t_optimized"].t_optimized()
+        #t_coords = modules["t_optimized"].t_optimized()
     except KeyError:
         mir_index_offset = None
         pass
