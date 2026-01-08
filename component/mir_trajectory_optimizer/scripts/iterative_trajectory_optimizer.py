@@ -505,6 +505,48 @@ class LocalRetimingOptimizerNode:
         plot_path2 = self.plot_path.replace(".png", "_reach_index.png")
         plt.savefig(plot_path2, dpi=1600)
 
+    def compute_speed_with_index_offset(self,mir_xyz, t0, di):
+        # effektive indices (kontinuierlich)
+        i_eff = np.arange(len(t0), dtype=np.float64) + di
+        i_eff = np.clip(i_eff, 0, len(mir_xyz) - 1)
+
+        s = np.arange(len(mir_xyz), dtype=np.float64)
+        x_eff = np.interp(i_eff, s, mir_xyz[:, 0])
+        y_eff = np.interp(i_eff, s, mir_xyz[:, 1])
+
+        dp = np.linalg.norm(np.diff(np.stack([x_eff, y_eff], axis=1), axis=0), axis=1)
+        dt = np.diff(t0)
+        v = dp / np.maximum(dt, 1e-9)
+        return v
+
+    def debug_offset_effects(self, mir_xyz, t0, di):
+        v_orig = np.linalg.norm(np.diff(mir_xyz[:, :2], axis=0), axis=1) / np.maximum(np.diff(t0), 1e-9)
+        v_appl = self.compute_speed_with_index_offset(mir_xyz, t0, di)
+
+        grad_di = np.diff(di)
+
+        fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        axs[0].plot(v_orig, label="v_orig")
+        axs[0].plot(v_appl, label="v_applied")
+        axs[0].set_ylabel("v [m/s]")
+        axs[0].legend()
+        axs[0].grid(True)
+
+        axs[1].plot(di, label="di (index offset)")
+        axs[1].set_ylabel("di")
+        axs[1].legend()
+        axs[1].grid(True)
+
+        axs[2].plot(grad_di, label="di[k+1] - di[k]")
+        axs[2].axhline(0.0, linestyle="--")
+        axs[2].set_ylabel("grad_di")
+        axs[2].set_xlabel("Index k")
+        axs[2].legend()
+        axs[2].grid(True)
+
+        plt.tight_layout()
+        plt.savefig(self.plot_path.replace(".png", "_debug_offset_effects.png"), dpi=1600)
+
 
     def run(self):
         mir_path, ur_path, mir_ts0 = self.wait_inputs()
@@ -540,6 +582,8 @@ class LocalRetimingOptimizerNode:
             self.plot_reach_and_index_offset(mir_ts0, ts_opt, ur_tcp_xyz, ur_base_world=ur_base_world,
                                             max_reach_xy=self.reach_xy_max)
             self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, ts_opt)
+
+        self.debug_offset_effects(mir_xyz, mir_ts0, mir_index_offset_at_ts0)
 
 
 
