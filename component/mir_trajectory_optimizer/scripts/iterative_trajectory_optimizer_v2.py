@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import math
+import time
+import numpy as np
+
+import rospy
+from nav_msgs.msg import Path
+from std_msgs.msg import Float32MultiArray
+
+# Optional plotting (headless): saves PNG if enabled
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+    HAS_PLOT = True
+except Exception:
+    HAS_PLOT = False
+
+
+def yaw_from_quat(q):
+    """Yaw from geometry_msgs/Quaternion."""
+    # yaw (z-axis rotation)
+    siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def path_to_xyz_yaw(path_msg: Path):
+    n = len(path_msg.poses)
+    xyz = np.zeros((n, 3), dtype=np.float64)
+    yaw = np.zeros((n,), dtype=np.float64)
+    for i, ps in enumerate(path_msg.poses):
+        p = ps.pose.position
+        o = ps.pose.orientation
+        xyz[i, :] = [p.x, p.y, p.z]
+        yaw[i] = yaw_from_quat(o)
+    return xyz, yaw
+
+
+def interp_along_t(xyz: np.ndarray, t_knots: np.ndarray, t_query: np.ndarray):
+    """
+    Linear interpolation of xyz along time knots.
+    xyz: (N,3), t_knots: (N,), t_query: (M,)
+    Returns (M,3).
+    """
+    # clamp queries to range
+    tq = np.clip(t_query, t_knots[0], t_knots[-1])
+    out = np.zeros((len(tq), 3), dtype=np.float64)
+    for d in range(3):
+        out[:, d] = np.interp(tq, t_knots, xyz[:, d])
+    return out
+
+
+def interp_yaw(yaw: np.ndarray, t_knots: np.ndarray, t_query: np.ndarray):
+    """
+    Interpolate yaw robustly via sin/cos to avoid +-pi jumps.
+    """
+    tq = np.clip(t_query, t_knots[0], t_knots[-1])
+    s = np.interp(tq, t_knots, np.sin(yaw))
+    c = np.interp(tq, t_knots, np.cos(yaw))
+    return np.arctan2(s, c)
+
+
+class LocalRetimingOptimizerNode:
+    """
+    NEUE VARIANTE:
+    - UR path & timing: UR-Timestamps weiter trivial aus MiR-Start/Ende abgeleitet.
+    - MiR-Zeitstempel bleiben UNVERÄNDERT (ts0).
+    - Es wird ein Index-Offset di[k] optimiert, so dass der effektive Index
+      i_eff[k] = k + di[k] bei fixer Zeit ts0[k] gefahren wird.
+    - Ziel: Reduktion von Geschwindigkeitsspitzen bei Einhaltung der Reach-Constraint.
+    """
+
+    def __init__(self):
+        rospy.init_node("mir_index_offset_optimizer", anonymous=False)
+
+        # Topics
+        self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mur620c/mir_path_original")
+        self.ur_path_topic = rospy.get_param("~ur_path_topic", "/mur620c/ur_path_original")
+        self.mir_ts_topic = rospy.get_param("~mir_timestamps_topic", "/mur620c/mir_path_timestamps")
+
+        self.out_ts_topic = rospy.get_param("~out_timestamps_topic", "/mur620c/mir_path_timestamps_optimized")
+        self.out_dt_topic = rospy.get_param("~out_deltas_topic", "/mur620c/mir_path_dt_optimized")  # optional
+
+        # Mount offset of UR base in MiR base frame (meters) - only XY used for reach
+        # Your given xyz="0.549 -0.318 0.49" -> we use x,y
+        self.mount_x = float(rospy.get_param("~ur_mount_x", 0.549))
+        self.mount_y = float(rospy.get_param("~ur_mount_y", -0.318))
+
+        # Constraint (XY only)
+        self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.10))
+
+        # Optimization params
+        self.max_iters = int(rospy.get_param("~max_iters", 400))
+
+        # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
+        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.10))  # top 10% segments
+        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.20))  # bottom 20% segments
+
+        # Grenzen im Indexraum
+        self.di_max = float(rospy.get_param("~di_max", 80.0))      # max |index offset|
+        self.min_step = float(rospy.get_param("~min_step", 0.2))   # min i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 2.0))   # max i_eff-Schritt
+
+        # Objective
+        self.obj_mode = rospy.get_param("~objective", "peak")  # "peak" or "l2"
+        self.accept_tol = float(rospy.get_param("~accept_tol", 1e-9))
+
+        # Plotting
+        self.save_plot = bool(rospy.get_param("~save_plot", True))
+        self.plot_path = rospy.get_param("~plot_path", "/tmp/mir_index_offset_speeds.png")
+
+        # CSV exports
+        self.export_csv = bool(rospy.get_param("~export_csv", True))
+        self.csv_timestamps_path = rospy.get_param("~csv_timestamps_path", "/tmp/mir_timestamps_original.csv")
+        self.csv_index_offset_path = rospy.get_param("~csv_index_offset_path", "/tmp/mir_index_offset.csv")
+
+        # XY path plot (first layer)
+        self.xy_plot_path = rospy.get_param("~xy_plot_path", "/tmp/mir_ur_xy_first_layer_index_offset.png")
+        self.layer_z_eps = float(rospy.get_param("~layer_z_eps", 1e-4))
+
+        # Publishers (hier weiterhin original timestamps, falls benötigt)
+        self.pub_ts = rospy.Publisher(self.out_ts_topic, Float32MultiArray, queue_size=1, latch=True)
+        self.pub_dt = rospy.Publisher(self.out_dt_topic, Float32MultiArray, queue_size=1, latch=True)
+
+    # -------------------------------------------------------------------------
+    # Allgemeine Utilities
+    # -------------------------------------------------------------------------
+
+    def wait_inputs(self):
+        rospy.loginfo("Waiting for live topics...")
+        mir_path = rospy.wait_for_message(self.mir_path_topic, Path, timeout=None)
+        ur_path = rospy.wait_for_message(self.ur_path_topic, Path, timeout=None)
+        mir_ts_msg = rospy.wait_for_message(self.mir_ts_topic, Float32MultiArray, timeout=None)
+
+        mir_ts = np.array(mir_ts_msg.data, dtype=np.float64)
+        if len(mir_ts) != len(mir_path.poses):
+            rospy.logwarn("MiR timestamps length != MiR path length. Truncating to min length.")
+            n = min(len(mir_ts), len(mir_path.poses))
+            mir_ts = mir_ts[:n]
+            mir_path.poses = mir_path.poses[:n]
+
+        if len(ur_path.poses) != len(mir_path.poses):
+            rospy.logwarn("UR path length != MiR path length. Proceeding anyway (UR timestamps are built separately).")
+
+        return mir_path, ur_path, mir_ts
+
+    def build_ur_time(self, mir_ts, n_ur):
+        # UR timing fixed: same start/end as MiR, uniform steps over UR points
+        t0 = float(mir_ts[0])
+        t1 = float(mir_ts[-1])
+        if n_ur < 2:
+            return np.array([t0], dtype=np.float64)
+        return np.linspace(t0, t1, n_ur, dtype=np.float64)
+
+    def objective(self, v: np.ndarray) -> float:
+        if self.obj_mode == "l2":
+            return float(np.mean(v * v))
+        return float(np.max(v))
+
+    # -------------------------------------------------------------------------
+    # Index-Raum Interpolation
+    # -------------------------------------------------------------------------
+
+    def _interp_along_index(self, values: np.ndarray, idx_eff: np.ndarray) -> np.ndarray:
+        """
+        Lineare Interpolation in Indexrichtung.
+        values: (N, D) oder (N,) – Bahn über Index k
+        idx_eff: (N,)             – kontinuierlicher Index i_eff[k]
+        """
+        N = len(values)
+        s = np.arange(N, dtype=np.float64)
+        idx_clamped = np.clip(idx_eff, 0.0, float(N - 1))
+
+        if values.ndim == 1:
+            return np.interp(idx_clamped, s, values.astype(np.float64))
+
+        out = np.zeros((len(idx_eff), values.shape[1]), dtype=np.float64)
+        for d in range(values.shape[1]):
+            out[:, d] = np.interp(idx_clamped, s, values[:, d].astype(np.float64))
+        return out
+
+    def _interp_yaw_along_index(self, yaw: np.ndarray, idx_eff: np.ndarray) -> np.ndarray:
+        """Yaw-Interpolation im Indexraum (sin/cos, robust gg. +-pi)."""
+        N = len(yaw)
+        s = np.arange(N, dtype=np.float64)
+        idx_clamped = np.clip(idx_eff, 0.0, float(N - 1))
+
+        s_y = np.interp(idx_clamped, s, np.sin(yaw))
+        c_y = np.interp(idx_clamped, s, np.cos(yaw))
+        return np.arctan2(s_y, c_y)
+
+    # -------------------------------------------------------------------------
+    # Geschwindigkeiten & Reach mit Indexoffset
+    # -------------------------------------------------------------------------
+
+    def compute_speeds_with_offset(self,
+                                   mir_xyz: np.ndarray,
+                                   ts0: np.ndarray,
+                                   di: np.ndarray) -> np.ndarray:
+        """
+        v[k] für effektive Pfadpunkte mit Indexoffset di[k] bei festen Zeiten ts0[k].
+        """
+        idx_eff = np.arange(len(ts0), dtype=np.float64) + di
+        mir_eff_xy = self._interp_along_index(mir_xyz[:, :2], idx_eff)
+
+        dp = np.linalg.norm(np.diff(mir_eff_xy, axis=0), axis=1)
+        dt = np.diff(ts0)
+        v = dp / np.maximum(dt, 1e-9)
+        return v
+
+    def check_reach_xy_with_offset(self,
+                                   mir_xyz: np.ndarray,
+                                   mir_yaw: np.ndarray,
+                                   ts0: np.ndarray,
+                                   di: np.ndarray,
+                                   ur_tcp_xyz: np.ndarray,
+                                   ur_ts: np.ndarray) -> tuple[bool, float]:
+        """
+        Reach-Constraint für Offset-Trajektorie bei festen Zeiten ts0.
+        """
+        idx_eff = np.arange(len(ts0), dtype=np.float64) + di
+        mir_eff_xy = self._interp_along_index(mir_xyz[:, :2], idx_eff)
+        yaw_eff = self._interp_yaw_along_index(mir_yaw, idx_eff)
+
+        # UR TCP an denselben Zeiten
+        tcp_xy = interp_along_t(ur_tcp_xyz, ur_ts, ts0)[:, :2]
+
+        # UR-Base aus MiR + Mount-Offset
+        c = np.cos(yaw_eff)
+        s = np.sin(yaw_eff)
+        off_x = self.mount_x * c - self.mount_y * s
+        off_y = self.mount_x * s + self.mount_y * c
+
+        ur_base_xy = np.stack([mir_eff_xy[:, 0] + off_x,
+                               mir_eff_xy[:, 1] + off_y], axis=1)
+
+        d = np.linalg.norm(tcp_xy - ur_base_xy, axis=1)
+        dmax = float(np.max(d)) if len(d) else 0.0
+        return dmax <= self.reach_xy_max, dmax
+
+    # -------------------------------------------------------------------------
+    # Reparatur & Schrittvorschlag im Indexraum
+    # -------------------------------------------------------------------------
+
+    def _repair_di(self,
+                   di: np.ndarray,
+                   di_max: float | None = None,
+                   min_step: float | None = None,
+                   max_step: float | None = None) -> np.ndarray:
+        """
+        Erzwingt:
+        - |di[k]| <= di_max
+        - i_eff[k] = k + di[k] in [0, N-1]
+        - monotone i_eff mit Schrittweite in [min_step, max_step]
+        """
+        if di_max is None:
+            di_max = self.di_max
+        if min_step is None:
+            min_step = self.min_step
+        if max_step is None:
+            max_step = self.max_step
+
+        N = len(di)
+        k = np.arange(N, dtype=np.float64)
+
+        # Roh i_eff, begrenze globalen Offset
+        i_eff = k + np.clip(di, -di_max, di_max)
+        i_eff[0] = 0.0  # erster Punkt = Start
+
+        for n in range(1, N):
+            min_i = i_eff[n - 1] + min_step
+            max_i = min(i_eff[n - 1] + max_step, float(N - 1))
+            i_eff[n] = np.clip(i_eff[n], min_i, max_i)
+
+        di_repaired = i_eff - k
+        return di_repaired
+
+    def propose_offset_step(self, di: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """
+        Lokale Anpassung von di:
+        - schnelle Segmente: Δi_eff verkleinern (di[k+1] Richtung di[k])
+        - langsame Segmente: Δi_eff vergrößern
+        """
+        N = len(di)
+        if N < 3:
+            return di.copy()
+
+        k_fast = max(1, int(round(self.k_fast_frac * (N - 1))))
+        k_slow = max(1, int(round(self.k_slow_frac * (N - 1))))
+
+        idx_fast = np.argsort(-v)[:k_fast]  # höchste v
+        idx_slow = np.argsort(v)[:k_slow]   # niedrigste v
+
+        di_new = di.copy()
+        eps_idx = 0.05  # Schrittgröße im Indexraum pro Iteration
+
+        # schnelle Segmente: Δi_eff = (di[k+1]-di[k]) kleiner machen
+        for j in idx_fast:
+            if j + 1 < N:
+                di_new[j + 1] -= eps_idx
+
+        # langsame Segmente: Δi_eff größer machen
+        for j in idx_slow:
+            if j + 1 < N:
+                di_new[j + 1] += eps_idx
+
+        # Reparieren: Monotonie, Grenzen, Schrittweite
+        di_new = self._repair_di(di_new)
+        return di_new
+
+    # -------------------------------------------------------------------------
+    # Hauptoptimierer im Index-Offset-Raum
+    # -------------------------------------------------------------------------
+
+    def optimize_index_offset(self,
+                              mir_xyz: np.ndarray,
+                              mir_yaw: np.ndarray,
+                              ts0: np.ndarray,
+                              ur_tcp_xyz: np.ndarray,
+                              ur_ts: np.ndarray) -> np.ndarray:
+        """
+        Optimiert di[k] so, dass die reale Geschwindigkeit mit Indexoffset
+        bei festen Zeiten ts0 glatter wird und die Reach-Constraint erfüllt bleibt.
+        """
+        N = len(ts0)
+        di_best = np.zeros((N,), dtype=np.float64)
+
+        v0 = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
+        obj_best = self.objective(v0)
+
+        ok0, dmax0 = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di_best,
+                                                     ur_tcp_xyz, ur_ts)
+        rospy.loginfo(f"Initial (di=0): obj={obj_best:.4f} reach_ok={ok0} dmax={dmax0:.3f} m")
+
+        accepted = 0
+        last_log = time.time()
+
+        for it in range(1, self.max_iters + 1):
+            v = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
+            di_prop = self.propose_offset_step(di_best, v)
+
+            ok, dmax = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di_prop,
+                                                       ur_tcp_xyz, ur_ts)
+            if not ok:
+                continue
+
+            v_prop = self.compute_speeds_with_offset(mir_xyz, ts0, di_prop)
+            obj_prop = self.objective(v_prop)
+
+            if obj_prop + self.accept_tol < obj_best:
+                di_best = di_prop
+                obj_best = obj_prop
+                accepted += 1
+
+            now = time.time()
+            if now - last_log > 1.0:
+                rospy.loginfo(f"[it {it:4d}/{self.max_iters}] obj={obj_best:.4f} "
+                              f"dmax={dmax:.3f}m accepted={accepted}")
+                last_log = now
+
+        rospy.loginfo(f"Done index-offset optimization. best_obj={obj_best:.4f}, accepted={accepted}")
+        return di_best
+
+    def compute_constant_speed_index_offset(self,
+                                            mir_xyz: np.ndarray,
+                                            ts0: np.ndarray) -> np.ndarray:
+        """
+        Berechnet di[k], so dass der Pfad mit (annähernd) konstanter XY-Geschwindigkeit
+        bei festen Zeiten ts0[k] durchlaufen wird.
+
+        Idee:
+        - s[k] = kumulative Weglänge entlang der Bahn (XY)
+        - s_target[k] = linear von 0..s_total
+        - u[k] = Index, bei dem s(u[k]) = s_target[k]
+        - di[k] = u[k] - k
+        """
+        N = len(ts0)
+        if N < 2:
+            return np.zeros((N,), dtype=np.float64)
+
+        # XY-Koordinaten
+        mir_xy = mir_xyz[:, :2].astype(np.float64)
+
+        # Kumulative Weglänge s[k]
+        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)
+        s = np.zeros((N,), dtype=np.float64)
+        s[1:] = np.cumsum(dp)
+
+        s_total = float(s[-1])
+        if s_total <= 1e-12:
+            # Pfad hat praktisch keine Länge -> kein Offset nötig
+            return np.zeros((N,), dtype=np.float64)
+
+        # Ziel-Weglänge linear in k
+        k_idx = np.arange(N, dtype=np.float64)
+        s_target = s_total * k_idx / float(N - 1)
+
+        # Invertiere s(k): für jedes s_target finde Index u[k]
+        # s ist monoton wachsend (oder konstant) -> np.interp funktioniert
+        u = np.interp(s_target, s, k_idx)  # u[k] ist kontinuierlicher Index
+
+        di = u - k_idx
+        return di
+
+
+    def scale_di_for_reach(self,
+                        di: np.ndarray,
+                        mir_xyz: np.ndarray,
+                        mir_yaw: np.ndarray,
+                        ts0: np.ndarray,
+                        ur_tcp_xyz: np.ndarray,
+                        ur_ts: np.ndarray,
+                        max_iter: int = 20) -> np.ndarray:
+        """
+        Skaliert den Offset di mit einem Faktor alpha ∈ [0,1], sodass die Reach-Constraint
+        erfüllt bleibt. Falls bereits ok: alpha = 1.0.
+
+        Einfache binäre Suche auf alpha.
+        """
+        ok, dmax = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di,
+                                                ur_tcp_xyz, ur_ts)
+        if ok:
+            rospy.loginfo(f"Reach OK mit alpha=1.0 (dmax={dmax:.3f} m)")
+            return di
+
+        # Falls nicht ok: binäre Suche auf alpha
+        lo, hi = 0.0, 1.0
+        best_alpha = 0.0
+        for _ in range(max_iter):
+            alpha = 0.5 * (lo + hi)
+            di_scaled = alpha * di
+            ok_alpha, dmax_alpha = self.check_reach_xy_with_offset(
+                mir_xyz, mir_yaw, ts0, di_scaled, ur_tcp_xyz, ur_ts
+            )
+            if ok_alpha:
+                best_alpha = alpha
+                lo = alpha
+            else:
+                hi = alpha
+
+        di_scaled = best_alpha * di
+        rospy.loginfo(f"Reach enforced via alpha={best_alpha:.3f}")
+        return di_scaled
+
+
+    # -------------------------------------------------------------------------
+    # Publishing / CSV / Plots
+    # -------------------------------------------------------------------------
+
+    def publish(self, ts_orig: np.ndarray):
+        """
+        Publish original timestamps (unverändert) und deren dt – optional.
+        """
+        msg_ts = Float32MultiArray()
+        msg_ts.data = [float(x) for x in ts_orig]
+        self.pub_ts.publish(msg_ts)
+
+        msg_dt = Float32MultiArray()
+        msg_dt.data = [float(x) for x in np.diff(ts_orig)]
+        self.pub_dt.publish(msg_dt)
+
+        rospy.loginfo(f"Published ORIGINAL timestamps to {self.out_ts_topic} and dt to {self.out_dt_topic}")
+
+    def export_csv_lines(self, ts0: np.ndarray, index_offset: np.ndarray):
+        if not self.export_csv:
+            return
+        try:
+            # 1) originale timestamps
+            with open(self.csv_timestamps_path, "w", encoding="utf-8") as f:
+                f.write(",".join([f"{float(x):.9f}" for x in ts0]))
+
+            # 2) index offset mit Vorzeichen
+            with open(self.csv_index_offset_path, "w", encoding="utf-8") as f:
+                f.write(",".join([f"{float(x):+.6f}" for x in index_offset]))
+
+            rospy.loginfo(f"Exported CSV: {self.csv_timestamps_path} and {self.csv_index_offset_path}")
+        except Exception as e:
+            rospy.logwarn(f"CSV export failed: {e}")
+
+    def _first_layer_end_index(self, z: np.ndarray, eps_z: float = 1e-4) -> int:
+        """Return end index (exclusive) for the first layer, based on first significant z-change."""
+        if len(z) < 2:
+            return len(z)
+        z0 = float(z[0])
+        dz = np.abs(z - z0)
+        idx = np.where(dz > eps_z)[0]
+        if len(idx) == 0:
+            return len(z)
+        return int(idx[0])
+
+    def plot_debug(self, mir_xyz: np.ndarray, ts0: np.ndarray, di: np.ndarray):
+        """
+        Plot Geschwindigkeiten: original (di=0) vs. mit Indexoffset.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        di_zero = np.zeros_like(di)
+        v0 = self.compute_speeds_with_offset(mir_xyz, ts0, di_zero)
+        v1 = self.compute_speeds_with_offset(mir_xyz, ts0, di)
+
+        plt.figure()
+        plt.plot(v0, label="orig v_xy (di=0)")
+        plt.plot(v1, label="opt  v_xy (with di)")
+        plt.xlabel("segment index")
+        plt.ylabel("speed [m/s]")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(self.plot_path, dpi=1600)
+        rospy.loginfo(f"Saved speed plot: {self.plot_path}")
+
+    def plot_xy_first_layer(self,
+                            mir_xyz: np.ndarray,
+                            ur_xyz: np.ndarray,
+                            ts0: np.ndarray,
+                            di: np.ndarray):
+        """
+        Plot MiR & UR XY (first layer only). MiR (mit Offset) farblich nach Geschwindigkeitsänderung.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(2, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz), len(ts0)))
+
+        mir_xy_orig = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+        ts0_n = ts0[:n]
+        di_n = di[:n]
+
+        # effektive MiR-Bahn mit Indexoffset
+        idx_eff = np.arange(n, dtype=np.float64) + di_n
+        mir_eff_xy = self._interp_along_index(mir_xyz[:, :2], idx_eff)
+
+        # Geschwindigkeiten original vs. offset
+        dp0 = np.linalg.norm(np.diff(mir_xy_orig, axis=0), axis=1)
+        dp1 = np.linalg.norm(np.diff(mir_eff_xy, axis=0), axis=1)
+        dt = np.diff(ts0_n)
+        v0 = dp0 / np.maximum(dt, 1e-9)
+        v1 = dp1 / np.maximum(dt, 1e-9)
+        ratio = v1 / np.maximum(v0, 1e-12)
+
+        # Map ratio -> diverging colormap centered at 1.0
+        r = np.clip(np.log(ratio + 1e-12), -1.0, 1.0)  # symmetric around 0
+        r_norm = (r - (-1.0)) / 2.0  # [0,1]
+
+        # Segmente der effektiven MiR-Bahn
+        segs = np.stack([mir_eff_xy[:-1], mir_eff_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=r_norm, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("MiR speed change: red=slower, blue=faster (log ratio)")
+        plt.tight_layout()
+        plt.savefig(self.xy_plot_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer, index offset): {self.xy_plot_path}")
+
+    # -------------------------------------------------------------------------
+    # Main
+    # -------------------------------------------------------------------------
+
+    def run(self):
+        mir_path, ur_path, mir_ts0 = self.wait_inputs()
+
+        rospy.loginfo(f"mir frame: {mir_path.header.frame_id}")
+        rospy.loginfo(f"ur  frame: {ur_path.header.frame_id}")
+
+        mir_xyz, mir_yaw = path_to_xyz_yaw(mir_path)
+        ur_tcp_xyz, _ = path_to_xyz_yaw(ur_path)
+
+        ur_ts = self.build_ur_time(mir_ts0, len(ur_tcp_xyz))
+
+        # 1) Konstantgeschwindigkeits-Offset im Indexraum
+        di_const = self.compute_constant_speed_index_offset(mir_xyz, mir_ts0)
+
+        # 2) Reach-Constraint prüfen und ggf. Offset global skalieren
+        di_best = self.scale_di_for_reach(di_const, mir_xyz, mir_yaw,
+                                        mir_ts0, ur_tcp_xyz, ur_ts)
+
+        rospy.loginfo(f"di_best: min={float(np.min(di_best)):.3f}, max={float(np.max(di_best)):.3f}")
+
+        # 3) Publish: originale Zeitstempel (unverändert)
+        self.publish(mir_ts0)
+
+        # 4) CSV-Export: originale Zeitstempel + Indexoffset
+        self.export_csv_lines(mir_ts0, di_best)
+
+        # 5) Plots
+        if self.save_plot and HAS_PLOT:
+            self.plot_debug(mir_xyz, mir_ts0, di_best)
+            self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
+
+
+
+if __name__ == "__main__":
+    try:
+        node = LocalRetimingOptimizerNode()
+        node.run()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
+    except Exception as e:
+        rospy.logerr(f"Optimizer crashed: {e}")
+        raise

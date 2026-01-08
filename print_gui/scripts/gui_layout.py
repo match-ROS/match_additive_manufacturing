@@ -286,6 +286,7 @@ class ROSGui(QWidget):
             "/qualisys_map/mur620c/pose": {"local": True, "remote": False},
             "/qualisys_map/nozzle/pose": {"local": True, "remote": False},
             "/mur620c/UR10_r/global_tcp_pose_mocap": {"local": True, "remote": False},
+            "/mur620c/cmd_vel": {"local": True, "remote": False},
         }
 
 

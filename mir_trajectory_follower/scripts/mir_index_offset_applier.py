@@ -4,7 +4,7 @@ from std_msgs.msg import Float32MultiArray, Int32
 
 class MirIndexOffsetApplier:
     def __init__(self):
-        self.ns = rospy.get_param("~ns", "/mur620c")
+        self.ns = rospy.get_param("~namespace", "/mur620c")
         self.offset_topic = rospy.get_param("~offset_topic", f"{self.ns}/mir_index_offset")
         self.ur_index_topic = rospy.get_param("~ur_index_topic", f"{self.ns}/path_index")
         self.out_topic = rospy.get_param("~out_topic", f"{self.ns}/path_index_modified")
@@ -63,10 +63,16 @@ class MirIndexOffsetApplier:
             self._publish_with_monotonic_guard(ur_idx)
             return
 
-        raw_offset = float(self.offset_vec[ur_idx])
+        offset_middle = (max(self.offset_vec) + min(self.offset_vec)) / 2.0
+        raw_offset = float(self.offset_vec[ur_idx + int(offset_middle)]) 
         weighted_offset = self.gain * raw_offset
         candidate = self._apply_rounding(ur_idx + weighted_offset)
         self._publish_with_monotonic_guard(candidate, ur_idx=ur_idx, raw_offset=raw_offset)
+        # log index offset
+        rospy.loginfo_throttle(0.5,
+            "UR index: %d, raw offset: %.4f, gain: %.3f -> weighted offset: %.4f -> MiR index: %d",
+            ur_idx, raw_offset, self.gain, weighted_offset, candidate
+        )
 
     def _publish_with_monotonic_guard(self, candidate: int, ur_idx: int = None, raw_offset: float = None):
         # Enforce non-decreasing published index
@@ -82,7 +88,7 @@ class MirIndexOffsetApplier:
                     "MiR index would go backwards: last=%d, new=%d. Publishing last again.",
                     self.last_published, candidate
                 )
-            candidate = self.last_published + 1  # at least increment by 1
+            candidate = self.last_published   # at least increment by 1
 
         self.pub.publish(Int32(data=int(candidate)))
         self.last_published = int(candidate)

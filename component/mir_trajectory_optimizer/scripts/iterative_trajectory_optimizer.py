@@ -547,6 +547,123 @@ class LocalRetimingOptimizerNode:
         plt.tight_layout()
         plt.savefig(self.plot_path.replace(".png", "_debug_offset_effects.png"), dpi=1600)
 
+    def plot_xy_first_layer_index_gradient(self,
+                                           mir_xyz: np.ndarray,
+                                           ur_xyz: np.ndarray,
+                                           mir_ts0: np.ndarray,
+                                           index_offset: np.ndarray):
+        """
+        Plot MiR & UR XY (first layer only).
+        MiR-Bahn wird farbcodiert nach der Ableitung des Index-Offsets:
+            grad_di[k] = di[k+1] - di[k]
+        - grad_di > 0: Offset wird aufgebaut (MiR "zieht vor")
+        - grad_di < 0: Offset wird abgebaut (MiR "wartet nach")
+        Farben symmetrisch um 0 normalisiert.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        # First layer bestimmen
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(3, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz), len(index_offset)))
+
+        mir_xy = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+        di = index_offset[:n]
+
+        # Ableitung des Index-Offsets pro Segment
+        grad_di = np.diff(di)  # Länge n-1, gehört zu Segmenten [k -> k+1]
+
+        # symmetrische Normalisierung um 0
+        max_ds = 1.0
+        max_abs = float(np.max(np.abs(max_ds))) if len(grad_di) > 0 else 1.0
+        if max_abs < 1e-9:
+            max_abs = 1.0  # alles ~0 => neutrales Mittelgrau
+        grad_norm = grad_di / max_abs      # in [-1,1]
+        c_vals = (grad_norm + 1.0) / 2.0    # auf [0,1] für Cmap
+
+        # Segmente der MiR-Bahn
+        segs = np.stack([mir_xy[:-1], mir_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=c_vals, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("Index-Gradient Δdi = di[k+1] - di[k] (rot<0, blau>0)")
+        plt.tight_layout()
+
+        out_path = self.xy_plot_path.replace(".png", "_index_grad.png")
+        plt.savefig(out_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer, index gradient): {out_path}")
+
+
+    def plot_xy_first_layer_index_offset(self,
+                                         mir_xyz: np.ndarray,
+                                         ur_xyz: np.ndarray,
+                                         mir_ts0: np.ndarray,
+                                         index_offset: np.ndarray):
+        """
+        Plot MiR & UR XY (first layer only).
+        MiR-Bahn wird farbcodiert nach Index-Offset di[k] = i_eff[k] - k:
+        - di > 0: MiR ist "voraus" (z.B. blau)
+        - di < 0: MiR ist "hinten"  (z.B. rot)
+        Farben werden symmetrisch um 0 normalisiert.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        # First layer bestimmen
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(2, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz), len(index_offset)))
+
+        mir_xy = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+        di = index_offset[:n]
+
+        # Index-Offset pro Segment (Mittelwert der Endpunkte)
+        di_seg = 0.5 * (di[:-1] + di[1:])
+
+        # symmetrische Normalisierung um 0
+        max_abs = float(np.max(np.abs(di_seg))) if len(di_seg) > 0 else 1.0
+        if max_abs < 1e-9:
+            max_abs = 1.0  # alles ~0 => neutrales Mittelgrau
+        # di_norm in [-1, 1]
+        di_norm = di_seg / max_abs
+        # auf [0,1] mappen für Cmap
+        c_vals = (di_norm + 1.0) / 2.0
+
+        # Segmente der MiR-Bahn
+        segs = np.stack([mir_xy[:-1], mir_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=di_seg, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("Index offset di (relativ, rot<0, blau>0)")
+        plt.tight_layout()
+
+        out_path = self.xy_plot_path.replace(".png", "_index_offset.png")
+        plt.savefig(out_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer, index offset): {out_path}")
+
 
     def run(self):
         mir_path, ur_path, mir_ts0 = self.wait_inputs()
@@ -584,6 +701,12 @@ class LocalRetimingOptimizerNode:
             self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, ts_opt)
 
         self.debug_offset_effects(mir_xyz, mir_ts0, mir_index_offset_at_ts0)
+
+        self.plot_xy_first_layer_index_offset(mir_xyz, ur_tcp_xyz, mir_ts0, mir_index_offset_at_ts0)
+
+        self.plot_xy_first_layer_index_gradient(mir_xyz, ur_tcp_xyz, mir_ts0, mir_index_offset_at_ts0)
+
+
 
 
 
