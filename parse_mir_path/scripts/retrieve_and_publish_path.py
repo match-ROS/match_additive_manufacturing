@@ -136,7 +136,7 @@ def publish_paths():
         mir_index_offset = modules["mir_index_offset"].mir_index_offset()
         #t_coords = modules["t_optimized"].t_optimized()
     except KeyError:
-        mir_index_offset = None
+        mir_index_offset = [0.0]  # Default offset if module not found
         pass
 
     index_offset_msg = Float32MultiArray()
