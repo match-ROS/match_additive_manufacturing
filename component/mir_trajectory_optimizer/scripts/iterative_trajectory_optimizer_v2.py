@@ -91,7 +91,7 @@ class LocalRetimingOptimizerNode:
         self.mount_y = float(rospy.get_param("~ur_mount_y", -0.318))
 
         # Constraint (XY only)
-        self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.10))
+        self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
 
         # Optimization params
         self.max_iters = int(rospy.get_param("~max_iters", 400))
@@ -313,7 +313,7 @@ class LocalRetimingOptimizerNode:
         return di_new
 
     # -------------------------------------------------------------------------
-    # Hauptoptimierer im Index-Offset-Raum
+    # Hauptoptimierer im Index-Offset-Raum (hier ggf. optional)
     # -------------------------------------------------------------------------
 
     def optimize_index_offset(self,
@@ -406,15 +406,14 @@ class LocalRetimingOptimizerNode:
         di = u - k_idx
         return di
 
-
     def scale_di_for_reach(self,
-                        di: np.ndarray,
-                        mir_xyz: np.ndarray,
-                        mir_yaw: np.ndarray,
-                        ts0: np.ndarray,
-                        ur_tcp_xyz: np.ndarray,
-                        ur_ts: np.ndarray,
-                        max_iter: int = 20) -> np.ndarray:
+                           di: np.ndarray,
+                           mir_xyz: np.ndarray,
+                           mir_yaw: np.ndarray,
+                           ts0: np.ndarray,
+                           ur_tcp_xyz: np.ndarray,
+                           ur_ts: np.ndarray,
+                           max_iter: int = 20) -> np.ndarray:
         """
         Skaliert den Offset di mit einem Faktor alpha ∈ [0,1], sodass die Reach-Constraint
         erfüllt bleibt. Falls bereits ok: alpha = 1.0.
@@ -422,7 +421,7 @@ class LocalRetimingOptimizerNode:
         Einfache binäre Suche auf alpha.
         """
         ok, dmax = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di,
-                                                ur_tcp_xyz, ur_ts)
+                                                   ur_tcp_xyz, ur_ts)
         if ok:
             rospy.loginfo(f"Reach OK mit alpha=1.0 (dmax={dmax:.3f} m)")
             return di
@@ -445,7 +444,6 @@ class LocalRetimingOptimizerNode:
         di_scaled = best_alpha * di
         rospy.loginfo(f"Reach enforced via alpha={best_alpha:.3f}")
         return di_scaled
-
 
     # -------------------------------------------------------------------------
     # Publishing / CSV / Plots
@@ -570,6 +568,179 @@ class LocalRetimingOptimizerNode:
         rospy.loginfo(f"Saved XY plot (first layer, index offset): {self.xy_plot_path}")
 
     # -------------------------------------------------------------------------
+    # Zusätzliche Plot-Funktionen aus dem Original
+    # -------------------------------------------------------------------------
+
+    def compute_speed_with_index_offset(self, mir_xyz, t0, di):
+        """
+        Wrapper, kompatibel zur Original-Funktion:
+        nutzt intern compute_speeds_with_offset.
+        """
+        return self.compute_speeds_with_offset(mir_xyz, t0, di)
+
+    def debug_offset_effects(self, mir_xyz, t0, di):
+        """
+        Plot:
+        - v_orig vs. v_applied (mit Indexoffset)
+        - di[k] (Indexoffset)
+        - grad_di[k] = di[k+1] - di[k]
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        v_orig = np.linalg.norm(np.diff(mir_xyz[:, :2], axis=0), axis=1) / np.maximum(np.diff(t0), 1e-9)
+        v_appl = self.compute_speed_with_index_offset(mir_xyz, t0, di)
+
+        grad_di = np.diff(di)
+
+        fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        axs[0].plot(v_orig, label="v_orig")
+        axs[0].plot(v_appl, label="v_applied")
+        axs[0].set_ylabel("v [m/s]")
+        axs[0].legend()
+        axs[0].grid(True)
+
+        axs[1].plot(di, label="di (index offset)")
+        axs[1].set_ylabel("di")
+        axs[1].legend()
+        axs[1].grid(True)
+
+        axs[2].plot(grad_di, label="di[k+1] - di[k]")
+        axs[2].axhline(0.0, linestyle="--")
+        axs[2].set_ylabel("grad_di")
+        axs[2].set_xlabel("Index k")
+        axs[2].legend()
+        axs[2].grid(True)
+
+        plt.tight_layout()
+        out_path = self.plot_path.replace(".png", "_debug_offset_effects.png")
+        plt.savefig(out_path, dpi=1600)
+        rospy.loginfo(f"Saved debug offset effects plot: {out_path}")
+
+    def plot_xy_first_layer_index_gradient(self,
+                                           mir_xyz: np.ndarray,
+                                           ur_xyz: np.ndarray,
+                                           mir_ts0: np.ndarray,
+                                           index_offset: np.ndarray):
+        """
+        Plot MiR & UR XY (first layer only).
+        MiR-Bahn wird farbcodiert nach der Ableitung des Index-Offsets:
+            grad_di[k] = di[k+1] - di[k]
+        - grad_di > 0: Offset wird aufgebaut (MiR "zieht vor")
+        - grad_di < 0: Offset wird abgebaut (MiR "wartet nach")
+        Farben symmetrisch um 0 normalisiert.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        # First layer bestimmen
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(3, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz), len(index_offset)))
+
+        mir_xy = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+        di = index_offset[:n]
+
+        # Ableitung des Index-Offsets pro Segment
+        grad_di = np.diff(di)  # Länge n-1, gehört zu Segmenten [k -> k+1]
+
+        # symmetrische Normalisierung um 0
+        if len(grad_di) > 0:
+            max_abs = float(np.max(np.abs(grad_di)))
+        else:
+            max_abs = 1.0
+        if max_abs < 1e-9:
+            max_abs = 1.0  # alles ~0 => neutrales Mittelgrau
+
+        grad_norm = grad_di / max_abs      # in [-1,1]
+        c_vals = (grad_norm + 1.0) / 2.0   # auf [0,1] für Cmap
+
+        # Segmente der MiR-Bahn
+        segs = np.stack([mir_xy[:-1], mir_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=c_vals, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("Index-Gradient Δdi = di[k+1] - di[k] (rot<0, blau>0)")
+        plt.tight_layout()
+
+        out_path = self.xy_plot_path.replace(".png", "_index_grad.png")
+        plt.savefig(out_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer, index gradient): {out_path}")
+
+    def plot_xy_first_layer_index_offset(self,
+                                         mir_xyz: np.ndarray,
+                                         ur_xyz: np.ndarray,
+                                         mir_ts0: np.ndarray,
+                                         index_offset: np.ndarray):
+        """
+        Plot MiR & UR XY (first layer only).
+        MiR-Bahn wird farbcodiert nach Index-Offset di[k] = i_eff[k] - k:
+        - di > 0: MiR ist "voraus" (z.B. blau)
+        - di < 0: MiR ist "hinten"  (z.B. rot)
+        Farben werden symmetrisch um 0 normalisiert.
+        """
+        if not (self.save_plot and HAS_PLOT):
+            return
+
+        # First layer bestimmen
+        n_mir = self._first_layer_end_index(mir_xyz[:, 2])
+        n_ur = self._first_layer_end_index(ur_xyz[:, 2])
+        n = max(2, min(n_mir, n_ur, len(mir_xyz), len(ur_xyz), len(index_offset)))
+
+        mir_xy = mir_xyz[:n, :2]
+        ur_xy = ur_xyz[:n, :2]
+        di = index_offset[:n]
+
+        # Index-Offset pro Segment (Mittelwert der Endpunkte)
+        di_seg = 0.5 * (di[:-1] + di[1:])
+
+        # symmetrische Normalisierung um 0
+        if len(di_seg) > 0:
+            max_abs = float(np.max(np.abs(di_seg)))
+        else:
+            max_abs = 1.0
+        if max_abs < 1e-9:
+            max_abs = 1.0  # alles ~0 => neutrales Mittelgrau
+
+        di_norm = di_seg / max_abs        # in [-1,1]
+        # auf [0,1] mappen für evtl. weitere Nutzung
+        # (für LineCollection reicht di_seg mit symmetrischem Cmap)
+        _c_vals = (di_norm + 1.0) / 2.0
+
+        # Segmente der MiR-Bahn
+        segs = np.stack([mir_xy[:-1], mir_xy[1:]], axis=1)  # (n-1,2,2)
+        lc = LineCollection(segs, array=di_seg, cmap="bwr", linewidths=2.0)
+
+        plt.figure()
+        ax = plt.gca()
+        ax.add_collection(lc)
+        ax.plot(ur_xy[:, 0], ur_xy[:, 1], linestyle="-", linewidth=1.5, label="UR TCP (first layer)")
+        ax.autoscale()
+        ax.set_aspect("equal", adjustable="box")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid(True)
+        plt.legend()
+        cbar = plt.colorbar(lc)
+        cbar.set_label("Index offset di (relativ, rot<0, blau>0)")
+        plt.tight_layout()
+
+        out_path = self.xy_plot_path.replace(".png", "_index_offset.png")
+        plt.savefig(out_path, dpi=160)
+        rospy.loginfo(f"Saved XY plot (first layer, index offset): {out_path}")
+
+    # -------------------------------------------------------------------------
     # Main
     # -------------------------------------------------------------------------
 
@@ -589,7 +760,7 @@ class LocalRetimingOptimizerNode:
 
         # 2) Reach-Constraint prüfen und ggf. Offset global skalieren
         di_best = self.scale_di_for_reach(di_const, mir_xyz, mir_yaw,
-                                        mir_ts0, ur_tcp_xyz, ur_ts)
+                                          mir_ts0, ur_tcp_xyz, ur_ts)
 
         rospy.loginfo(f"di_best: min={float(np.min(di_best)):.3f}, max={float(np.max(di_best)):.3f}")
 
@@ -599,11 +770,13 @@ class LocalRetimingOptimizerNode:
         # 4) CSV-Export: originale Zeitstempel + Indexoffset
         self.export_csv_lines(mir_ts0, di_best)
 
-        # 5) Plots
+        # 5) Plots (alle Plot-Funktionen aus dem Original integriert)
         if self.save_plot and HAS_PLOT:
             self.plot_debug(mir_xyz, mir_ts0, di_best)
             self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
-
+            self.debug_offset_effects(mir_xyz, mir_ts0, di_best)
+            self.plot_xy_first_layer_index_offset(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
+            self.plot_xy_first_layer_index_gradient(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
 
 
 if __name__ == "__main__":

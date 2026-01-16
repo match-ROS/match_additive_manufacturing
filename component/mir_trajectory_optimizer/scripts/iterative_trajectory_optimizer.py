@@ -89,7 +89,7 @@ class LocalRetimingOptimizerNode:
         self.mount_y = float(rospy.get_param("~ur_mount_y", -0.318))
 
         # Constraint (XY only)
-        self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.10))
+        self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
 
         # Optimization params
         self.max_iters = int(rospy.get_param("~max_iters", 400))
