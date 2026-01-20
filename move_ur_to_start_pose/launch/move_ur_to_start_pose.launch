@@ -10,14 +10,13 @@
     <arg name="path_ns" default="" doc="Namespace prefix for UR path topics (with or without leading slash)." />
     <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
     <arg name="path_topic" default="$(arg path_ns_prefix)/ur_path_transformed" />
-    <arg name="path_namespace" default="" />
 
-    <group ns="$(arg path_namespace)">
+    <group ns="$(arg path_ns)">
         <!-- Node that runs the path transformer script -->
         <node name="move_ur_to_start_pose" pkg="move_ur_to_start_pose" type="move_ur_to_start_pose.py" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' ">
             <!-- Transformation parameters -->
             <param name="path_topic" value="$(arg path_topic)" />
-            <param name="path_namespace" value="$(arg path_namespace)" />
+            <param name="path_namespace" value="$(arg path_ns)" />
             <param name="robot_name" value="$(arg robot_name)" />
             <!-- <param name="manipulator_base_link" value="mur620/UR10_l/base_link" /> -->
             <param name="manipulator_base_link" value="$(arg manipulator_base_link)" />

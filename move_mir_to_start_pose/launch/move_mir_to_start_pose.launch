@@ -3,14 +3,13 @@
     <arg name="path_ns" default="" doc="Namespace prefix for MIR path topics (with or without leading slash)." />
     <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
     <arg name="path_topic" default="$(arg path_ns_prefix)/mir_path_transformed" />
-    <arg name="path_namespace" default="" />
     <arg name="initial_path_index" default="0" />
 
-    <group ns="$(arg path_namespace)">
+    <group ns="$(arg path_ns)">
         <!-- Node that runs the path transformer script -->
         <node name="move_mir_to_start_pose" pkg="move_mir_to_start_pose" type="move_mir_to_start_pose.py" output="screen">
             <param name="path_topic" value="$(arg path_topic)" />
-            <param name="path_namespace" value="$(arg path_namespace)" />
+            <param name="path_namespace" value="$(arg path_ns)" />
             <param name="robot_name" value="$(arg robot_name)" />
             <param name="initial_path_index" value="$(arg initial_path_index)" />
         </node>
