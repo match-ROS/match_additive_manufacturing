@@ -87,6 +87,7 @@ class ROSGui(QWidget):
         for robot in self.robots.keys():
             row = QHBoxLayout(); row.addWidget(QLabel(robot)); mir_label = QLabel("MiR: –"); ur_label = QLabel("UR: –"); row.addWidget(mir_label); row.addWidget(ur_label); self.battery_labels[robot] = (mir_label, ur_label); self.battery_layout.addLayout(row)
         ur_layout = QVBoxLayout(); ur_layout.addWidget(QLabel("Select URs:")); self.ur10_l = QCheckBox("UR10_l"); self.ur10_r = QCheckBox("UR10_r"); self.ur10_l.setChecked(False); self.ur10_r.setChecked(True); ur_layout.addWidget(self.ur10_l); ur_layout.addWidget(self.ur10_r)
+        sim_mode_layout = QHBoxLayout(); self.sim_mode_checkbox = QCheckBox("Simulation Mode"); self.sim_mode_checkbox.setChecked(False); sim_mode_layout.addWidget(self.sim_mode_checkbox); ur_layout.addLayout(sim_mode_layout)
         selection_layout.addLayout(robot_layout); selection_layout.addLayout(ur_layout); selection_group.setLayout(selection_layout); left_layout.addWidget(selection_group)
         # Override
         override_layout = QVBoxLayout()
@@ -912,6 +913,9 @@ class ROSGui(QWidget):
         if not hasattr(self, 'tcp_phi_spin'):
             return 0.0
         return math.radians(self.tcp_phi_spin.value())
+    
+    def get_simulation_mode(self):
+        return self.simulation_mode_checkbox.isChecked()
 
     def get_spray_distance(self):
         return self.spray_distance_spin.value()
