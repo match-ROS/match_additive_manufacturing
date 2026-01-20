@@ -915,7 +915,7 @@ class ROSGui(QWidget):
         return math.radians(self.tcp_phi_spin.value())
     
     def get_simulation_mode(self):
-        return self.simulation_mode_checkbox.isChecked()
+        return self.sim_mode_checkbox.isChecked()
 
     def get_spray_distance(self):
         return self.spray_distance_spin.value()
