@@ -38,7 +38,7 @@ DEFAULT_SPRAY_DISTANCE = 0.52
 DEFAULT_PATH_INDEX = 0
 DEFAULT_COMPONENT_NAME = "rectangleRoundedCorners"
 COMPONENT_TRANSFORM_KEYS = ("tx", "ty", "tz", "rx", "ry", "rz")
-ROSCORE_HOST = "localhost"
+ROSCORE_HOST = "roscore"
 MIR_TARGET_TOPIC = "/mir_target_pose"
 UR_TARGET_TOPIC = "/ur_target_pose"
 
