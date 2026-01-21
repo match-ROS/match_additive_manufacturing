@@ -30,7 +30,7 @@ from typing import Any, cast
 from PyQt5.QtGui import QIcon
 from ros_interface import start_status_update, ur_follow_trajectory, open_rviz, launch_drivers, quit_drivers, turn_on_arm_controllers, turn_on_twist_controllers, stop_mir_motion, stop_idx_advancer, stop_ur_motion, stop_all_but_drivers
 from ros_interface import enable_all_urs, move_to_home_pose, parse_mir_path, parse_ur_path, move_mir_to_start_pose, move_ur_to_start_pose, mir_follow_trajectory, increment_path_index, target_broadcaster
-from ros_interface import ROSInterface
+from ros_interface import ROSInterface , toggle_simulation_mode
 import os
 import math
 import html
@@ -87,7 +87,7 @@ class ROSGui(QWidget):
         for robot in self.robots.keys():
             row = QHBoxLayout(); row.addWidget(QLabel(robot)); mir_label = QLabel("MiR: –"); ur_label = QLabel("UR: –"); row.addWidget(mir_label); row.addWidget(ur_label); self.battery_labels[robot] = (mir_label, ur_label); self.battery_layout.addLayout(row)
         ur_layout = QVBoxLayout(); ur_layout.addWidget(QLabel("Select URs:")); self.ur10_l = QCheckBox("UR10_l"); self.ur10_r = QCheckBox("UR10_r"); self.ur10_l.setChecked(False); self.ur10_r.setChecked(True); ur_layout.addWidget(self.ur10_l); ur_layout.addWidget(self.ur10_r)
-        sim_mode_layout = QHBoxLayout(); self.sim_mode_checkbox = QCheckBox("Simulation Mode"); self.sim_mode_checkbox.setChecked(False); sim_mode_layout.addWidget(self.sim_mode_checkbox); ur_layout.addLayout(sim_mode_layout)
+        sim_mode_layout = QHBoxLayout(); self.sim_mode_checkbox = QCheckBox("Simulation Mode"); self.sim_mode_checkbox.setChecked(False); sim_mode_layout.addWidget(self.sim_mode_checkbox); ur_layout.addLayout(sim_mode_layout); self.sim_mode_checkbox.toggled.connect(self._handle_simulation_mode_toggle)
         selection_layout.addLayout(robot_layout); selection_layout.addLayout(ur_layout); selection_group.setLayout(selection_layout); left_layout.addWidget(selection_group)
         # Override
         override_layout = QVBoxLayout()
@@ -870,6 +870,9 @@ class ROSGui(QWidget):
 
     def get_override_value(self):
         return self.override_slider.value()
+
+    def _handle_simulation_mode_toggle(self, enabled: bool):
+        toggle_simulation_mode(self.ros_interface, enabled)
 
     def _handle_turbo_mode_toggle(self, enabled: bool):
         if not hasattr(self, 'override_slider'):

@@ -75,6 +75,14 @@ def _build_debug_env(gui, base_env=None):
         env.pop("ROSCONSOLE_CONFIG_FILE", None)
     return env
 
+def toggle_simulation_mode(gui, enabled: bool):
+    if enabled:
+        print("Simulation mode enabled.")
+        global ROSCORE_HOST
+        ROSCORE_HOST = "localhost"
+    else:
+        print("Simulation mode disabled.")
+        ROSCORE_HOST = "roscore"
 
 def _remote_debug_prefix(gui, workspace: Optional[str] = None) -> str:
     workspace = (workspace or "").strip()
@@ -2301,7 +2309,7 @@ def move_mir_to_start_pose(gui):
     command = (
         "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch "
         f"robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()} "
-        f"path_topic:={mir_path_topic}{ns_arg}"
+        f"path_topic:={mir_path_topic}{ns_arg} path_ns:={ns_clean}"
     )
     rospy.loginfo(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)
