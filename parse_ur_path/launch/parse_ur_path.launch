@@ -6,8 +6,8 @@
     <arg name="rx" default="0.0" />
     <arg name="ry" default="0.0" />
     <arg name="rz" default="0.0" />
-    <arg name="path_namespace" default="" />
-    <group ns="$(arg path_namespace)">
+    <arg name="path_ns" default="" />
+    <group ns="$(arg path_ns)">
         <!-- Node that runs the path transformer script -->
         <node name="retrieve_and_publish_ur_path" pkg="parse_ur_path" type="retrieve_and_publish_path.py" output="screen">
             <param name="component_name" value="$(arg component_name)" />
@@ -20,7 +20,7 @@
             <param name="rx" value="$(arg rx)" />
             <param name="ry" value="$(arg ry)" />
             <param name="rz" value="$(arg rz)" />
-            <param name="path_namespace" value="$(arg path_namespace)" />
+            <param name="path_namespace" value="$(arg path_ns)" />
         </node>
     </group>
 </launch>
