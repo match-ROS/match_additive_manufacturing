@@ -59,23 +59,32 @@ def _load_component_modules(component_name):
     return modules
 
 
-def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
+def apply_transformation(poses, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
 
     # Convert rotation from Euler angles to a quaternion
     quaternion = tf.quaternion_from_euler(rx, ry, rz)
      
-    for i in range(start_index, len(x_coords)-1):
+    for i in range(start_index, len(poses)-1):
         pose_stamped = PoseStamped()
         R = tf.quaternion_matrix(quaternion)[:3, :3]
 
         # Original position + translation
-        pose_stamped.pose.position.x = x_coords[i] + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
-        pose_stamped.pose.position.y = y_coords[i] + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
+        pose_stamped.pose.position.x = poses[i].pose.position.x + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
+        pose_stamped.pose.position.y = poses[i].pose.position.y + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
         pose_stamped.pose.position.z = tz
         # the path should always face towards the next point
-        orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
-        q = tf.quaternion_from_euler(0, 0, orientation)
+        # Calculate desired rotation as a quaternion from rx, ry, rz
+        desired_quaternion = tf.quaternion_from_euler(rx, ry, rz)
+
+        # Apply the desired quaternion to the orientation quaternion from poses
+        if rx == 0.0 and ry == 0.0 and rz == 0.0:
+            desired_quaternion = [0.0, 0.0, 0.0, 1.0]  # No rotation
+        q_original = [pose_stamped.pose.orientation.x,
+                      pose_stamped.pose.orientation.y,
+                      pose_stamped.pose.orientation.z,
+                      pose_stamped.pose.orientation.w]
+        q = tf.quaternion_multiply(q_original, desired_quaternion)
 
         pose_stamped.pose.orientation.x = q[0]
         pose_stamped.pose.orientation.y = q[1]
@@ -202,7 +211,7 @@ def publish_paths():
     timestamps_msg.data = list(t_coords)
     
     # Transform and fill transformed Path message
-    transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
+    transformed_path.poses = apply_transformation(original_path.poses, tx, ty, tz, rx, ry, rz)
     
     set_metadata(layer_numbers, resolved_namespace)
 
