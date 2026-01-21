@@ -90,11 +90,15 @@ class LocalRetimingOptimizerNode:
         self.mount_x = float(rospy.get_param("~ur_mount_x", 0.549))
         self.mount_y = float(rospy.get_param("~ur_mount_y", -0.318))
 
+        # Äquivalenter Radius für Drehbewegung (ca. halber Radabstand)
+        self.equiv_radius = float(rospy.get_param("~equiv_radius", 0.45))
+
+
         # Constraint (XY only)
         self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
 
         # Optimization params
-        self.max_iters = int(rospy.get_param("~max_iters", 400))
+        self.max_iters = int(rospy.get_param("~max_iters", 600))
 
         # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
         self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.10))  # top 10% segments
@@ -365,43 +369,86 @@ class LocalRetimingOptimizerNode:
         rospy.loginfo(f"Done index-offset optimization. best_obj={obj_best:.4f}, accepted={accepted}")
         return di_best
 
+    def _equivalent_arc_length(self,
+                               mir_xyz: np.ndarray,
+                               mir_yaw: np.ndarray,
+                               ts0: np.ndarray) -> np.ndarray:
+        """
+        Berechnet eine äquivalente kumulative Weglänge s[k], die Translation
+        und Rotation berücksichtigt:
+
+            v_lin = Δp / Δt
+            w     = Δyaw / Δt
+            v_rot = |w| * equiv_radius
+
+            v_eff = max(v_lin, v_rot)
+            Δs    = v_eff * Δt
+
+        Rückgabe: s[k] mit s[0] = 0, kumulativ.
+        """
+        N = len(ts0)
+        s = np.zeros((N,), dtype=np.float64)
+        if N < 2:
+            return s
+
+        mir_xy = mir_xyz[:, :2].astype(np.float64)
+
+        # Translation
+        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)  # Länge N-1
+
+        # Yaw-Differenzen mit Wrap auf [-pi, pi]
+        dyaw_raw = np.diff(mir_yaw)  # N-1
+        dyaw = np.arctan2(np.sin(dyaw_raw), np.cos(dyaw_raw))
+
+        # Zeitdifferenzen
+        dt = np.diff(ts0)
+        dt = np.maximum(dt, 1e-9)
+
+        v_lin = dp / dt
+        w = np.abs(dyaw) / dt
+        v_rot = w * self.equiv_radius
+
+        v_eff = np.maximum(v_lin, v_rot)
+        ds = v_eff * dt
+
+        print(v_lin)
+        print(v_rot)
+        print(v_eff)
+
+
+        s[1:] = np.cumsum(ds)
+        return s
+
     def compute_constant_speed_index_offset(self,
                                             mir_xyz: np.ndarray,
+                                            mir_yaw: np.ndarray,
                                             ts0: np.ndarray) -> np.ndarray:
         """
-        Berechnet di[k], so dass der Pfad mit (annähernd) konstanter XY-Geschwindigkeit
-        bei festen Zeiten ts0[k] durchlaufen wird.
+        Berechnet di[k], so dass der Pfad mit (annähernd) konstanter
+        äquivalenter Geschwindigkeit (Translation + Rotation) bei festen
+        Zeiten ts0[k] durchlaufen wird.
 
-        Idee:
-        - s[k] = kumulative Weglänge entlang der Bahn (XY)
-        - s_target[k] = linear von 0..s_total
-        - u[k] = Index, bei dem s(u[k]) = s_target[k]
-        - di[k] = u[k] - k
+        Äquivalente Weglänge s berücksichtigt:
+            v_lin = Δp / Δt
+            v_rot = |Δyaw/Δt| * equiv_radius
+            v_eff = max(v_lin, v_rot)
         """
         N = len(ts0)
         if N < 2:
             return np.zeros((N,), dtype=np.float64)
 
-        # XY-Koordinaten
-        mir_xy = mir_xyz[:, :2].astype(np.float64)
-
-        # Kumulative Weglänge s[k]
-        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)
-        s = np.zeros((N,), dtype=np.float64)
-        s[1:] = np.cumsum(dp)
-
+        # Äquivalente kumulative Weglänge (Translation + Rotation)
+        s = self._equivalent_arc_length(mir_xyz, mir_yaw, ts0)
         s_total = float(s[-1])
         if s_total <= 1e-12:
-            # Pfad hat praktisch keine Länge -> kein Offset nötig
+            # Pfad hat praktisch keine Bewegung -> kein Offset nötig
             return np.zeros((N,), dtype=np.float64)
 
-        # Ziel-Weglänge linear in k
         k_idx = np.arange(N, dtype=np.float64)
         s_target = s_total * k_idx / float(N - 1)
 
         # Invertiere s(k): für jedes s_target finde Index u[k]
-        # s ist monoton wachsend (oder konstant) -> np.interp funktioniert
-        u = np.interp(s_target, s, k_idx)  # u[k] ist kontinuierlicher Index
+        u = np.interp(s_target, s, k_idx)  # kontinuierlicher Index
 
         di = u - k_idx
         return di
@@ -756,7 +803,8 @@ class LocalRetimingOptimizerNode:
         ur_ts = self.build_ur_time(mir_ts0, len(ur_tcp_xyz))
 
         # 1) Konstantgeschwindigkeits-Offset im Indexraum
-        di_const = self.compute_constant_speed_index_offset(mir_xyz, mir_ts0)
+        di_const = self.compute_constant_speed_index_offset(mir_xyz, mir_yaw, mir_ts0)
+
 
         # 2) Reach-Constraint prüfen und ggf. Offset global skalieren
         di_best = self.scale_di_for_reach(di_const, mir_xyz, mir_yaw,

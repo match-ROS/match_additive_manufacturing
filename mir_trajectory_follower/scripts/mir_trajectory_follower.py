@@ -40,6 +40,7 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.35)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
+        self.angular_distance_threshold = rospy.get_param("~angular_distance_threshold", 0.07)  # in radians
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
@@ -67,6 +68,7 @@ class PurePursuitNode:
         self.start_condition_topic = self._normalize_topic(rospy.get_param("~start_condition_topic", "/start_condition"))
         self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
         self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
+        self.low_linear_velocity_threshold = rospy.get_param("~low_linear_velocity_threshold", 0.005)  # Schwelle für niedrige lineare Geschwindigkeit (unterhalb wird als Drehung auf der Stelle betrachtet)
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 1.0)  # Maximaler Abstandsfehler
@@ -131,17 +133,27 @@ class PurePursuitNode:
         return value if value.startswith('/') else f"/{value}" if value else value
         
 
-    def reached_target(self, target_position):
+    def reached_target(self, target_pose, target_velocity_lin, target_velocity_ang):
         if self.current_pose is None:
             return False
         
         current_position = self.current_pose.position
-        distance = math.sqrt((target_position.x - current_position.x) ** 2 + (target_position.y - current_position.y) ** 2)
+        distance = math.sqrt((target_pose.position.x - current_position.x) ** 2 + (target_pose.position.y - current_position.y) ** 2)
         # compute lateral and tangential distance
         orientation = self.get_yaw_from_pose(self.current_pose)
-        direction = math.atan2(target_position.y - current_position.y, target_position.x - current_position.x)
+        direction = math.atan2(target_pose.position.y - current_position.y, target_pose.position.x - current_position.x)
         self.lateral_distance = distance * math.sin(direction - orientation)
         tangent_distance = distance * math.cos(direction - orientation)
+
+        # check if the robot is supposed to rotate in place or at low linear speed
+        if abs(target_velocity_lin) < self.low_linear_velocity_threshold:
+            # only consider orientation error
+            raw_ang_err = self.calculate_orientation_error(
+                self.current_pose,
+                Pose(orientation=target_pose.orientation)
+            )
+            orientation_error = wrap_to_pi(raw_ang_err)
+            return abs(orientation_error) < self.angular_distance_threshold
 
         return abs(tangent_distance) < self.tangent_distance_threshold and abs(self.lateral_distance) < self.lateral_distance_threshold
 
@@ -166,7 +178,7 @@ class PurePursuitNode:
                 continue
             
             # check if the current path index is reaced 
-            if self.reached_target(self.path[self.current_mir_path_index].pose.position):
+            if self.reached_target(self.path[self.current_mir_path_index].pose, self.path_velocities_lin[self.current_mir_path_index], self.path_velocities_ang[self.current_mir_path_index]):
                 self.current_mir_path_index += 1
                 self.current_sub_step = 0
                 # check if trajectory is finished
@@ -248,7 +260,6 @@ class PurePursuitNode:
                  target_pose.orientation.y,
                  target_pose.orientation.z,
                  target_pose.orientation.w]
-
         q_rel = tr.quaternion_multiply(q_tgt, tr.quaternion_conjugate(q_curr))
         _, _, yaw = tr.euler_from_quaternion(q_rel)
         return yaw

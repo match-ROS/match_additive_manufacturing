@@ -79,12 +79,16 @@ def apply_transformation(poses, tx, ty, tz, rx, ry, rz):
 
         # Apply the desired quaternion to the orientation quaternion from poses
         if rx == 0.0 and ry == 0.0 and rz == 0.0:
-            desired_quaternion = [0.0, 0.0, 0.0, 1.0]  # No rotation
-        q_original = [pose_stamped.pose.orientation.x,
+            q = [poses[i].pose.orientation.x,
+                 poses[i].pose.orientation.y,
+                 poses[i].pose.orientation.z,
+                 poses[i].pose.orientation.w]
+        else:
+            q_original = [pose_stamped.pose.orientation.x,
                       pose_stamped.pose.orientation.y,
                       pose_stamped.pose.orientation.z,
                       pose_stamped.pose.orientation.w]
-        q = tf.quaternion_multiply(q_original, desired_quaternion)
+            q = tf.quaternion_multiply(q_original, desired_quaternion)
 
         pose_stamped.pose.orientation.x = q[0]
         pose_stamped.pose.orientation.y = q[1]
