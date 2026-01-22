@@ -95,7 +95,7 @@ class LocalRetimingOptimizerNode:
 
         # Maximaler äquivalenter Rotations-"Speed" in m/s
         # verhindert, dass einzelne Dreh-Spikes das Mapping dominieren
-        self.max_rot_equiv_speed = float(rospy.get_param("~max_rot_equiv_speed", 0.6))
+        self.max_rot_equiv_speed = float(rospy.get_param("~max_rot_equiv_speed", 0.3))
 
         # Schwelle, ab der wir sagen: der Roboter "fährt wirklich"
         # (darüber ignorieren wir v_rot und glätten nur v_lin)
@@ -121,7 +121,7 @@ class LocalRetimingOptimizerNode:
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 1.6))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
@@ -143,6 +143,8 @@ class LocalRetimingOptimizerNode:
         # Publishers (hier weiterhin original timestamps, falls benötigt)
         self.pub_ts = rospy.Publisher(self.out_ts_topic, Float32MultiArray, queue_size=1, latch=True)
         self.pub_dt = rospy.Publisher(self.out_dt_topic, Float32MultiArray, queue_size=1, latch=True)
+
+        self.clamp_hits = None  # wird zur Laufzeit gefüllt
 
     # -------------------------------------------------------------------------
     # Allgemeine Utilities
@@ -268,12 +270,16 @@ class LocalRetimingOptimizerNode:
                    di: np.ndarray,
                    di_max: float | None = None,
                    min_step: float | None = None,
-                   max_step: float | None = None) -> np.ndarray:
+                   max_step: float | None = None,
+                   debug_hits: np.ndarray | None = None) -> np.ndarray:
         """
         Erzwingt:
         - |di[k]| <= di_max
         - i_eff[k] = k + di[k] in [0, N-1]
         - monotone i_eff mit Schrittweite in [min_step, max_step]
+
+        Wenn debug_hits übergeben wird (shape (N,)), wird bei jedem
+        geklemmten Schritt der Zähler erhöht.
         """
         if di_max is None:
             di_max = self.di_max
@@ -289,13 +295,20 @@ class LocalRetimingOptimizerNode:
         i_eff = k + np.clip(di, -di_max, di_max)
         i_eff[0] = 0.0  # erster Punkt = Start
 
+        debug_hits = self.clamp_hits 
+
         for n in range(1, N):
+            raw = i_eff[n]
             min_i = i_eff[n - 1] + min_step
             max_i = min(i_eff[n - 1] + max_step, float(N - 1))
-            i_eff[n] = np.clip(i_eff[n], min_i, max_i)
+            clipped = np.clip(raw, min_i, max_i)
+            if debug_hits is not None and abs(clipped - raw) > 1e-9:
+                debug_hits[n] += 1
+            i_eff[n] = clipped
 
         di_repaired = i_eff - k
         return di_repaired
+
     
     def repair_di_const(self,di: np.ndarray, di_max: float) -> np.ndarray:
         """
@@ -376,7 +389,8 @@ class LocalRetimingOptimizerNode:
                 raise ValueError("di_init length mismatch")
 
         # Sicherstellen, dass Startlösung gültig ist:
-        di_best = self._repair_di(di_best)
+        self.clamp_hits = np.zeros_like(di_best, dtype=np.int32)
+        di_best = self._repair_di(di_best, debug_hits=self.clamp_hits)
         v0 = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
         obj_best = self.objective(v0)
 
@@ -403,7 +417,7 @@ class LocalRetimingOptimizerNode:
             obj_prop = self.objective(v_prop)
 
             if obj_prop + self.accept_tol < obj_best:
-                di_best = di_prop
+                di_best = self._repair_di(di_prop, debug_hits=self.clamp_hits)
                 obj_best = obj_prop
                 accepted += 1
 
@@ -486,6 +500,7 @@ class LocalRetimingOptimizerNode:
         N = len(ts0)
         if N < 2:
             return np.zeros((N,), dtype=np.float64)
+
 
         # Äquivalente kumulative Weglänge (Translation + Rotation)
         s = self._equivalent_arc_length(mir_xyz, mir_yaw, ts0)
@@ -695,7 +710,8 @@ class LocalRetimingOptimizerNode:
         if not (self.save_plot and HAS_PLOT):
             return
 
-        v_orig = np.linalg.norm(np.diff(mir_xyz[:, :2], axis=0), axis=1) / np.maximum(np.diff(t0), 1e-9)
+        mir_xy = mir_xyz[:, :2]
+        v_orig = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1) / np.maximum(np.diff(t0), 1e-9)
         v_appl = self.compute_speed_with_index_offset(mir_xyz, t0, di)
 
         grad_di = np.diff(di)
@@ -882,6 +898,14 @@ class LocalRetimingOptimizerNode:
 
         rospy.loginfo(f"Optimized di_best: min={float(np.min(di_best)):.3f}, "
                       f"max={float(np.max(di_best)):.3f}")
+        
+        # Top 10 Indizes mit den meisten Clamps
+        if self.clamp_hits is not None:
+            idx_sorted = np.argsort(-self.clamp_hits)
+            top = idx_sorted[:10]
+            rospy.loginfo("Top clamp indices (index : hits): " +
+                        ", ".join(f"{int(i)}:{int(self.clamp_hits[i])}"
+                                    for i in top if self.clamp_hits[i] > 0))
 
         # 3) Publish: originale Zeitstempel (unverändert)
         self.publish(mir_ts0)
