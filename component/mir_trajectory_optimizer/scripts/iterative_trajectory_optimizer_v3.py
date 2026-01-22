@@ -103,6 +103,10 @@ class LocalRetimingOptimizerNode:
             rospy.get_param("~rotation_only_threshold", 0.02)
         )  # m/s
 
+        # Anzahl der vorderen Pfadpunkte, die von der Index-Optimierung
+        # explizit ausgenommen werden sollen (di = 0)
+        self.ignore_prefix_points = int(rospy.get_param("~ignore_prefix_points", 100))
+
 
         # Constraint (XY only)
         self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
@@ -115,9 +119,9 @@ class LocalRetimingOptimizerNode:
         self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.20))  # bottom 20% segments
 
         # Grenzen im Indexraum
-        self.di_max = float(rospy.get_param("~di_max", 80.0))      # max |index offset|
+        self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 2.5))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "peak")  # "peak" or "l2"
@@ -292,6 +296,25 @@ class LocalRetimingOptimizerNode:
 
         di_repaired = i_eff - k
         return di_repaired
+    
+    def repair_di_const(self,di: np.ndarray, di_max: float) -> np.ndarray:
+        """
+        Sanfte Reparatur nur für die Konstantgeschwindigkeits-Lösung:
+        - begrenzt |di[k]| auf di_max
+        - erzwingt monotones i_eff (keine Rückwärtsbewegung)
+        - KEIN max_step-Clamping -> keine dauerhafte 2.0-Sättigung
+        """
+        N = len(di)
+        k = np.arange(N, dtype=np.float64)
+
+        # globaler Offset-Clip
+        i_eff = k + np.clip(di, -di_max, di_max)
+
+        # nur monotone Steigerung erzwingen
+        i_eff = np.maximum.accumulate(i_eff)
+
+        return i_eff - k
+
 
     def propose_offset_step(self, di: np.ndarray, v: np.ndarray) -> np.ndarray:
         """
@@ -335,20 +358,33 @@ class LocalRetimingOptimizerNode:
                               mir_yaw: np.ndarray,
                               ts0: np.ndarray,
                               ur_tcp_xyz: np.ndarray,
-                              ur_ts: np.ndarray) -> np.ndarray:
+                              ur_ts: np.ndarray,
+                              di_init: np.ndarray | None = None) -> np.ndarray:
         """
-        Optimiert di[k] so, dass die reale Geschwindigkeit mit Indexoffset
-        bei festen Zeiten ts0 glatter wird und die Reach-Constraint erfüllt bleibt.
+        Iterative Optimierung von di[k]:
+        - Startet von di_init (oder 0, falls None)
+        - reduziert Peak- oder L2-Geschwindigkeit
+        - beachtet Reach-Constraint in jeder Iteration
         """
         N = len(ts0)
-        di_best = np.zeros((N,), dtype=np.float64)
 
+        if di_init is None:
+            di_best = np.zeros((N,), dtype=np.float64)
+        else:
+            di_best = np.array(di_init, dtype=np.float64)
+            if len(di_best) != N:
+                raise ValueError("di_init length mismatch")
+
+        # Sicherstellen, dass Startlösung gültig ist:
+        di_best = self._repair_di(di_best)
         v0 = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
         obj_best = self.objective(v0)
 
-        ok0, dmax0 = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di_best,
-                                                     ur_tcp_xyz, ur_ts)
-        rospy.loginfo(f"Initial (di=0): obj={obj_best:.4f} reach_ok={ok0} dmax={dmax0:.3f} m")
+        ok0, dmax0 = self.check_reach_xy_with_offset(
+            mir_xyz, mir_yaw, ts0, di_best, ur_tcp_xyz, ur_ts
+        )
+        rospy.loginfo(f"Initial in optimize_index_offset: obj={obj_best:.4f} "
+                      f"reach_ok={ok0} dmax={dmax0:.3f} m")
 
         accepted = 0
         last_log = time.time()
@@ -357,8 +393,9 @@ class LocalRetimingOptimizerNode:
             v = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
             di_prop = self.propose_offset_step(di_best, v)
 
-            ok, dmax = self.check_reach_xy_with_offset(mir_xyz, mir_yaw, ts0, di_prop,
-                                                       ur_tcp_xyz, ur_ts)
+            ok, dmax = self.check_reach_xy_with_offset(
+                mir_xyz, mir_yaw, ts0, di_prop, ur_tcp_xyz, ur_ts
+            )
             if not ok:
                 continue
 
@@ -372,12 +409,16 @@ class LocalRetimingOptimizerNode:
 
             now = time.time()
             if now - last_log > 1.0:
-                rospy.loginfo(f"[it {it:4d}/{self.max_iters}] obj={obj_best:.4f} "
-                              f"dmax={dmax:.3f}m accepted={accepted}")
+                rospy.loginfo(
+                    f"[it {it:4d}/{self.max_iters}] obj={obj_best:.4f} "
+                    f"dmax={dmax:.3f}m accepted={accepted}"
+                )
                 last_log = now
 
-        rospy.loginfo(f"Done index-offset optimization. best_obj={obj_best:.4f}, accepted={accepted}")
+        rospy.loginfo(f"Done index-offset optimization. best_obj={obj_best:.4f}, "
+                      f"accepted={accepted}")
         return di_best
+
 
     def _equivalent_arc_length(self,
                                mir_xyz: np.ndarray,
@@ -821,32 +862,41 @@ class LocalRetimingOptimizerNode:
 
         ur_ts = self.build_ur_time(mir_ts0, len(ur_tcp_xyz))
 
-        # 1) Konstantgeschwindigkeits-Offset im Indexraum
+        # 1) Konstantgeschwindigkeits-Offset als Startlösung
         di_const = self.compute_constant_speed_index_offset(mir_xyz, mir_yaw, mir_ts0)
 
-        # 1b) Index-Offset reparieren: Schrittweiten und Grenzen erzwingen
-        di_const = self._repair_di(di_const)
+        # 1a) optional: leicht reparieren (Grenzen, Monotonie)
+        di_const = self._repair_di(di_const, min_step=0.0)
 
-        # 2) Reach-Constraint prüfen und ggf. Offset global skalieren
-        di_best = self.scale_di_for_reach(di_const, mir_xyz, mir_yaw,
+        # 1b) Reach-Constraint global einhalten
+        di_init = self.scale_di_for_reach(di_const, mir_xyz, mir_yaw,
                                           mir_ts0, ur_tcp_xyz, ur_ts)
 
+        rospy.loginfo(f"Initial di_init: min={float(np.min(di_init)):.3f}, "
+                      f"max={float(np.max(di_init)):.3f}")
 
-        rospy.loginfo(f"di_best: min={float(np.min(di_best)):.3f}, max={float(np.max(di_best)):.3f}")
+        # 2) Iterative lokale Optimierung (DAS ist jetzt die eigentliche Optimierung)
+        di_best = self.optimize_index_offset(
+            mir_xyz, mir_yaw, mir_ts0, ur_tcp_xyz, ur_ts, di_init=di_init
+        )
+
+        rospy.loginfo(f"Optimized di_best: min={float(np.min(di_best)):.3f}, "
+                      f"max={float(np.max(di_best)):.3f}")
 
         # 3) Publish: originale Zeitstempel (unverändert)
         self.publish(mir_ts0)
 
-        # 4) CSV-Export: originale Zeitstempel + Indexoffset
+        # 4) CSV-Export: originale Zeitstempel + finaler Indexoffset
         self.export_csv_lines(mir_ts0, di_best)
 
-        # 5) Plots (alle Plot-Funktionen aus dem Original integriert)
+        # 5) Plots mit dem FINALEN di_best
         if self.save_plot and HAS_PLOT:
             self.plot_debug(mir_xyz, mir_ts0, di_best)
             self.plot_xy_first_layer(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
             self.debug_offset_effects(mir_xyz, mir_ts0, di_best)
             self.plot_xy_first_layer_index_offset(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
             self.plot_xy_first_layer_index_gradient(mir_xyz, ur_tcp_xyz, mir_ts0, di_best)
+
 
 
 if __name__ == "__main__":
