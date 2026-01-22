@@ -121,10 +121,10 @@ class LocalRetimingOptimizerNode:
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 2.5))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
 
         # Objective
-        self.obj_mode = rospy.get_param("~objective", "peak")  # "peak" or "l2"
+        self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
         self.accept_tol = float(rospy.get_param("~accept_tol", 1e-9))
 
         # Plotting
