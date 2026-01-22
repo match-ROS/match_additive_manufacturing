@@ -97,6 +97,12 @@ class LocalRetimingOptimizerNode:
         # verhindert, dass einzelne Dreh-Spikes das Mapping dominieren
         self.max_rot_equiv_speed = float(rospy.get_param("~max_rot_equiv_speed", 0.6))
 
+        # Schwelle, ab der wir sagen: der Roboter "fährt wirklich"
+        # (darüber ignorieren wir v_rot und glätten nur v_lin)
+        self.rotation_only_threshold = float(
+            rospy.get_param("~rotation_only_threshold", 0.02)
+        )  # m/s
+
 
         # Constraint (XY only)
         self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
@@ -110,8 +116,8 @@ class LocalRetimingOptimizerNode:
 
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 80.0))      # max |index offset|
-        self.min_step = float(rospy.get_param("~min_step", 0.2))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 2.0))   # max i_eff-Schritt
+        self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "peak")  # "peak" or "l2"
@@ -378,15 +384,12 @@ class LocalRetimingOptimizerNode:
                                mir_yaw: np.ndarray,
                                ts0: np.ndarray) -> np.ndarray:
         """
-        Berechnet eine äquivalente kumulative Weglänge s[k], die Translation
-        und Rotation berücksichtigt:
+        Äquivalente kumulative Weglänge s[k]:
 
-            v_lin = Δp / Δt
-            w     = Δyaw / Δt
-            v_rot = |w| * equiv_radius
-            v_eff = max(v_lin, v_rot)   (mit Clipping für v_rot)
-
-        Rückgabe: s[k] mit s[0] = 0, kumulativ.
+        - wenn v_lin >= rotation_only_threshold:
+              -> nur v_lin (wie ursprüngliche XY-Metrik)
+        - wenn v_lin <  rotation_only_threshold:
+              -> max(v_lin, v_rot) mit geclipptem v_rot
         """
         N = len(ts0)
         s = np.zeros((N,), dtype=np.float64)
@@ -396,7 +399,7 @@ class LocalRetimingOptimizerNode:
         mir_xy = mir_xyz[:, :2].astype(np.float64)
 
         # Translation
-        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)  # Länge N-1
+        dp = np.linalg.norm(np.diff(mir_xy, axis=0), axis=1)  # N-1
 
         # Yaw-Differenzen mit Wrap auf [-pi, pi]
         dyaw_raw = np.diff(mir_yaw)  # N-1
@@ -406,20 +409,24 @@ class LocalRetimingOptimizerNode:
         dt = np.diff(ts0)
         dt = np.maximum(dt, 1e-9)
 
-        v_lin = dp / dt
+        v_lin = dp / dt                     # reine Translationsgeschwindigkeit
         w = np.abs(dyaw) / dt
-
-        # Rotations-"Speed" in m/s-Äquivalent
-        v_rot = w * self.equiv_radius
-        # *** WICHTIG: Spike-Clip ***
+        v_rot = w * self.equiv_radius       # Rotations-"Speed" in m/s-Äquivalent
         v_rot = np.minimum(v_rot, self.max_rot_equiv_speed)
 
-        # Effektive Geschwindigkeit
-        v_eff = np.sqrt(v_lin**2 + v_rot**2)
+        # Maske: wo "fährt" der Roboter wirklich?
+        move_mask = v_lin >= self.rotation_only_threshold
+
+        # Basis: überall v_lin
+        v_eff = v_lin.copy()
+
+        # Nur dort, wo kaum Translation ist, Rotation berücksichtigen
+        v_eff[~move_mask] = np.maximum(v_lin[~move_mask], v_rot[~move_mask])
 
         ds = v_eff * dt
         s[1:] = np.cumsum(ds)
         return s
+
 
     def compute_constant_speed_index_offset(self,
                                             mir_xyz: np.ndarray,
