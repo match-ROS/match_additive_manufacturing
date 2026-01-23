@@ -95,7 +95,7 @@ class LocalRetimingOptimizerNode:
 
         # Maximaler äquivalenter Rotations-"Speed" in m/s
         # verhindert, dass einzelne Dreh-Spikes das Mapping dominieren
-        self.max_rot_equiv_speed = float(rospy.get_param("~max_rot_equiv_speed", 0.3))
+        self.max_rot_equiv_speed = float(rospy.get_param("~max_rot_equiv_speed", 0.8))
 
         # Schwelle, ab der wir sagen: der Roboter "fährt wirklich"
         # (darüber ignorieren wir v_rot und glätten nur v_lin)
@@ -112,16 +112,16 @@ class LocalRetimingOptimizerNode:
         self.reach_xy_max = float(rospy.get_param("~reach_xy_max", 1.30))
 
         # Optimization params
-        self.max_iters = int(rospy.get_param("~max_iters", 1600))
+        self.max_iters = int(rospy.get_param("~max_iters", 2600))
 
         # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
         self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.10))  # top 10% segments
-        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.20))  # bottom 20% segments
+        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.01))  # bottom 20% segments
 
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 1.6))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 1.42))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
@@ -401,6 +401,7 @@ class LocalRetimingOptimizerNode:
                       f"reach_ok={ok0} dmax={dmax0:.3f} m")
 
         accepted = 0
+        accepted_old = 0
         last_log = time.time()
 
         for it in range(1, self.max_iters + 1):
@@ -428,6 +429,11 @@ class LocalRetimingOptimizerNode:
                     f"dmax={dmax:.3f}m accepted={accepted}"
                 )
                 last_log = now
+
+            if not accepted > accepted_old:
+                # keine Verbesserung in dieser Iteration
+                break
+            accepted_old = accepted
 
         rospy.loginfo(f"Done index-offset optimization. best_obj={obj_best:.4f}, "
                       f"accepted={accepted}")

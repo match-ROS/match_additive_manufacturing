@@ -40,13 +40,13 @@ class PurePursuitNode:
         self.lookahead_distance = rospy.get_param("~lookahead_distance", 0.1)
         self.lateral_distance_threshold = rospy.get_param("~lateral_distance_threshold", 0.35)
         self.tangent_distance_threshold = rospy.get_param("~tangent_distance_threshold", 0.04)
-        self.angular_distance_threshold = rospy.get_param("~angular_distance_threshold", 0.07)  # in radians
+        self.angular_distance_threshold = rospy.get_param("~angular_distance_threshold", 0.11)  # in radians
         self.search_range = rospy.get_param("~search_range", 5) # Number of points to search for lookahead point
         self.Kv = rospy.get_param("~Kv", 1.0)  # Linear speed multiplier
         self.Kw = rospy.get_param("~Kw", 1.0)  # Angular speed multiplier
         self.Ky = rospy.get_param("~Ky", 0.3)  # Lateral error multiplier
         self.K_distance = rospy.get_param("~K_distance", 0.0)  # Distance error multiplier
-        self.K_orientation = rospy.get_param("~K_orientation", 0.3)  # Orientation error multiplier
+        self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.02)  # Index error multiplier
         self.mir_path_topic = self._normalize_topic(rospy.get_param("~mir_path_topic", "/mir_path_transformed"))
         self.mir_pose_topic = self._normalize_topic(rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple"))
@@ -68,7 +68,7 @@ class PurePursuitNode:
         self.start_condition_topic = self._normalize_topic(rospy.get_param("~start_condition_topic", "/start_condition"))
         self.wait_for_start_condition = rospy.get_param("~wait_for_start_condition", True)
         self.initial_path_index = self._parse_initial_path_index(rospy.get_param("~initial_path_index", -1))
-        self.low_linear_velocity_threshold = rospy.get_param("~low_linear_velocity_threshold", 0.005)  # Schwelle für niedrige lineare Geschwindigkeit (unterhalb wird als Drehung auf der Stelle betrachtet)
+        self.low_linear_velocity_threshold = rospy.get_param("~low_linear_velocity_threshold", 0.01)  # Schwelle für niedrige lineare Geschwindigkeit (unterhalb wird als Drehung auf der Stelle betrachtet)
 
         # Fehlergrenzen. Beim Überschreiten wird die Pfadverfolgung abgebrochen
         self.max_distance_error = rospy.get_param("~max_distance_error", 1.0)  # Maximaler Abstandsfehler
@@ -288,7 +288,7 @@ class PurePursuitNode:
 
         target_v = self.Kv*feedforward_v + self.K_distance*distance_error * self.current_sub_step_progress
         target_v = target_v * (1.0 + self.K_idx*index_error)
-        target_w = math.sin(self.K_orientation*orientation_error) * self.current_sub_step_progress + self.Kw*feedforward_w + self.Ky * self.lateral_distance * np.sign(target_v)
+        target_w = self.K_orientation*math.sin(orientation_error) * self.current_sub_step_progress + self.Kw*feedforward_w + self.Ky * self.lateral_distance * np.sign(target_v)
         target_w = target_w * (1.0 + self.K_idx*index_error)
 
         target_v = max(0.0, target_v) * self.override
@@ -435,7 +435,7 @@ class PurePursuitNode:
     def _update_active_state(self):
         should_be_active = self.control_enabled and self.ur_trajectory_index > 0
         if should_be_active and not self.is_active:
-            rospy.loginfo("Trajectory index available and start condition met – starting MIR path following.")
+            rospy.loginfo_throttle(5.0, "Trajectory index available and start condition met – starting MIR path following.")
         self.is_active = should_be_active
 
     @staticmethod

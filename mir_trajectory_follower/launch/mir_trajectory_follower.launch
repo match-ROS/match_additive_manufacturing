@@ -34,7 +34,7 @@
     </node> -->
 
     <node name="mir_index_offset_applier" pkg="mir_trajectory_follower" type="mir_index_offset_applier.py" output="screen">
-        <param name="gain" value="0.0" />
+        <param name="gain" value="1.0" />
         <param name="rounding" value="round" />
         <param name="offset_topic" value="$(arg path_ns_prefix)/mir_index_offset" />
         <param name="ur_index_topic" value="$(arg path_index_topic)" />
