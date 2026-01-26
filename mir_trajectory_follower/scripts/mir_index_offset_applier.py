@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import rospy
-from std_msgs.msg import Float32MultiArray, Int32
+from std_msgs.msg import Float32MultiArray, Int32, Bool
 
 class MirIndexOffsetApplier:
     def __init__(self):
@@ -20,7 +20,7 @@ class MirIndexOffsetApplier:
 
         rospy.Subscriber(self.offset_topic, Float32MultiArray, self._cb_offset, queue_size=1)
         rospy.Subscriber(self.ur_index_topic, Int32, self._cb_ur_index, queue_size=50)
-        rospy.Subscriber(self.start_signal_topic, Int32, self._cb_start_signal, queue_size=1)
+        rospy.Subscriber(self.start_signal_topic, Bool, self._cb_start_signal, queue_size=1)
 
         rospy.loginfo("MirIndexOffsetApplier up. offset=%s ur_index=%s out=%s gain=%.3f rounding=%s",
                       self.offset_topic, self.ur_index_topic, self.out_topic, self.gain, self.rounding)
