@@ -69,7 +69,7 @@ class MirIndexOffsetApplier:
         candidate = self._apply_rounding(ur_idx + weighted_offset)
         self._publish_with_monotonic_guard(candidate, ur_idx=ur_idx, raw_offset=raw_offset)
         # log index offset
-        rospy.loginfo_throttle(0.5,
+        rospy.loginfo_throttle(5,
             "UR index: %d, raw offset: %.4f, gain: %.3f -> weighted offset: %.4f -> MiR index: %d",
             ur_idx, raw_offset, self.gain, weighted_offset, candidate
         )

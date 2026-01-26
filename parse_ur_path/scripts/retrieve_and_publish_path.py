@@ -122,25 +122,36 @@ class PathTransfomer:
         self.normals.vectors = [Vector3(x=n[0], y=n[1], z=0) for n in normals]
         return normals
 
-    def apply_transformation(self, x_coords, y_coords, z_coords, tx, ty, tz, rx, ry, rz, timestamps=None):
+    def apply_transformation(self, poses, tx, ty, tz, rx, ry, rz, timestamps=None):
         if timestamps is None:
-            timestamps = [rospy.Time.from_sec(i*0.1) for i in range(len(x_coords))]
+            timestamps = [rospy.Time.from_sec(i*0.1) for i in range(len(poses))]
         transformed_poses = []
 
         # Convert rotation from Euler angles to a quaternion
         quaternion = tf.quaternion_from_euler(rx, ry, rz)
         
-        for i in range(self.start_index, len(x_coords)-1):
+        for i in range(self.start_index, len(poses)-1):
             pose_stamped = PoseStamped()
             R = tf.quaternion_matrix(quaternion)[:3, :3]
 
             # Original position + translation
-            pose_stamped.pose.position.x = x_coords[i] + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
-            pose_stamped.pose.position.y = y_coords[i] + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
-            pose_stamped.pose.position.z = z_coords[i] + R[2, 0] * tx + R[2, 1] * ty + R[2, 2] * tz
+            pose_stamped.pose.position.x = poses[i].pose.position.x + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
+            pose_stamped.pose.position.y = poses[i].pose.position.y + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
+            pose_stamped.pose.position.z = poses[i].pose.position.z + R[2, 0] * tx + R[2, 1] * ty + R[2, 2] * tz
             # the path should always face towards the next point
-            orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
-            q = tf.quaternion_from_euler(0, 0, orientation)
+            original_q = [poses[i].pose.orientation.x,
+                          poses[i].pose.orientation.y,
+                          poses[i].pose.orientation.z,
+                          poses[i].pose.orientation.w]
+            # Calculate desired rotation as a quaternion from rx, ry, rz
+           
+            if rx == 0.0 and ry == 0.0 and rz == 0.0:
+                desired_quaternion = [0.0, 0.0, 0.0, 1.0]  # No rotation
+            else:
+                desired_quaternion = tf.quaternion_from_euler(rx, ry, rz)
+
+            # Apply the desired quaternion to the orientation quaternion from poses
+            q = tf.quaternion_multiply(original_q, desired_quaternion)
 
             pose_stamped.pose.orientation.x = q[0]
             pose_stamped.pose.orientation.y = q[1]
@@ -182,7 +193,7 @@ class PathTransfomer:
 
         
         # Transform and fill transformed Path message
-        self.transformed_path.poses = self.apply_transformation(self.x_coords, self.y_coords, self.z_coords, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz, self.timestamps)
+        self.transformed_path.poses = self.apply_transformation(self.original_path.poses, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz, self.timestamps)
         
     def publish(self):  
     
