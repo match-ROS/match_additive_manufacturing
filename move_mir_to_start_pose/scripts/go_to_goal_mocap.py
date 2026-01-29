@@ -12,9 +12,9 @@ class GoToGoal:
         self.pose = None
 
         # Zielposition (anpassen)
-        self.goal_x = rospy.get_param("~goal_x", 51.523826)
-        self.goal_y = rospy.get_param("~goal_y", 43.065081)
-        self.yaw_goal = rospy.get_param("~yaw_goal", -2.4130057)
+        self.goal_x = rospy.get_param("~goal_x", 48.841301)
+        self.goal_y = rospy.get_param("~goal_y", 41.671346)
+        self.yaw_goal = rospy.get_param("~yaw_goal", 2.0332128)
 
         # Reglerparameter
         self.k_lin = 0.4
