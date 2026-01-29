@@ -77,6 +77,10 @@ class LocalRetimingOptimizerNode:
     def __init__(self):
         rospy.init_node("mir_index_offset_optimizer", anonymous=False)
 
+        # Weights for combined objective (speed + acceleration)
+        self.w_speed = float(rospy.get_param("~w_speed", 1.0))
+        self.w_accel = float(rospy.get_param("~w_accel", 0.001))
+
         # Topics
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mur620c/mir_path_original")
         self.ur_path_topic = rospy.get_param("~ur_path_topic", "/mur620c/ur_path_original")
@@ -329,7 +333,7 @@ class LocalRetimingOptimizerNode:
         return i_eff - k
 
 
-    def propose_offset_step(self, di: np.ndarray, v: np.ndarray) -> np.ndarray:
+    def propose_offset_step(self, di: np.ndarray, score: np.ndarray) -> np.ndarray:
         """
         Lokale Anpassung von di:
         - schnelle Segmente: Δi_eff verkleinern (di[k+1] Richtung di[k])
@@ -342,8 +346,8 @@ class LocalRetimingOptimizerNode:
         k_fast = max(1, int(round(self.k_fast_frac * (N - 1))))
         k_slow = max(1, int(round(self.k_slow_frac * (N - 1))))
 
-        idx_fast = np.argsort(-v)[:k_fast]  # höchste v
-        idx_slow = np.argsort(v)[:k_slow]   # niedrigste v
+        idx_fast = np.argsort(-score)[:k_fast]
+        idx_slow = np.argsort(score)[:k_slow]
 
         di_new = di.copy()
         eps_idx = 0.05  # Schrittgröße im Indexraum pro Iteration
@@ -361,6 +365,48 @@ class LocalRetimingOptimizerNode:
         # Reparieren: Monotonie, Grenzen, Schrittweite
         di_new = self._repair_di(di_new)
         return di_new
+
+    def compute_speeds_and_accel_with_offset(self,
+                                             mir_xyz: np.ndarray,
+                                             ts0: np.ndarray,
+                                             di: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Returns:
+          v: (N-1,) speed per segment (XY)
+          a: (N-2,) accel estimate between segments
+        """
+        idx_eff = np.arange(len(ts0), dtype=np.float64) + di
+        mir_eff_xy = self._interp_along_index(mir_xyz[:, :2], idx_eff)
+
+        dp = np.linalg.norm(np.diff(mir_eff_xy, axis=0), axis=1)   # N-1
+        dt = np.diff(ts0)                                          # N-1
+        dt = np.maximum(dt, 1e-9)
+
+        v = dp / dt                                                # N-1
+
+        if len(v) < 3:
+            a = np.zeros((max(0, len(v)-1),), dtype=np.float64)
+            return v, a
+
+        dv = np.diff(v)                                            # N-2
+        dt_mid = 0.5 * (dt[:-1] + dt[1:])                           # N-2
+        dt_mid = np.maximum(dt_mid, 1e-9)
+
+        a = dv / dt_mid                                            # N-2
+        return v, a
+
+    def objective_va(self, v: np.ndarray, a: np.ndarray) -> float:
+        """
+        Combined objective with tunable weights.
+        """
+        if self.obj_mode == "peak":
+            j_v = float(np.max(np.abs(v))) if len(v) else 0.0
+            j_a = float(np.max(np.abs(a))) if len(a) else 0.0
+        else:
+            j_v = float(np.mean(v * v)) if len(v) else 0.0
+            j_a = float(np.mean(a * a)) if len(a) else 0.0
+        return self.w_speed * j_v + self.w_accel * j_a
+
 
     # -------------------------------------------------------------------------
     # Hauptoptimierer im Index-Offset-Raum (hier ggf. optional)
@@ -391,8 +437,8 @@ class LocalRetimingOptimizerNode:
         # Sicherstellen, dass Startlösung gültig ist:
         self.clamp_hits = np.zeros_like(di_best, dtype=np.int32)
         di_best = self._repair_di(di_best, debug_hits=self.clamp_hits)
-        v0 = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
-        obj_best = self.objective(v0)
+        v0, a0 = self.compute_speeds_and_accel_with_offset(mir_xyz, ts0, di_best)
+        obj_best = self.objective_va(v0, a0)
 
         ok0, dmax0 = self.check_reach_xy_with_offset(
             mir_xyz, mir_yaw, ts0, di_best, ur_tcp_xyz, ur_ts
@@ -405,8 +451,18 @@ class LocalRetimingOptimizerNode:
         last_log = time.time()
 
         for it in range(1, self.max_iters + 1):
-            v = self.compute_speeds_with_offset(mir_xyz, ts0, di_best)
-            di_prop = self.propose_offset_step(di_best, v)
+            v, a = self.compute_speeds_and_accel_with_offset(mir_xyz, ts0, di_best)
+
+            # Ranking-Score pro Segment: speed + "accel contribution"
+            # a hat Länge N-2, auf Segmente mappen: accel_seg[i] = |a[i-1]| + |a[i]|
+            accel_seg = np.zeros_like(v)
+            if len(a) > 0:
+                accel_seg[1:-1] = np.abs(a[:-1]) + np.abs(a[1:])
+                accel_seg[0] = np.abs(a[0])
+                accel_seg[-1] = np.abs(a[-1])
+
+            score_seg = self.w_speed * (v * v) + self.w_accel * (accel_seg * accel_seg)
+            di_prop = self.propose_offset_step(di_best, score_seg)  # nutzt jetzt score statt v
 
             ok, dmax = self.check_reach_xy_with_offset(
                 mir_xyz, mir_yaw, ts0, di_prop, ur_tcp_xyz, ur_ts
@@ -414,8 +470,8 @@ class LocalRetimingOptimizerNode:
             if not ok:
                 continue
 
-            v_prop = self.compute_speeds_with_offset(mir_xyz, ts0, di_prop)
-            obj_prop = self.objective(v_prop)
+            v_prop, a_prop = self.compute_speeds_and_accel_with_offset(mir_xyz, ts0, di_prop)
+            obj_prop = self.objective_va(v_prop, a_prop)
 
             if obj_prop + self.accept_tol < obj_best:
                 di_best = self._repair_di(di_prop, debug_hits=self.clamp_hits)
