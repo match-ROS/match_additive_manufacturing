@@ -35,6 +35,7 @@ import os
 import math
 import html
 import json
+import rospy
 
 
 Qt = cast(Any, QtCore.Qt)
@@ -337,16 +338,20 @@ class ROSGui(QWidget):
 
         print_functions_layout.addLayout(idx_box)
         
-        # Servo section
-        servo_box = QGroupBox("Dynamixel Servo Targets"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
-        left_percent, right_percent = self.ros_interface.get_cached_servo_targets()
-        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.servo_left_slider = QSlider(); self.servo_left_slider.setOrientation(Qt.Horizontal); self.servo_left_slider.setRange(0,100); self.servo_left_slider.setTickInterval(10); self.servo_left_slider.setTickPosition(QSlider.TicksBelow); self.servo_left_spin = EnterSpinBox(); self.servo_left_spin.setRange(-100,200); self.servo_left_spin.setValue(int(round(left_percent))); self.servo_left_slider.setValue(int(round(left_percent))); self.servo_left_slider.valueChanged.connect(self.servo_left_spin.setValue); self.servo_left_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_left_slider.setValue(v)); self.servo_left_spin.returnPressed.connect(self._send_percent_targets); left_col.addWidget(self.servo_left_slider); left_col.addWidget(self.servo_left_spin)
-        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.servo_right_slider = QSlider(); self.servo_right_slider.setOrientation(Qt.Horizontal); self.servo_right_slider.setRange(0,100); self.servo_right_slider.setTickInterval(10); self.servo_right_slider.setTickPosition(QSlider.TicksBelow); self.servo_right_spin = EnterSpinBox(); self.servo_right_spin.setRange(-100,200); self.servo_right_spin.setValue(int(round(right_percent))); self.servo_right_slider.setValue(int(round(right_percent))); self.servo_right_slider.valueChanged.connect(self.servo_right_spin.setValue); self.servo_right_spin.valueChanged.connect(lambda v: 0 <= v <= 100 and self.servo_right_slider.setValue(v)); self.servo_right_spin.returnPressed.connect(self._send_percent_targets); right_col.addWidget(self.servo_right_slider); right_col.addWidget(self.servo_right_spin)
-        self.servo_left_spin.valueChanged.connect(self._handle_servo_percent_change)
-        self.servo_right_spin.valueChanged.connect(self._handle_servo_percent_change)
-        self._servo_percent_timer = QTimer(self); self._servo_percent_timer.setSingleShot(True); self._servo_percent_timer.setInterval(700); self._servo_percent_timer.timeout.connect(self._persist_pending_servo_percentages); self._pending_servo_targets = (left_percent, right_percent)
-        send_col = QVBoxLayout(); send_btn = QPushButton("Send Targets"); send_btn.clicked.connect(self._send_percent_targets); send_col.addWidget(QLabel(" ")); send_col.addWidget(send_btn)
-        targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(send_col); servo_outer_layout.addLayout(targets_row)
+        # Flow control section
+        servo_box = QGroupBox("Foam Flow Control (PID)"); servo_outer_layout = QVBoxLayout(); targets_row = QHBoxLayout();
+        left_percent, right_percent = self.ros_interface.get_cached_flow_targets()
+        self._flow_baseline = {}
+        base_left, base_right = self.ros_interface.get_cached_flow_baseline()
+        self._flow_baseline["left"] = float(base_left)
+        self._flow_baseline["right"] = float(base_right)
+        left_col = QVBoxLayout(); left_col.addWidget(QLabel("Left target (%)")); self.flow_left_slider = QSlider(); self.flow_left_slider.setOrientation(Qt.Horizontal); self.flow_left_slider.setRange(0,200); self.flow_left_slider.setTickInterval(20); self.flow_left_slider.setTickPosition(QSlider.TicksBelow); self.flow_left_spin = EnterSpinBox(); self.flow_left_spin.setRange(0,200); self.flow_left_spin.setValue(int(round(left_percent))); self.flow_left_slider.setValue(int(round(left_percent))); self.flow_left_slider.valueChanged.connect(self.flow_left_spin.setValue); self.flow_left_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_left_slider.setValue(v)); left_col.addWidget(self.flow_left_slider); left_col.addWidget(self.flow_left_spin)
+        right_col = QVBoxLayout(); right_col.addWidget(QLabel("Right target (%)")); self.flow_right_slider = QSlider(); self.flow_right_slider.setOrientation(Qt.Horizontal); self.flow_right_slider.setRange(0,200); self.flow_right_slider.setTickInterval(20); self.flow_right_slider.setTickPosition(QSlider.TicksBelow); self.flow_right_spin = EnterSpinBox(); self.flow_right_spin.setRange(0,200); self.flow_right_spin.setValue(int(round(right_percent))); self.flow_right_slider.setValue(int(round(right_percent))); self.flow_right_slider.valueChanged.connect(self.flow_right_spin.setValue); self.flow_right_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_right_slider.setValue(v)); right_col.addWidget(self.flow_right_slider); right_col.addWidget(self.flow_right_spin)
+        self.flow_left_spin.valueChanged.connect(self._handle_flow_target_change)
+        self.flow_right_spin.valueChanged.connect(self._handle_flow_target_change)
+        self._flow_target_timer = QTimer(self); self._flow_target_timer.setSingleShot(True); self._flow_target_timer.setInterval(700); self._flow_target_timer.timeout.connect(self._persist_pending_flow_targets); self._pending_flow_targets = (left_percent, right_percent)
+        mid_col = QVBoxLayout(); self.flow_pid_enabled = QCheckBox("Flow PID Active"); self.flow_pid_enabled.setChecked(True); mid_col.addWidget(self.flow_pid_enabled); self.flow_hold_enabled = QCheckBox("Hold Valve Position"); self.flow_hold_enabled.setChecked(False); self.flow_hold_enabled.toggled.connect(self._handle_flow_hold_toggle); mid_col.addWidget(self.flow_hold_enabled); self.flow_baseline_left_label = QLabel("Normal L: {:.1f}%".format(self._flow_baseline["left"])); self.flow_baseline_right_label = QLabel("Normal R: {:.1f}%".format(self._flow_baseline["right"])); mid_col.addWidget(self.flow_baseline_left_label); mid_col.addWidget(self.flow_baseline_right_label); self.capture_flow_btn = QPushButton("Set Normal Flow (1s avg)"); self.capture_flow_btn.clicked.connect(self._capture_flow_baseline); mid_col.addWidget(self.capture_flow_btn)
+        targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(mid_col); servo_outer_layout.addLayout(targets_row)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
 
         nozzle_group = QGroupBox("Nozzle position")
@@ -438,6 +443,19 @@ class ROSGui(QWidget):
 
         
         self.setLayout(main_layout)
+        # Flow PID controller
+        self._flow_pid_state = {
+            "left": {"integral": 0.0, "last_error": 0.0, "last_time": None, "last_output": None},
+            "right": {"integral": 0.0, "last_error": 0.0, "last_time": None, "last_output": None},
+        }
+        self._flow_pid_gains = {
+            "kp": float(rospy.get_param("~flow_pid_kp", 2.0)),
+            "ki": float(rospy.get_param("~flow_pid_ki", 0.1)),
+            "kd": float(rospy.get_param("~flow_pid_kd", 0.2)),
+            "i_max": float(rospy.get_param("~flow_pid_i_max", 200.0)),
+            "output_max": float(rospy.get_param("~flow_pid_output_max", 300.0)),
+        }
+        self._flow_pid_timer = QTimer(self); self._flow_pid_timer.setInterval(100); self._flow_pid_timer.timeout.connect(self._flow_pid_step); self._flow_pid_timer.start()
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(2000)
 
@@ -448,6 +466,11 @@ class ROSGui(QWidget):
                 self.status_timer.stop()
         except Exception as exc:
             print(f"Failed to stop status timer: {exc}")
+        try:
+            if hasattr(self, "_flow_pid_timer"):
+                self._flow_pid_timer.stop()
+        except Exception as exc:
+            print(f"Failed to stop flow PID timer: {exc}")
         try:
             self.ros_interface.shutdown()
         except Exception as exc:
@@ -512,6 +535,139 @@ class ROSGui(QWidget):
             self.ros_interface.persist_servo_targets(left, right)
         except Exception as exc:
             print(f"Failed to persist servo targets: {exc}")
+
+    def _handle_flow_target_change(self, _value):
+        if not hasattr(self, "flow_left_spin") or not hasattr(self, "flow_right_spin"):
+            return
+        self._pending_flow_targets = (
+            float(self.flow_left_spin.value()),
+            float(self.flow_right_spin.value())
+        )
+        if hasattr(self, "_flow_target_timer"):
+            self._flow_target_timer.start()
+
+    def _persist_pending_flow_targets(self):
+        pending = getattr(self, "_pending_flow_targets", None)
+        if not pending:
+            return
+        left, right = pending
+        try:
+            self.ros_interface.persist_flow_targets(left, right)
+        except Exception as exc:
+            print(f"Failed to persist flow targets: {exc}")
+
+    def _update_flow_baseline_labels(self):
+        if hasattr(self, "flow_baseline_left_label"):
+            self.flow_baseline_left_label.setText("Normal L: {:.1f}%".format(self._flow_baseline.get("left", 0.0)))
+        if hasattr(self, "flow_baseline_right_label"):
+            self.flow_baseline_right_label.setText("Normal R: {:.1f}%".format(self._flow_baseline.get("right", 0.0)))
+
+    def _capture_flow_baseline(self):
+        if not hasattr(self, "capture_flow_btn"):
+            return
+        self.capture_flow_btn.setEnabled(False)
+        self.capture_flow_btn.setText("Capturing...")
+        QTimer.singleShot(1000, self._finalize_flow_baseline)
+
+    def _finalize_flow_baseline(self):
+        left_avg = self.ros_interface.get_flow_average("left", 1.0)
+        right_avg = self.ros_interface.get_flow_average("right", 1.0)
+        if left_avg is None or right_avg is None:
+            QMessageBox.warning(self, "Flow Sensor", "Not enough flow samples yet. Please try again once sensors are running.")
+        else:
+            self._flow_baseline["left"] = float(left_avg)
+            self._flow_baseline["right"] = float(right_avg)
+            try:
+                self.ros_interface.persist_flow_baseline(left_avg, right_avg)
+            except Exception as exc:
+                print(f"Failed to persist flow baseline: {exc}")
+            self._update_flow_baseline_labels()
+        if hasattr(self, "capture_flow_btn"):
+            self.capture_flow_btn.setEnabled(True)
+            self.capture_flow_btn.setText("Set Normal Flow (1s avg)")
+
+    def _handle_flow_hold_toggle(self, enabled: bool):
+        if enabled:
+            for side in ("left", "right"):
+                current_raw = self.ros_interface.get_latest_servo_position(side)
+                if current_raw is None:
+                    current_raw = float(self.servo_calib[side]["zero"])
+                self._flow_pid_state[side]["last_output"] = float(current_raw)
+            left_raw = self._flow_pid_state["left"].get("last_output")
+            right_raw = self._flow_pid_state["right"].get("last_output")
+            if left_raw is not None and right_raw is not None:
+                self.ros_interface.publish_servo_targets(int(round(left_raw)), int(round(right_raw)))
+
+    def _flow_pid_step(self):
+        if hasattr(self, "flow_hold_enabled") and self.flow_hold_enabled.isChecked():
+            left_raw = self._flow_pid_state["left"].get("last_output")
+            right_raw = self._flow_pid_state["right"].get("last_output")
+            if left_raw is not None and right_raw is not None:
+                self.ros_interface.publish_servo_targets(int(round(left_raw)), int(round(right_raw)))
+            return
+        if not hasattr(self, "flow_pid_enabled") or not self.flow_pid_enabled.isChecked():
+            return
+        now = rospy.Time.now().to_sec()
+        gains = self._flow_pid_gains
+        any_update = False
+        targets = {}
+
+        def clamp(value, min_val, max_val):
+            return max(min_val, min(max_val, value))
+
+        for side in ("left", "right"):
+            target_percent = float(self.flow_left_spin.value()) if side == "left" else float(self.flow_right_spin.value())
+            baseline = float(self._flow_baseline.get(side, 0.0))
+            if baseline <= 0.0:
+                continue
+            target_flow = baseline * (target_percent / 100.0)
+            actual_flow = self.ros_interface.get_latest_flow_percent(side)
+            if actual_flow is None:
+                continue
+            state = self._flow_pid_state[side]
+            last_time = state.get("last_time")
+            dt = (now - last_time) if last_time else 0.0
+            error = target_flow - float(actual_flow)
+            derivative = 0.0
+            if dt > 1e-6:
+                derivative = (error - state.get("last_error", 0.0)) / dt
+            integral = state.get("integral", 0.0) + error * dt
+            i_max = float(gains.get("i_max", 200.0))
+            integral = clamp(integral, -i_max, i_max)
+            output = (
+                float(gains.get("kp", 0.0)) * error
+                + float(gains.get("ki", 0.0)) * integral
+                + float(gains.get("kd", 0.0)) * derivative
+            )
+            output_max = float(gains.get("output_max", 300.0))
+            output = clamp(output, -output_max, output_max)
+            current_raw = state.get("last_output")
+            if current_raw is None:
+                current_raw = self.ros_interface.get_latest_servo_position(side)
+            if current_raw is None:
+                current_raw = float(self.servo_calib[side]["zero"])
+            min_raw = float(self.servo_calib[side]["min"])
+            max_raw = float(self.servo_calib[side]["max"])
+            new_raw = clamp(float(current_raw) + output, min_raw, max_raw)
+            state["integral"] = integral
+            state["last_error"] = error
+            state["last_time"] = now
+            state["last_output"] = new_raw
+            targets[side] = int(round(new_raw))
+            any_update = True
+
+        if any_update:
+            left_raw = targets.get("left")
+            right_raw = targets.get("right")
+            if left_raw is None:
+                left_raw = self._flow_pid_state["left"].get("last_output")
+            if right_raw is None:
+                right_raw = self._flow_pid_state["right"].get("last_output")
+            if left_raw is None:
+                left_raw = int(self.servo_calib["left"]["zero"])
+            if right_raw is None:
+                right_raw = int(self.servo_calib["right"]["zero"])
+            self.ros_interface.publish_servo_targets(int(round(left_raw)), int(round(right_raw)))
 
     def _open_component_dialog(self):
         components = self._list_available_components()
