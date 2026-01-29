@@ -27,6 +27,10 @@ class LaserProfileController(object):
             "~height_error_topic",
             "/laser_profile/height_error"
         )
+        self.lateral_pitch_topic = rospy.get_param(
+            "~lateral_pitch_topic",
+            "/profiles_pitch_m"
+        )
 
         # Override-Steuerung
         self.manual_override_topic = rospy.get_param(
@@ -46,6 +50,7 @@ class LaserProfileController(object):
         self.override_max = rospy.get_param("~override_max", 2.0)
 
         self.k_p = rospy.get_param("~k_p", 0.3)
+        self.lateral_pitch_m = rospy.get_param("~lateral_pitch_m", 0.001)
         self.max_vel = rospy.get_param("~max_vel", 0.15)
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
         self.control_rate = rospy.get_param("~control_rate", 200.0)
@@ -74,6 +79,8 @@ class LaserProfileController(object):
                          self.lateral_error_callback, queue_size=1)
         rospy.Subscriber(self.height_error_topic, Float32,
                          self.height_error_callback, queue_size=1)
+        rospy.Subscriber(self.lateral_pitch_topic, Float32,
+                 self.lateral_pitch_callback, queue_size=1)
         rospy.Subscriber(self.manual_override_topic, Float32,
                          self.manual_override_callback, queue_size=1)
 
@@ -94,6 +101,10 @@ class LaserProfileController(object):
 
     def height_error_callback(self, msg: Float32):
         self.height_error = msg.data
+
+    def lateral_pitch_callback(self, msg: Float32):
+        if msg.data > 0.0:
+            self.lateral_pitch_m = msg.data
 
     def manual_override_callback(self, msg: Float32):
         self.manual_override = msg.data
@@ -163,7 +174,7 @@ class LaserProfileController(object):
                 return
 
         # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        v_lat = -self.k_p * self.lateral_error * 0.001  # Index -> m
+        v_lat = -self.k_p * self.lateral_error * self.lateral_pitch_m
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
         # v_tcp: nur seitliche Bewegung entlang -Y des TCP
