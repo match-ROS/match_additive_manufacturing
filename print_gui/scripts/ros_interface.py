@@ -3,6 +3,7 @@ import subprocess
 import yaml
 import threading
 import shlex
+from collections import deque
 from typing import Optional, Iterable
 import signal
 import rospy
@@ -137,6 +138,66 @@ def _save_servo_targets_cache(left: float, right: float):
         "right": float(right),
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    _save_gui_cache_payload(payload)
+
+
+def _load_flow_targets_cache(default_left: float = 100.0, default_right: float = 100.0):
+    data = _load_gui_cache_payload()
+    entry = data.get("flow_control") if isinstance(data, dict) else None
+    targets = entry.get("targets") if isinstance(entry, dict) else None
+    left = default_left
+    right = default_right
+    if isinstance(targets, dict):
+        l_val = targets.get("left")
+        r_val = targets.get("right")
+        if isinstance(l_val, (int, float)):
+            left = float(l_val)
+        if isinstance(r_val, (int, float)):
+            right = float(r_val)
+    return (left, right)
+
+
+def _save_flow_targets_cache(left: float, right: float):
+    payload = _load_gui_cache_payload()
+    flow_control = payload.get("flow_control") if isinstance(payload, dict) else None
+    if not isinstance(flow_control, dict):
+        flow_control = {}
+    flow_control["targets"] = {
+        "left": float(left),
+        "right": float(right),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    payload["flow_control"] = flow_control
+    _save_gui_cache_payload(payload)
+
+
+def _load_flow_baseline_cache(default_left: float = 100.0, default_right: float = 100.0):
+    data = _load_gui_cache_payload()
+    entry = data.get("flow_control") if isinstance(data, dict) else None
+    baseline = entry.get("baseline") if isinstance(entry, dict) else None
+    left = default_left
+    right = default_right
+    if isinstance(baseline, dict):
+        l_val = baseline.get("left")
+        r_val = baseline.get("right")
+        if isinstance(l_val, (int, float)):
+            left = float(l_val)
+        if isinstance(r_val, (int, float)):
+            right = float(r_val)
+    return (left, right)
+
+
+def _save_flow_baseline_cache(left: float, right: float):
+    payload = _load_gui_cache_payload()
+    flow_control = payload.get("flow_control") if isinstance(payload, dict) else None
+    if not isinstance(flow_control, dict):
+        flow_control = {}
+    flow_control["baseline"] = {
+        "left": float(left),
+        "right": float(right),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    payload["flow_control"] = flow_control
     _save_gui_cache_payload(payload)
 
 
@@ -660,10 +721,15 @@ class ROSInterface:
         self._cached_path_index = self.current_index
         self._cached_spray_distance = _load_spray_distance_cache()
         self._cached_servo_targets = _load_servo_targets_cache()
+        self._cached_flow_targets = _load_flow_targets_cache()
+        self._cached_flow_baseline = _load_flow_baseline_cache()
         self._cached_component_name = _load_component_choice(DEFAULT_COMPONENT_NAME)
         self._component_transform_cache = {}
         self._servo_state_lock = threading.Lock()
         self._latest_servo_positions = {}
+        self._flow_lock = threading.Lock()
+        self._latest_flow_percent = {"left": None, "right": None}
+        self._flow_history = {"left": deque(maxlen=400), "right": deque(maxlen=400)}
         self._start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
         self._start_signal_pub = None
         self._start_signal_active = False
@@ -722,6 +788,7 @@ class ROSInterface:
         self._refresh_path_subscriptions()
         self._init_dynamixel_publishers()
         self._init_servo_state_listener()
+        self._init_flow_listeners()
         # Receive medians from robot-side node (published by profiles_median_node on the mur)
         self._last_med_base = float('nan')
         self._last_med_map = float('nan')
@@ -809,16 +876,34 @@ class ROSInterface:
 
         self._subscribe_rosout_logs()
 
+    def get_cached_flow_targets(self):
+        targets = getattr(self, "_cached_flow_targets", (100.0, 100.0))
+        if isinstance(targets, (list, tuple)) and len(targets) == 2:
+            return targets
+        return (100.0, 100.0)
+
+    def persist_flow_targets(self, left_percent: float, right_percent: float):
+        left = float(left_percent)
+        right = float(right_percent)
+        self._cached_flow_targets = (left, right)
+        _save_flow_targets_cache(left, right)
+
+    def get_cached_flow_baseline(self):
+        baseline = getattr(self, "_cached_flow_baseline", (100.0, 100.0))
+        if isinstance(baseline, (list, tuple)) and len(baseline) == 2:
+            return baseline
+        return (100.0, 100.0)
+
+    def persist_flow_baseline(self, left_percent: float, right_percent: float):
+        left = float(left_percent)
+        right = float(right_percent)
+        self._cached_flow_baseline = (left, right)
+        _save_flow_baseline_cache(left, right)
+
     def get_cached_path_index(self) -> int:
         cached = getattr(self, "_cached_path_index", None)
         if isinstance(cached, int):
-            self._orth_stats = {"mean": None, "count": None, "ref_index": None}
-            self._orth_stats_timer = QTimer(self.gui)
-            self._orth_stats_timer.setSingleShot(True)
-            self._orth_stats_timer.setInterval(120)
-            self._orth_stats_timer.timeout.connect(self._emit_orth_stats)
-            self._init_orthogonal_stats_listener()
-            self._orth_reset_pub = None
+            self._ensure_orth_stats_listener()
             return cached
         value = _load_path_index_cache(self.current_index)
         self._cached_path_index = value
@@ -830,53 +915,72 @@ class ROSInterface:
             return
         self._cached_path_index = normalized
         self.current_index = normalized
-        def _init_orthogonal_stats_listener(self):
-            if not rospy.core.is_initialized():
-                return
-            try:
-                rospy.Subscriber("/orthogonal_error_bias_mean", Float32, self._orth_mean_cb, queue_size=10)
-                rospy.Subscriber("/orthogonal_error_sample_count", Int32, self._orth_count_cb, queue_size=10)
-                rospy.Subscriber("/orthogonal_error_reference_index", Int32, self._orth_ref_idx_cb, queue_size=10)
-            except Exception as exc:
-                print(f"Failed to subscribe orthogonal stats: {exc}")
         _save_path_index_cache(normalized)
-        def _orth_mean_cb(self, msg: Float32):
-            self._orth_stats["mean"] = float(msg.data)
-            self._schedule_orth_stats_emit()
+        self._ensure_orth_stats_listener()
 
-        def _orth_count_cb(self, msg: Int32):
-            self._orth_stats["count"] = int(msg.data)
-            self._schedule_orth_stats_emit()
+    def _ensure_orth_stats_listener(self):
+        if hasattr(self, "_orth_stats") and hasattr(self, "_orth_stats_timer"):
+            return
+        self._orth_stats = {"mean": None, "count": None, "ref_index": None}
+        self._orth_stats_timer = QTimer(self.gui)
+        self._orth_stats_timer.setSingleShot(True)
+        self._orth_stats_timer.setInterval(120)
+        self._orth_stats_timer.timeout.connect(self._emit_orth_stats)
+        self._init_orthogonal_stats_listener()
+        self._orth_reset_pub = None
+
+    def _init_orthogonal_stats_listener(self):
+        if not rospy.core.is_initialized():
+            return
+        try:
+            rospy.Subscriber("/orthogonal_error_bias_mean", Float32, self._orth_mean_cb, queue_size=10)
+            rospy.Subscriber("/orthogonal_error_sample_count", Int32, self._orth_count_cb, queue_size=10)
+            rospy.Subscriber("/orthogonal_error_reference_index", Int32, self._orth_ref_idx_cb, queue_size=10)
+        except Exception as exc:
+            print(f"Failed to subscribe orthogonal stats: {exc}")
+
+    def _orth_mean_cb(self, msg: Float32):
+        self._orth_stats["mean"] = float(msg.data)
+        self._schedule_orth_stats_emit()
+
+    def _orth_count_cb(self, msg: Int32):
+        self._orth_stats["count"] = int(msg.data)
+        self._schedule_orth_stats_emit()
+
+    def _orth_ref_idx_cb(self, msg: Int32):
+        self._orth_stats["ref_index"] = int(msg.data)
+        self._schedule_orth_stats_emit()
+
+    def _schedule_orth_stats_emit(self):
+        if hasattr(self, "_orth_stats_timer"):
+            self._orth_stats_timer.start()
+
+    def _emit_orth_stats(self):
+        mean = self._orth_stats.get("mean")
+        count = self._orth_stats.get("count")
+        ref_index = self._orth_stats.get("ref_index")
+        if mean is None or count is None or ref_index is None:
+            return
+        if hasattr(self.gui, "orth_stats"):
+            self.gui.orth_stats.emit(float(mean), int(count), int(ref_index))
+
+    def reset_orthogonal_accumulator(self):
+        if not rospy.core.is_initialized():
+            print("ROS not initialized. Cannot reset accumulator.")
+            return
+        if self._orth_reset_pub is None:
+            self._orth_reset_pub = rospy.Publisher(
+                "/orthogonal_error_accumulator/reset",
+                Bool,
+                queue_size=1,
+                latch=False,
+            )
+        self._orth_reset_pub.publish(True)
+
     def get_cached_path_namespace(self) -> str:
-        def _orth_ref_idx_cb(self, msg: Int32):
-            self._orth_stats["ref_index"] = int(msg.data)
-            self._schedule_orth_stats_emit()
         cached = getattr(self, "_cached_path_namespace", None)
-        def _schedule_orth_stats_emit(self):
-            if hasattr(self, "_orth_stats_timer"):
-                self._orth_stats_timer.start()
         if isinstance(cached, str):
-        def _emit_orth_stats(self):
-            mean = self._orth_stats.get("mean")
-            count = self._orth_stats.get("count")
-            ref_index = self._orth_stats.get("ref_index")
-            if mean is None or count is None or ref_index is None:
-                return
-            if hasattr(self.gui, "orth_stats"):
-                self.gui.orth_stats.emit(float(mean), int(count), int(ref_index))
             return cached
-        def reset_orthogonal_accumulator(self):
-            if not rospy.core.is_initialized():
-                print("ROS not initialized. Cannot reset accumulator.")
-                return
-            if self._orth_reset_pub is None:
-                self._orth_reset_pub = rospy.Publisher(
-                    "/orthogonal_error_accumulator/reset",
-                    Bool,
-                    queue_size=1,
-                    latch=False,
-                )
-            self._orth_reset_pub.publish(True)
         resolved = _load_path_namespace_cache("")
         self._cached_path_namespace = resolved
         return resolved
@@ -1840,6 +1944,50 @@ class ROSInterface:
             )
         except Exception as exc:
             rospy.logwarn(f"Failed to subscribe to dynamixel state topic: {exc}")
+
+    def _init_flow_listeners(self):
+        """Subscribe to the foam volume flow sensor percent topics."""
+        if not rospy.core.is_initialized():
+            return
+        left_topic = rospy.get_param("~flow_left_topic", "/foam_volume_flow_sensor/left")
+        right_topic = rospy.get_param("~flow_right_topic", "/foam_volume_flow_sensor/right")
+        try:
+            rospy.Subscriber(left_topic, Float32, lambda msg: self._flow_cb("left", msg), queue_size=10)
+            rospy.Subscriber(right_topic, Float32, lambda msg: self._flow_cb("right", msg), queue_size=10)
+        except Exception as exc:
+            rospy.logwarn(f"Failed to subscribe to flow sensor topics: {exc}")
+
+    def _flow_cb(self, which: str, msg: Float32):
+        try:
+            value = float(msg.data)
+        except Exception:
+            return
+        now = rospy.Time.now().to_sec()
+        with self._flow_lock:
+            self._latest_flow_percent[which] = value
+            history = self._flow_history.get(which)
+            if history is not None:
+                history.append((now, value))
+
+    def get_latest_flow_percent(self, which: str):
+        if not which:
+            return None
+        key = str(which).strip().lower()
+        with self._flow_lock:
+            return self._latest_flow_percent.get(key)
+
+    def get_flow_average(self, which: str, window_sec: float = 1.0):
+        if not which:
+            return None
+        key = str(which).strip().lower()
+        now = rospy.Time.now().to_sec()
+        cutoff = now - max(float(window_sec), 0.0)
+        with self._flow_lock:
+            history = list(self._flow_history.get(key, []))
+        values = [val for ts, val in history if ts >= cutoff]
+        if not values:
+            return None
+        return sum(values) / float(len(values))
 
     def _servo_state_cb(self, msg: DynamixelStateList):
         entries = getattr(msg, 'dynamixel_state', []) if msg is not None else []
