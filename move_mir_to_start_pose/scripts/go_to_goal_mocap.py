@@ -46,6 +46,13 @@ class GoToGoal:
         _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
         return yaw
 
+    def shutdown(self):
+        self.cmd_pub.publish(Twist())
+        rospy.loginfo("Shutting down go_to_goal node.") 
+        rospy.sleep(1)  
+        rospy.signal_shutdown("Goal reached")
+
+
     def run(self):
         while not rospy.is_shutdown():
             if self.pose is None:
@@ -87,7 +94,8 @@ class GoToGoal:
                     self.cmd_pub.publish(Twist())
                     rospy.loginfo_once("Goal position + orientation reached")
                     self.rate.sleep()
-                    continue
+                    self.shutdown()
+                    return
 
                 cmd.angular.z = max(
                     -self.max_w,
