@@ -42,3 +42,11 @@ rosservice call /pointcloud_assembler/stop_acquisition
 ### Notes
 - Requires TF between the scanner frame (e.g. `sensor_optical_frame`) and the target frame (e.g. `mur620c/base_footprint`).
 - If using `input_type:=laserscan`, ensure the `laser_geometry` package is installed and the input topic carries `sensor_msgs/LaserScan` messages.
+
+## Node: laser_profile_controller
+
+Consumes lateral and height errors from the laser profile pipeline and commands TCP motion.
+
+- Parameters:
+  - `~lateral_pitch_topic` (string, default `/profiles_pitch_m`): topic that publishes the scanner pitch in meters.
+  - `~lateral_pitch_m` (float, default `0.001`): fallback meters per profile index used until `~lateral_pitch_topic` is received. Pitch should be `lXPitch * 1e-8 * downsample`.
