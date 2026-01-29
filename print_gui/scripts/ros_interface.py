@@ -75,6 +75,14 @@ def _build_debug_env(gui, base_env=None):
         env.pop("ROSCONSOLE_CONFIG_FILE", None)
     return env
 
+def toggle_simulation_mode(gui, enabled: bool):
+    if enabled:
+        print("Simulation mode enabled.")
+        global ROSCORE_HOST
+        ROSCORE_HOST = "localhost"
+    else:
+        print("Simulation mode disabled.")
+        ROSCORE_HOST = "roscore"
 
 def _remote_debug_prefix(gui, workspace: Optional[str] = None) -> str:
     workspace = (workspace or "").strip()
@@ -165,25 +173,43 @@ def _run_remote_commands(
     if workspace:
         env_prefix.append(f"source ~/{workspace}/devel/setup.bash")
 
-    for robot in selected_robots:
-        per_robot_cmds = []
-        for cmd in cmd_list:
-            resolved_cmd = cmd(robot) if callable(cmd) else cmd
-            if not isinstance(resolved_cmd, str):
-                raise ValueError("Commands must resolve to strings")
-            resolved_cmd = resolved_cmd.strip()
-            if debug_prefix:
-                resolved_cmd = f"{debug_prefix}{resolved_cmd}"
-            per_robot_cmds.append(resolved_cmd)
+    if not gui.get_simulation_mode():
+        for robot in selected_robots:
+            per_robot_cmds = []
+            for cmd in cmd_list:
+                resolved_cmd = cmd(robot) if callable(cmd) else cmd
+                if not isinstance(resolved_cmd, str):
+                    raise ValueError("Commands must resolve to strings")
+                resolved_cmd = resolved_cmd.strip()
+                if debug_prefix:
+                    resolved_cmd = f"{debug_prefix}{resolved_cmd}"
+                per_robot_cmds.append(resolved_cmd)
 
-        remote_cmd = "; ".join(env_prefix + per_robot_cmds)
-        ssh_cmd = ["ssh"]
-        if allocate_tty:
-            ssh_cmd += ["-t", "-t"]
-        ssh_cmd.extend([robot, remote_cmd])
-        print(f"{description} on {robot} with command: {remote_cmd}")
-        stdin_target = None if allocate_tty else subprocess.DEVNULL
-        _popen_with_debug(ssh_cmd, gui, stdin=stdin_target)
+            remote_cmd = "; ".join(env_prefix + per_robot_cmds)
+            ssh_cmd = ["ssh"]
+            if allocate_tty:
+                ssh_cmd += ["-t", "-t"]
+            ssh_cmd.extend([robot, remote_cmd])
+            print(f"{description} on {robot} with command: {remote_cmd}")
+            stdin_target = None if allocate_tty else subprocess.DEVNULL
+            _popen_with_debug(ssh_cmd, gui, stdin=stdin_target)
+    else: # Simulation Mode - execute commands locally
+        for robot in selected_robots:
+            for cmd in cmd_list:
+                resolved_cmd = cmd(robot) if callable(cmd) else cmd
+                if not isinstance(resolved_cmd, str):
+                    raise ValueError("Commands must resolve to strings")
+                resolved_cmd = resolved_cmd.strip()
+                if debug_prefix:
+                    resolved_cmd = f"{debug_prefix}{resolved_cmd}"
+                full_cmd = "; ".join(env_prefix + [resolved_cmd])
+                print(f"{description} in simulation mode with command: {full_cmd}")
+                _popen_with_debug(
+                    ["bash", "-c", full_cmd],
+                    gui,
+                    stdin=subprocess.DEVNULL,
+                )
+        
 
 
 def _kill_ros_nodes(node_names) -> bool:
@@ -2204,7 +2230,7 @@ def parse_mir_path(gui):
         except Exception:
             ns = ""
     ns_clean = ns.strip("/") if isinstance(ns, str) else ""
-    ns_flag = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+    ns_flag = f" path_ns:={ns_clean}" if ns_clean or ns == "" else ""
     command = f"roslaunch parse_mir_path parse_mir_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
@@ -2234,7 +2260,7 @@ def parse_ur_path(gui):
         except Exception:
             ns = ""
     ns_clean = ns.strip("/") if isinstance(ns, str) else ""
-    ns_flag = f" path_namespace:={ns_clean}" if ns_clean or ns == "" else ""
+    ns_flag = f" path_ns:={ns_clean}" if ns_clean or ns == "" else ""
     command = f"roslaunch parse_ur_path parse_ur_path.launch component_name:={component_arg} {transform_flags}{ns_flag}"
 
     _run_remote_commands(
@@ -2279,11 +2305,11 @@ def move_mir_to_start_pose(gui):
         except Exception:
             ns_value = ""
     ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
-    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns_value == "" else ""
+    ns_arg = f" path_ns:={ns_clean}" if ns_clean or ns_value == "" else ""
     command = (
         "roslaunch move_mir_to_start_pose move_mir_to_start_pose.launch "
         f"robot_name:={selected_robots[0]} initial_path_index:={gui.idx_spin.value()} "
-        f"path_topic:={mir_path_topic}{ns_arg}"
+        f"path_topic:={mir_path_topic}{ns_arg} path_ns:={ns_clean}"
     )
     rospy.loginfo(f"Executing: {command}")
     _popen_with_debug(command, gui, shell=True)
@@ -2320,7 +2346,7 @@ def move_ur_to_start_pose(gui):
         except Exception:
             ns_value = ""
     ns_clean = ns_value.strip("/") if isinstance(ns_value, str) else ""
-    ns_arg = f" path_namespace:={ns_clean}" if ns_clean or ns_value == "" else ""
+    ns_arg = f" path_ns:={ns_clean}" if ns_clean or ns_value == "" else ""
 
     _persist_gui_index_setting(gui)
     for robot in selected_robots:

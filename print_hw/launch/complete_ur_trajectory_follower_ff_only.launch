@@ -59,7 +59,7 @@
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
         <arg name="path_ns" value="$(arg path_ns)" />
-        <arg name="ff_only" value="true" />
+        <arg name="ff_only" value="false" />
         <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
         <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
         <arg name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />

@@ -27,6 +27,11 @@ REQUIRED_MODULES = (
     "t",
 )
 
+OPTIONAL_MODULES = (
+    "t_optimized",
+    "mir_index_offset",
+)
+
 
 def _load_component_modules(component_name):
     component_path = os.path.join(parent_dir, "component", component_name)
@@ -44,28 +49,46 @@ def _load_component_modules(component_name):
         except ImportError as exc:
             rospy.logfatal("Failed to import %s from component '%s': %s", module_name, component_name, exc)
             raise
+    for module_name in OPTIONAL_MODULES:
+        try:
+            modules[module_name] = importlib.import_module(f"print_path.{module_name}")
+        except ImportError:
+            rospy.logwarn("Optional module %s not found in component '%s'", module_name, component_name)
 
     rospy.loginfo("Loaded MiR print_path component '%s'", component_name)
     return modules
 
 
-def apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz):
+def apply_transformation(poses, tx, ty, tz, rx, ry, rz):
     transformed_poses = []
 
     # Convert rotation from Euler angles to a quaternion
     quaternion = tf.quaternion_from_euler(rx, ry, rz)
      
-    for i in range(start_index, len(x_coords)-1):
+    for i in range(start_index, len(poses)-1):
         pose_stamped = PoseStamped()
         R = tf.quaternion_matrix(quaternion)[:3, :3]
 
         # Original position + translation
-        pose_stamped.pose.position.x = x_coords[i] + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
-        pose_stamped.pose.position.y = y_coords[i] + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
+        pose_stamped.pose.position.x = poses[i].pose.position.x + R[0, 0] * tx + R[0, 1] * ty + R[0, 2] * tz
+        pose_stamped.pose.position.y = poses[i].pose.position.y + R[1, 0] * tx + R[1, 1] * ty + R[1, 2] * tz
         pose_stamped.pose.position.z = tz
         # the path should always face towards the next point
-        orientation = math.atan2(y_coords[i+1] - y_coords[i], x_coords[i+1] - x_coords[i])
-        q = tf.quaternion_from_euler(0, 0, orientation)
+        # Calculate desired rotation as a quaternion from rx, ry, rz
+        desired_quaternion = tf.quaternion_from_euler(rx, ry, rz)
+
+        # Apply the desired quaternion to the orientation quaternion from poses
+        if rx == 0.0 and ry == 0.0 and rz == 0.0:
+            q = [poses[i].pose.orientation.x,
+                 poses[i].pose.orientation.y,
+                 poses[i].pose.orientation.z,
+                 poses[i].pose.orientation.w]
+        else:
+            q_original = [pose_stamped.pose.orientation.x,
+                      pose_stamped.pose.orientation.y,
+                      pose_stamped.pose.orientation.z,
+                      pose_stamped.pose.orientation.w]
+            q = tf.quaternion_multiply(q_original, desired_quaternion)
 
         pose_stamped.pose.orientation.x = q[0]
         pose_stamped.pose.orientation.y = q[1]
@@ -109,6 +132,7 @@ def publish_paths():
     transformed_pub = rospy.Publisher(_ns_topic('mir_path_transformed'), Path, queue_size=10)
     velocity_pub = rospy.Publisher(_ns_topic('mir_path_velocity'), Path, queue_size=10)
     timestamps_pub = rospy.Publisher(_ns_topic('mir_path_timestamps'), Float32MultiArray, queue_size=10)
+    index_offset_pub = rospy.Publisher(_ns_topic('mir_index_offset'), Float32MultiArray, queue_size=1)
 
     
     # Retrieve the original path
@@ -121,6 +145,16 @@ def publish_paths():
     layer_numbers = modules["nL"].nL()
     t_coords = modules["t"].t()
     
+    try:
+        mir_index_offset = modules["mir_index_offset"].mir_index_offset()
+        #t_coords = modules["t_optimized"].t_optimized()
+    except KeyError:
+        mir_index_offset = [0.0]  # Default offset if module not found
+        pass
+
+    index_offset_msg = Float32MultiArray()
+    index_offset_msg.data = list(mir_index_offset)
+
     # Get transformation parameters from ROS params
     tx = rospy.get_param('~tx', 0.0)
     ty = rospy.get_param('~ty', 0.0)
@@ -181,7 +215,7 @@ def publish_paths():
     timestamps_msg.data = list(t_coords)
     
     # Transform and fill transformed Path message
-    transformed_path.poses = apply_transformation(x_coords, y_coords, tx, ty, tz, rx, ry, rz)
+    transformed_path.poses = apply_transformation(original_path.poses, tx, ty, tz, rx, ry, rz)
     
     set_metadata(layer_numbers, resolved_namespace)
 
@@ -197,6 +231,7 @@ def publish_paths():
         transformed_pub.publish(transformed_path)
         velocity_pub.publish(velocity_path)
         timestamps_pub.publish(timestamps_msg)
+        index_offset_pub.publish(index_offset_msg)
         rate.sleep()
 
 def set_metadata(layer_numbers, path_namespace=""):

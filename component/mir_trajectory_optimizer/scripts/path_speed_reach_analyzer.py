@@ -208,7 +208,8 @@ class MirUrTimestampOptimizer:
         def reach_ineq(dt):
             t = np.concatenate([[0.0], np.cumsum(dt)])  # (N,)
             tcp = ur_tcp_at_times(t)  # (N,3)
-            d = np.linalg.norm(tcp - ur_base, axis=1)  # (N,)
+            d = np.linalg.norm(tcp[:, :2] - ur_base[:, :2], axis=1)  # (N,)
+            print(d)
             return (self.max_reach - d)
 
         cons.append({"type": "ineq", "fun": reach_ineq})
