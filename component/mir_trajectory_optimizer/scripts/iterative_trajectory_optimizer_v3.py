@@ -109,7 +109,7 @@ class LocalRetimingOptimizerNode:
 
         # Anzahl der vorderen Pfadpunkte, die von der Index-Optimierung
         # explizit ausgenommen werden sollen (di = 0)
-        self.ignore_prefix_points = int(rospy.get_param("~ignore_prefix_points", 100))
+        self.ignore_prefix_points = int(rospy.get_param("~ignore_prefix_points", 0))
 
 
         # Constraint (XY only)
@@ -119,13 +119,13 @@ class LocalRetimingOptimizerNode:
         self.max_iters = int(rospy.get_param("~max_iters", 2600))
 
         # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
-        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.10))  # top 10% segments
+        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.01))  # top 10% segments
         self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.01))  # bottom 20% segments
 
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
-        self.min_step = float(rospy.get_param("~min_step", 0.1))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 1.42))   # max i_eff-Schritt
+        self.min_step = float(rospy.get_param("~min_step", 0.01))   # min i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 3.0))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
