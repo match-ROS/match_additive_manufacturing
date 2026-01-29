@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <style>
+    .box { fill:#f7f7f7; stroke:#2f2f2f; stroke-width:1.5; rx:10; ry:10; }
+    .title { font: 20px sans-serif; font-weight:700; }
+    .label { font: 14px sans-serif; }
+    .small { font: 12px sans-serif; fill:#333; }
+    .arrow { stroke:#2f2f2f; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#2f2f2f" />
+    </marker>
+  </defs>
+
+  <text x="30" y="36" class="title">UR Twist Computation (overview)</text>
+
+  <!-- Laser profile path -->
+  <rect x="30" y="70" width="250" height="70" class="box" />
+  <text x="50" y="100" class="label">Laser profile</text>
+  <text x="50" y="120" class="small">/profiles_float</text>
+
+  <rect x="320" y="60" width="260" height="90" class="box" />
+  <text x="340" y="95" class="label">LaserProfileErrorEstimator</text>
+  <text x="340" y="118" class="small">lateral_error, height_error</text>
+
+  <rect x="620" y="40" width="250" height="90" class="box" />
+  <text x="640" y="72" class="label">LaserProfileController</text>
+  <text x="640" y="95" class="small">lateral_error → v_lat</text>
+  <text x="640" y="115" class="small">TCP frame</text>
+
+  <rect x="910" y="40" width="250" height="90" class="box" />
+  <text x="930" y="72" class="label">Rotate twist by TCP pose</text>
+  <text x="930" y="95" class="small">TCP → base_link</text>
+
+  <!-- Path following -->
+  <rect x="30" y="230" width="250" height="70" class="box" />
+  <text x="50" y="260" class="label">UR path + current pose</text>
+  <text x="50" y="280" class="small">nav_msgs/Path</text>
+
+  <rect x="320" y="220" width="260" height="90" class="box" />
+  <text x="340" y="255" class="label">ur_path_direction_controller</text>
+  <text x="340" y="278" class="small">direction + v_z PID</text>
+
+  <rect x="620" y="220" width="250" height="90" class="box" />
+  <text x="640" y="255" class="label">twist_combiner_world</text>
+  <text x="640" y="278" class="small">orthogonal + direction + yaw</text>
+
+  <!-- Orthogonal correction -->
+  <rect x="30" y="390" width="250" height="70" class="box" />
+  <text x="50" y="420" class="label">Orthogonal error</text>
+  <text x="50" y="440" class="small">normal · position_error</text>
+
+  <rect x="320" y="380" width="260" height="90" class="box" />
+  <text x="340" y="415" class="label">orthogonal_error_correction</text>
+  <text x="340" y="438" class="small">v_orth along normal</text>
+
+  <rect x="30" y="310" width="250" height="70" class="box" />
+  <text x="50" y="340" class="label">UR yaw controller</text>
+  <text x="50" y="360" class="small">/ur_rotation_twist_world</text>
+
+  <rect x="620" y="320" width="250" height="90" class="box" />
+  <text x="640" y="355" class="label">world_twist_in_mir</text>
+  <text x="640" y="378" class="small">world → base_link</text>
+  <text x="640" y="398" class="small">/ur_twist_world_in_mir</text>
+
+  <!-- Override from height error -->
+  <rect x="320" y="140" width="260" height="60" class="box" />
+  <text x="340" y="170" class="label">velocity_override (scalar)</text>
+  <text x="340" y="190" class="small">height_error → speed scale</text>
+
+  <!-- Twist combiner -->
+  <rect x="910" y="260" width="250" height="110" class="box" />
+  <text x="930" y="295" class="label">twist_combiner</text>
+  <text x="930" y="318" class="small">mir compensation +</text>
+  <text x="930" y="338" class="small">world_in_mir + laser</text>
+
+  <rect x="620" y="420" width="250" height="40" class="box" />
+  <text x="640" y="445" class="small">/ur_twist_mir_compensation</text>
+
+  <rect x="910" y="430" width="250" height="90" class="box" />
+  <text x="930" y="465" class="label">UR twist controller</text>
+  <text x="930" y="488" class="small">command_collision_free</text>
+
+  <!-- Arrows: Laser -->
+  <path d="M280 105 L320 105" class="arrow" />
+  <path d="M580 105 L620 85" class="arrow" />
+  <path d="M870 85 L910 85" class="arrow" />
+  <path d="M1030 130 L1030 260" class="arrow" />
+
+  <!-- Arrow: height_error to override -->
+  <path d="M580 105 L450 140" class="arrow" />
+  <path d="M450 200 L450 220" class="arrow" />
+
+  <!-- Arrows: Path following -->
+  <path d="M280 265 L320 265" class="arrow" />
+  <path d="M580 265 L620 265" class="arrow" />
+  <path d="M280 345 L620 265" class="arrow" />
+  <path d="M870 265 L745 320" class="arrow" />
+  <path d="M870 365 L910 305" class="arrow" />
+
+  <!-- Arrows: Orthogonal correction -->
+  <path d="M280 425 L320 425" class="arrow" />
+  <path d="M580 425 L620 265" class="arrow" />
+
+  <!-- Arrows: Additional inputs -->
+  <path d="M870 440 L910 315" class="arrow" />
+
+  <!-- Final output -->
+  <path d="M1035 370 L1035 430" class="arrow" />
+</svg>
