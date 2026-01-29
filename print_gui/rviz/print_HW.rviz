@@ -6,12 +6,16 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Path1
+        - /Path2
         - /TF1/Frames1
         - /PointCloud21
         - /PointStamped1
         - /Pose1
         - /MotionPlanning1
         - /Pose2
+        - /Pose3
+        - /Pose4
       Splitter Ratio: 0.5005428791046143
     Tree Height: 2284
   - Class: rviz/Selection
@@ -78,7 +82,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.029999999329447746
       Shaft Length: 0.05000000074505806
-      Topic: /mir_path_transformed
+      Topic: /mur620/mir_path_transformed
       Unreliable: false
       Value: true
     - Alpha: 0.699999988079071
@@ -112,7 +116,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.009999999776482582
       Shaft Length: 0.10000000149011612
-      Topic: /ur_path_transformed
+      Topic: /mur620/ur_path_transformed
       Unreliable: false
       Value: true
     - Alpha: 0.20000000298023224
@@ -485,10 +489,12 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        current_pose:
+          Value: true
+        lookahead_point:
+          Value: true
         map:
           Value: false
-        mir_target:
-          Value: true
         mur620c/UR10_l/base:
           Value: false
         mur620c/UR10_l/base_ideal:
@@ -619,8 +625,8 @@ Visualization Manager:
           Value: false
         mur620c/us_2_frame:
           Value: false
-        ur_target:
-          Value: false
+        target_point:
+          Value: true
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -629,7 +635,9 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
-          mir_target:
+          current_pose:
+            {}
+          lookahead_point:
             {}
           mur620c/odom:
             mur620c/base_footprint:
@@ -656,18 +664,18 @@ Visualization Manager:
                       {}
                   mur620c/camera_floor_left_depth_optical_frame:
                     {}
-                  mur620c/camera_infra1_frame:
-                    mur620c/camera_infra1_optical_frame:
-                      {}
-                  mur620c/camera_infra2_frame:
-                    mur620c/camera_infra2_optical_frame:
-                      {}
                 mur620c/camera_floor_right_link:
                   mur620c/camera_floor_right_color_frame:
                     mur620c/camera_floor_right_color_optical_frame:
                       {}
                   mur620c/camera_floor_right_depth_optical_frame:
                     {}
+                  mur620c/camera_infra1_frame:
+                    mur620c/camera_infra1_optical_frame:
+                      {}
+                  mur620c/camera_infra2_frame:
+                    mur620c/camera_infra2_optical_frame:
+                      {}
                 mur620c/fl_caster_rotation_link:
                   mur620c/fl_caster_wheel_link:
                     {}
@@ -711,7 +719,7 @@ Visualization Manager:
                   {}
                 mur620c/us_2_frame:
                   {}
-          ur_target:
+          target_point:
             {}
         mur620c/UR10_l/wrist_3_link:
           mur620c/UR10_l/flange:
@@ -1447,6 +1455,38 @@ Visualization Manager:
       Topic: /mur620c/UR10_r/global_tcp_pose_mocap
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Pose
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /ur_target_pose
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Pose
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /mir_target_pose
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -1474,7 +1514,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -7.584998607635498
+      Angle: -7.57999849319458
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -1484,10 +1524,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 102.75859832763672
+      Scale: 464.6216735839844
       Target Frame: <Fixed Frame>
-      X: 52.38804244995117
-      Y: 32.499080657958984
+      X: 45.21909713745117
+      Y: 43.40650939941406
     Saved: ~
 Window Geometry:
   Displays:
