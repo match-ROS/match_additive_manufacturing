@@ -79,7 +79,7 @@ class LocalRetimingOptimizerNode:
 
         # Weights for combined objective (speed + acceleration)
         self.w_speed = float(rospy.get_param("~w_speed", 1.0))
-        self.w_accel = float(rospy.get_param("~w_accel", 0.001))
+        self.w_accel = float(rospy.get_param("~w_accel", 0.002))
 
         # Topics
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mur620c/mir_path_original")
