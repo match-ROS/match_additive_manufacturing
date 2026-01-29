@@ -55,6 +55,7 @@ roslaunch ur_trajectory_follower compensate_mir.launch ur_cmd_vel_local_topic:="
 - `combine_twists.py`: Combines a list of twists into a single twist, to be used as a velocity command for the UR robot.
 - `orthogonal_error_correction.py`: Takes a normalized vector orthogonal to the path (normal) as well as goal pose and current pose of the ur nozzle and calculates a twist for a control to follow the path more accurately.
     - this script could be used for any direction correction, not only orthogonal to the path by setting the normal vector accordingly.
+- `orthogonal_error_accumulator.py`: Accumulates orthogonal error per nearest XY reference point across z-layers and publishes a corrected error for the PID input.
 - `path_idx_advancer.py`: Determines the index of the next waypoint in the path from the current pose of the UR robot. There are 3 different methods implemented:
     - `radius`: Determines the index of the next waypoint based on the distance to the goal pose.
     - `collinear`: Determines the index of the next waypoint based on the distance to the goal pose collinear to the path between the last and the next waypoint.
@@ -75,6 +76,10 @@ roslaunch ur_trajectory_follower twist_sim.launch
 roslaunch ur_trajectory_follower complete_ur_trajectory_follower.launch
 
 rosrun topic_tools relay /ur_cmd /mur620/UR10_l/twist_fb_command 
+```
+
+```sh
+/home/rosmatch/catkin_ws_recker/src/.venv/bin/python -m unittest /home/rosmatch/catkin_ws_recker/src/match_additive_manufacturing/ur_trajectory_follower/tests/test_orthogonal_error_accumulator.py
 ```
 
 

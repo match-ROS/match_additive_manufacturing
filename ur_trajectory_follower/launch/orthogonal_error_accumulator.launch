@@ -1,0 +1,31 @@
+<launch>
+    <arg name="path_topic" default="/ur_path_transformed" />
+    <arg name="goal_topic" default="/next_goal" />
+    <arg name="normal_topic" default="/normal_vector" />
+    <arg name="orthogonal_error_topic" default="/orthogonal_error" />
+    <arg name="path_index_topic" default="/path_index" />
+    <arg name="layer_delta_z" default="0.01" />
+    <arg name="nn_window" default="50" />
+    <arg name="bias_gain" default="1.0" />
+    <arg name="bias_sign" default="1.0" />
+    <arg name="normalize_normal" default="true" />
+    <arg name="reset_topic" default="/orthogonal_error_accumulator/reset" />
+
+    <node
+        pkg="ur_trajectory_follower"
+        type="orthogonal_error_accumulator.py"
+        name="orthogonal_error_accumulator"
+        output="screen">
+        <param name="path_topic" value="$(arg path_topic)" />
+        <param name="goal_topic" value="$(arg goal_topic)" />
+        <param name="normal_topic" value="$(arg normal_topic)" />
+        <param name="orthogonal_error_topic" value="$(arg orthogonal_error_topic)" />
+        <param name="path_index_topic" value="$(arg path_index_topic)" />
+        <param name="layer_delta_z" value="$(arg layer_delta_z)" />
+        <param name="nn_window" value="$(arg nn_window)" />
+        <param name="bias_gain" value="$(arg bias_gain)" />
+        <param name="bias_sign" value="$(arg bias_sign)" />
+        <param name="normalize_normal" value="$(arg normalize_normal)" />
+        <param name="reset_topic" value="$(arg reset_topic)" />
+    </node>
+</launch>

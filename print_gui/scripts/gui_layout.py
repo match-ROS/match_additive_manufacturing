@@ -56,6 +56,7 @@ class ROSGui(QWidget):
     path_idx = pyqtSignal(int)
     medians = pyqtSignal(float, float)
     ros_log_signal = pyqtSignal(str, str, str)  # level, node, text
+    orth_stats = pyqtSignal(float, int, int)
     
     def __init__(self):
         super().__init__()
@@ -65,6 +66,7 @@ class ROSGui(QWidget):
         # ROS + window
         self.path_idx.connect(self._update_spinbox)
         self.medians.connect(self._update_medians)
+        self.orth_stats.connect(self._update_orth_stats)
         self.ros_interface = ROSInterface(self)
         self._selected_component_name = self.ros_interface.get_cached_component_name()
         self._path_namespace = self.ros_interface.get_cached_path_namespace()
@@ -235,10 +237,24 @@ class ROSGui(QWidget):
         self.orth_pid_toggle.toggled.connect(self._handle_orth_pid_toggle)
         orth_pid_row.addWidget(self.orth_pid_toggle)
 
+        self.btn_orth_reset = QPushButton("Reset Orth Accumulator")
+        self.btn_orth_reset.setToolTip("Reset accumulated orthogonal error stats")
+        self.btn_orth_reset.clicked.connect(self._handle_orth_reset)
+        orth_pid_row.addWidget(self.btn_orth_reset)
+
         self.orth_pid_state_label = QLabel("Off")
         orth_pid_row.addWidget(self.orth_pid_state_label)
 
         print_functions_layout.addLayout(orth_pid_row)
+
+        orth_stats_row = QHBoxLayout()
+        self.orth_bias_mean_label = QLabel("Mean: —")
+        self.orth_bias_count_label = QLabel("N: —")
+        self.orth_bias_ref_label = QLabel("RefIdx: —")
+        for label in (self.orth_bias_mean_label, self.orth_bias_count_label, self.orth_bias_ref_label):
+            label.setStyleSheet("border: 1px solid #999; padding: 4px;")
+            orth_stats_row.addWidget(label)
+        print_functions_layout.addLayout(orth_stats_row)
 
         # Remaining print function buttons
         print_function_buttons = {
@@ -276,6 +292,9 @@ class ROSGui(QWidget):
             "/path_index": {"local": False, "remote": True},
             "/orthogonal_error": {"local": False, "remote": True},
             "/orthogonal_twist": {"local": False, "remote": True},
+            "/orthogonal_error_bias_mean": {"local": False, "remote": True},
+            "/orthogonal_error_sample_count": {"local": False, "remote": True},
+            "/orthogonal_error_reference_index": {"local": False, "remote": True},
             "/ur_error_world": {"local": False, "remote": True},
             "/mur620c/UR10_r/twist_controller/command_collision_free": {"local": False, "remote": True},
             "/mur620c/UR10_r/twist_controller/controller_input": {"local": False, "remote": True},
@@ -934,6 +953,18 @@ class ROSGui(QWidget):
             self.ros_interface.start_orthogonal_pid_controller()
         else:
             self.ros_interface.stop_orthogonal_pid_controller()
+
+    def _handle_orth_reset(self):
+        if hasattr(self, "ros_interface"):
+            self.ros_interface.reset_orthogonal_accumulator()
+
+    def _update_orth_stats(self, mean: float, count: int, ref_index: int):
+        if hasattr(self, "orth_bias_mean_label"):
+            self.orth_bias_mean_label.setText(f"Mean: {mean:.4f}")
+        if hasattr(self, "orth_bias_count_label"):
+            self.orth_bias_count_label.setText(f"N: {count}")
+        if hasattr(self, "orth_bias_ref_label"):
+            self.orth_bias_ref_label.setText(f"RefIdx: {ref_index}")
 
     def _open_orth_pid_settings(self):
         dlg = OrthogonalPIDDialog(self, self.ros_interface)

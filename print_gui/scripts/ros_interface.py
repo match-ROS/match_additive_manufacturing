@@ -683,6 +683,9 @@ class ROSInterface:
             "/laser_profile_offset_cmd_vel",
             "/orthogonal_error",
             "/orthogonal_twist",
+            "/orthogonal_error_bias_mean",
+            "/orthogonal_error_sample_count",
+            "/orthogonal_error_reference_index",
             "/ur_error_world"
             "/mur620c/UR10_r/twist_controller/command_collision_free",
             "/mur620c/UR10_r/twist_controller/controller_input",
@@ -809,6 +812,13 @@ class ROSInterface:
     def get_cached_path_index(self) -> int:
         cached = getattr(self, "_cached_path_index", None)
         if isinstance(cached, int):
+            self._orth_stats = {"mean": None, "count": None, "ref_index": None}
+            self._orth_stats_timer = QTimer(self.gui)
+            self._orth_stats_timer.setSingleShot(True)
+            self._orth_stats_timer.setInterval(120)
+            self._orth_stats_timer.timeout.connect(self._emit_orth_stats)
+            self._init_orthogonal_stats_listener()
+            self._orth_reset_pub = None
             return cached
         value = _load_path_index_cache(self.current_index)
         self._cached_path_index = value
@@ -820,12 +830,53 @@ class ROSInterface:
             return
         self._cached_path_index = normalized
         self.current_index = normalized
+        def _init_orthogonal_stats_listener(self):
+            if not rospy.core.is_initialized():
+                return
+            try:
+                rospy.Subscriber("/orthogonal_error_bias_mean", Float32, self._orth_mean_cb, queue_size=10)
+                rospy.Subscriber("/orthogonal_error_sample_count", Int32, self._orth_count_cb, queue_size=10)
+                rospy.Subscriber("/orthogonal_error_reference_index", Int32, self._orth_ref_idx_cb, queue_size=10)
+            except Exception as exc:
+                print(f"Failed to subscribe orthogonal stats: {exc}")
         _save_path_index_cache(normalized)
+        def _orth_mean_cb(self, msg: Float32):
+            self._orth_stats["mean"] = float(msg.data)
+            self._schedule_orth_stats_emit()
 
+        def _orth_count_cb(self, msg: Int32):
+            self._orth_stats["count"] = int(msg.data)
+            self._schedule_orth_stats_emit()
     def get_cached_path_namespace(self) -> str:
+        def _orth_ref_idx_cb(self, msg: Int32):
+            self._orth_stats["ref_index"] = int(msg.data)
+            self._schedule_orth_stats_emit()
         cached = getattr(self, "_cached_path_namespace", None)
+        def _schedule_orth_stats_emit(self):
+            if hasattr(self, "_orth_stats_timer"):
+                self._orth_stats_timer.start()
         if isinstance(cached, str):
+        def _emit_orth_stats(self):
+            mean = self._orth_stats.get("mean")
+            count = self._orth_stats.get("count")
+            ref_index = self._orth_stats.get("ref_index")
+            if mean is None or count is None or ref_index is None:
+                return
+            if hasattr(self.gui, "orth_stats"):
+                self.gui.orth_stats.emit(float(mean), int(count), int(ref_index))
             return cached
+        def reset_orthogonal_accumulator(self):
+            if not rospy.core.is_initialized():
+                print("ROS not initialized. Cannot reset accumulator.")
+                return
+            if self._orth_reset_pub is None:
+                self._orth_reset_pub = rospy.Publisher(
+                    "/orthogonal_error_accumulator/reset",
+                    Bool,
+                    queue_size=1,
+                    latch=False,
+                )
+            self._orth_reset_pub.publish(True)
         resolved = _load_path_namespace_cache("")
         self._cached_path_namespace = resolved
         return resolved
@@ -1545,7 +1596,7 @@ class ROSInterface:
             return (
                 "roslaunch additive_manufacturing_helpers pid_twist_controller.launch "
                 "node_name:=pid_twist_controller_orthogonal "
-                "input_twist_topic:=/orthogonal_error "
+                "input_twist_topic:=/orthogonal_error_corrected "
                 "output_twist_topic:=/orthogonal_twist "
                 f"pid_values_path:={cfg_arg}"
             )

@@ -78,6 +78,15 @@
         <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
     </include>
+    <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_accumulator.launch">
+        <arg name="path_topic" value="$(arg ur_path_topic)" />
+        <arg name="goal_topic" value="$(arg path_ns_prefix)/next_goal" />
+        <arg name="normal_topic" value="$(arg path_ns_prefix)/normal_vector" />
+        <arg name="path_index_topic" value="$(arg path_ns_prefix)/path_index" />
+        <arg name="orthogonal_error_topic" value="/orthogonal_error" />
+        <arg name="layer_delta_z" value="0.01" />
+        <arg name="nn_window" value="50" />
+    </include>
 
     <!-- PID controllers: -->
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
