@@ -16,6 +16,8 @@ Panels:
         - /Pose1
         - /MotionPlanning1
         - /Pose2
+        - /Pose3
+        - /Pose4
       Splitter Ratio: 0.5005428791046143
     Tree Height: 1003
   - Class: rviz/Selection
@@ -620,6 +622,8 @@ Visualization Manager:
         mur620c/us_1_frame:
           Value: false
         mur620c/us_2_frame:
+          Value: false
+        target_point:
           Value: false
       Marker Alpha: 1
       Marker Scale: 1
@@ -1443,6 +1447,38 @@ Visualization Manager:
       Topic: /mur620c/UR10_r/global_tcp_pose_mocap
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Pose
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /ur_target_pose
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Pose
+      Queue Size: 10
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /mir_target_pose
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -1470,7 +1506,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -6.334998607635498
+      Angle: -7.57999849319458
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
