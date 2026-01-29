@@ -355,12 +355,22 @@ class LocalRetimingOptimizerNode:
         # schnelle Segmente: Δi_eff = (di[k+1]-di[k]) kleiner machen
         for j in idx_fast:
             if j + 1 < N:
-                di_new[j + 1] -= eps_idx
+                kernel = [0.25, 0.5, 0.25]   # Summe = 1
+                for o, w in zip([-1, 0, +1], kernel):
+                    idx = j + 1 + o
+                    if 0 <= idx < N:
+                        di_new[idx] -= eps_idx * w
+
 
         # langsame Segmente: Δi_eff größer machen
         for j in idx_slow:
             if j + 1 < N:
-                di_new[j + 1] += eps_idx
+                kernel = [0.25, 0.5, 0.25]   # Summe = 1
+                for o, w in zip([-1, 0, +1], kernel):
+                    idx = j + 1 + o
+                    if 0 <= idx < N:
+                        di_new[idx] += eps_idx * w
+
 
         # Reparieren: Monotonie, Grenzen, Schrittweite
         di_new = self._repair_di(di_new)
