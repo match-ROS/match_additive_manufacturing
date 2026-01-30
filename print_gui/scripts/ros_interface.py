@@ -2633,7 +2633,7 @@ def stop_ur_motion(gui):
         gui,
         "Stopping UR motion",
         [
-            "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller' || true",
+            "pkill -f 'ur_direction_controller|orthogonal_error_correction|move_ur_to_start_pose|ur_vel_induced_by_mir|world_twist_in_mir|twist_combiner|ur_yaw_controller|ur_tool_roll_pitch_stabilizer' || true",
         ],
     )
 

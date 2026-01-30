@@ -1,0 +1,39 @@
+<launch>
+    <!-- Parameters -->
+    <arg name="kp_roll" default="1.0"/>
+    <arg name="ki_roll" default="0.0"/>
+    <arg name="kd_roll" default="0.0"/>
+
+    <arg name="kp_pitch" default="1.0"/>
+    <arg name="ki_pitch" default="0.0"/>
+    <arg name="kd_pitch" default="0.0"/>
+
+    <arg name="output_smoothing_coeff" default="0.9"/>
+    <arg name="use_current_orientation_as_reference" default="true"/>
+    <arg name="reference_roll" default="0.0"/>
+    <arg name="reference_pitch" default="0.0"/>
+
+    <!-- Topics -->
+    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="velocity_override_topic" default="/velocity_override"/>
+    <arg name="twist_topic" default="/ur_roll_pitch_twist_world"/>
+
+    <node name="ur_tool_roll_pitch_stabilizer" pkg="ur_trajectory_follower" type="ur_tool_roll_pitch_stabilizer.py" output="screen">
+        <param name="kp_roll" value="$(arg kp_roll)"/>
+        <param name="ki_roll" value="$(arg ki_roll)"/>
+        <param name="kd_roll" value="$(arg kd_roll)"/>
+
+        <param name="kp_pitch" value="$(arg kp_pitch)"/>
+        <param name="ki_pitch" value="$(arg ki_pitch)"/>
+        <param name="kd_pitch" value="$(arg kd_pitch)"/>
+
+        <param name="output_smoothing_coeff" value="$(arg output_smoothing_coeff)"/>
+        <param name="use_current_orientation_as_reference" value="$(arg use_current_orientation_as_reference)"/>
+        <param name="reference_roll" value="$(arg reference_roll)"/>
+        <param name="reference_pitch" value="$(arg reference_pitch)"/>
+
+        <param name="current_pose_topic" value="$(arg current_pose_topic)"/>
+        <param name="velocity_override_topic" value="$(arg velocity_override_topic)"/>
+        <param name="twist_topic" value="$(arg twist_topic)"/>
+    </node>
+</launch>
