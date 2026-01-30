@@ -1387,14 +1387,28 @@ class ServoCalibrationDialog(QDialog):
         QMessageBox.information(self, "Defaults Saved", "Servo calibration defaults have been updated.")
 
     def _on_accept(self):
-        # Basic validation: min <= zero <= max
-        if not (self.left_min.value() <= self.left_zero.value() <= self.left_max.value()):
-            # silently clamp
-            z = min(max(self.left_zero.value(), self.left_min.value()), self.left_max.value())
-            self.left_zero.setValue(z)
-        if not (self.right_min.value() <= self.right_zero.value() <= self.right_max.value()):
-            z = min(max(self.right_zero.value(), self.right_min.value()), self.right_max.value())
-            self.right_zero.setValue(z)
+        # Basic validation: allow wrapped ranges (e.g., min > max for 0-4095 wrap)
+        def in_wrapped_range(value: int, min_value: int, max_value: int) -> bool:
+            if min_value <= max_value:
+                return min_value <= value <= max_value
+            return value >= min_value or value <= max_value
+
+        def clamp_wrapped(value: int, min_value: int, max_value: int) -> int:
+            if in_wrapped_range(value, min_value, max_value):
+                return value
+            if min_value <= max_value:
+                return min(max(value, min_value), max_value)
+            modulo = 4096
+            dist_to_min = min((value - min_value) % modulo, (min_value - value) % modulo)
+            dist_to_max = min((value - max_value) % modulo, (max_value - value) % modulo)
+            return min_value if dist_to_min <= dist_to_max else max_value
+
+        left_zero = clamp_wrapped(self.left_zero.value(), self.left_min.value(), self.left_max.value())
+        right_zero = clamp_wrapped(self.right_zero.value(), self.right_min.value(), self.right_max.value())
+        if left_zero != self.left_zero.value():
+            self.left_zero.setValue(left_zero)
+        if right_zero != self.right_zero.value():
+            self.right_zero.setValue(right_zero)
         self.accept()
 
     def get_values(self):
