@@ -3,11 +3,12 @@ import math
 from typing import Optional, Tuple
 
 import rospy
+import tf.transformations as tft
 from geometry_msgs.msg import PoseStamped, Twist
-from std_msgs.msg import Float32
 
 
 class ToolRollPitchStabilizer:
+    """Stabilize tool orientation about base-frame X/Y (roll/pitch)."""
     def __init__(self):
         # Roll control gains
         self.kp_roll = rospy.get_param("~kp_roll", 0.1)
@@ -23,6 +24,7 @@ class ToolRollPitchStabilizer:
         self.use_current_orientation_as_reference = rospy.get_param("~use_current_orientation_as_reference", True)
         self.reference_roll = rospy.get_param("~reference_roll", 0.0)
         self.reference_pitch = rospy.get_param("~reference_pitch", 0.0)
+        self.reference_orientation = None
 
         self.integral_roll = 0.0
         self.integral_pitch = 0.0
@@ -32,14 +34,11 @@ class ToolRollPitchStabilizer:
         self.command_old_twist = Twist()
         self.current_pose: Optional[PoseStamped] = None
         self.reference_set = not self.use_current_orientation_as_reference
-        self.velocity_override = 1.0
 
         pose_topic = rospy.get_param("~current_pose_topic", "/mur620c/UR10_r/ur_calibrated_pose")
-        velocity_topic = rospy.get_param("~velocity_override_topic", "/velocity_override")
         twist_topic = rospy.get_param("~twist_topic", "/ur_roll_pitch_twist")
 
         rospy.Subscriber(pose_topic, PoseStamped, self.pose_callback, queue_size=1)
-        rospy.Subscriber(velocity_topic, Float32, self.velocity_override_callback, queue_size=1)
 
         self.pub_ur_velocity_world = rospy.Publisher(twist_topic, Twist, queue_size=10)
 
@@ -47,6 +46,7 @@ class ToolRollPitchStabilizer:
         self.current_pose = pose_msg
         if not self.reference_set:
             self.reference_roll, self.reference_pitch = self.quaternion_to_roll_pitch(pose_msg.pose.orientation)
+            self.reference_orientation = pose_msg.pose.orientation
             self.reference_set = True
             rospy.loginfo(
                 "Roll/pitch reference set from current pose: roll=%.3f, pitch=%.3f",
@@ -54,9 +54,6 @@ class ToolRollPitchStabilizer:
                 self.reference_pitch,
             )
         self.calculate_twist()
-
-    def velocity_override_callback(self, velocity_msg: Float32):
-        self.velocity_override = max(0.0, min(velocity_msg.data, 1.0))
 
     @staticmethod
     def quaternion_to_roll_pitch(orientation) -> Tuple[float, float]:
@@ -94,27 +91,24 @@ class ToolRollPitchStabilizer:
         if self.current_pose is None or not self.reference_set:
             return
 
-        current_roll, current_pitch = self.quaternion_to_roll_pitch(self.current_pose.pose.orientation)
+        if self.reference_orientation is None:
+            return
 
-        roll_error = self.wrap_to_pi(current_roll- self.reference_roll)
-        pitch_error = self.wrap_to_pi(current_pitch - self.reference_pitch)
+        q_current = self.current_pose.pose.orientation
+        q_ref = self.reference_orientation
+        q_ref_tf = (q_ref.x, q_ref.y, q_ref.z, q_ref.w)
+        q_cur_tf = (q_current.x, q_current.y, q_current.z, q_current.w)
+        q_err = tft.quaternion_multiply(q_ref_tf, tft.quaternion_inverse(q_cur_tf))
+        roll_error, pitch_error = self.quaternion_to_roll_pitch(
+            type("Q", (), {"x": q_err[0], "y": q_err[1], "z": q_err[2], "w": q_err[3]})()
+        )
+        roll_error = self.wrap_to_pi(roll_error)
+        pitch_error = self.wrap_to_pi(pitch_error)
 
-        velocity_scale = self.velocity_override
+        # velocity_scale = self.velocity_override
 
-        proportional_roll = roll_error * self.kp_roll
-        derivative_roll = (roll_error - self.prev_error_roll) * self.kd_roll
-        integral_roll = self.integral_roll * self.ki_roll
-        omega_x = (proportional_roll + integral_roll + derivative_roll) * velocity_scale
-
-        proportional_pitch = pitch_error * self.kp_pitch
-        derivative_pitch = (pitch_error - self.prev_error_pitch) * self.kd_pitch
-        integral_pitch = self.integral_pitch * self.ki_pitch
-        omega_y = (proportional_pitch + integral_pitch + derivative_pitch) * velocity_scale
-
-        self.integral_roll += roll_error * velocity_scale
-        self.integral_pitch += pitch_error * velocity_scale
-        self.prev_error_roll = roll_error
-        self.prev_error_pitch = pitch_error
+        omega_x = (roll_error * self.kp_roll)
+        omega_y = (pitch_error * self.kp_pitch)
 
         control_command = Twist()
         control_command.angular.x = omega_x
