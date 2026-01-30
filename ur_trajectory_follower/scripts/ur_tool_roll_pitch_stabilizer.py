@@ -34,9 +34,9 @@ class ToolRollPitchStabilizer:
         self.reference_set = not self.use_current_orientation_as_reference
         self.velocity_override = 1.0
 
-        pose_topic = rospy.get_param("~current_pose_topic", "/global_nozzle_pose")
+        pose_topic = rospy.get_param("~current_pose_topic", "/mur620c/UR10_r/ur_calibrated_pose")
         velocity_topic = rospy.get_param("~velocity_override_topic", "/velocity_override")
-        twist_topic = rospy.get_param("~twist_topic", "/ur_roll_pitch_twist_world")
+        twist_topic = rospy.get_param("~twist_topic", "/ur_roll_pitch_twist")
 
         rospy.Subscriber(pose_topic, PoseStamped, self.pose_callback, queue_size=1)
         rospy.Subscriber(velocity_topic, Float32, self.velocity_override_callback, queue_size=1)

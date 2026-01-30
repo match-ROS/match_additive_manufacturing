@@ -20,13 +20,13 @@
 
     <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir'] -->
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
-        <arg name="twist_topics" value="['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/laser_profile_offset_cmd_vel']"/>
+        <arg name="twist_topics" value="['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/laser_profile_offset_cmd_vel', '/ur_roll_pitch_twist']"/>
         <!-- <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command"/> -->
         <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_controller/command_collision_free"/>
     </include>
 
     <node name="twist_combiner_world" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
-        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world', '/ur_rotation_twist_world', '/ur_roll_pitch_twist_world']</rosparam>
+        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world', '/ur_rotation_twist_world']</rosparam>
         <remap from="combined_twist" to="/ur_twist_world"/>
     </node>
 
@@ -77,7 +77,7 @@
     <include file="$(find ur_trajectory_follower)/launch/ur_tool_roll_pitch_stabilizer.launch">
         <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)ur_calibrated_pose" />
         <arg name="velocity_override_topic" value="/velocity_override" />
-        <arg name="twist_topic" value="/ur_roll_pitch_twist_world" />
+        <arg name="twist_topic" value="/ur_roll_pitch_twist" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="path_ns" value="$(arg path_ns)" />
