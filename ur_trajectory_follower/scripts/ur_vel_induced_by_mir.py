@@ -43,17 +43,17 @@ class UrMobileRobotCompensation():
 
                 self.last_mir_cmd = rospy.Time.now()
                 self.last_ur_pose = rospy.Time.now()
-                self.safe_pub_time_thread = rospy.Timer(rospy.Duration(0.1), self.safe_pub_cmd_time)
+                self.safe_pub_time_thread = rospy.Timer(rospy.Duration(0.5), self.safe_pub_cmd_time)
 
 
         def safe_pub_cmd_time(self, event):
             """If no command is received for a certain time, publish 0
             """
-            if ((rospy.Time.now() - self.last_mir_cmd > rospy.Duration(0.1)) 
-                or (rospy.Time.now() - self.last_ur_pose > rospy.Duration(0.1))):
+            if ((rospy.Time.now() - self.last_mir_cmd > rospy.Duration(0.5)) 
+                or (rospy.Time.now() - self.last_ur_pose > rospy.Duration(0.5))):
                 ur_cmd_vel_local = Twist()
                 self.ur_cmd_vel_local_pub.publish(ur_cmd_vel_local)
-                rospy.logwarn_throttle(5, "No mir or ur command received for 0.1s, publishing zero velocity to ur_cmd_vel_local")
+                rospy.logwarn_throttle(5, "No mir or ur command received for 0.5s, publishing zero velocity to ur_cmd_vel_local")
             
         
         def ur_pose_callback(self, data = PoseStamped()):
