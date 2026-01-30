@@ -10,12 +10,12 @@ from std_msgs.msg import Float32
 class ToolRollPitchStabilizer:
     def __init__(self):
         # Roll control gains
-        self.kp_roll = rospy.get_param("~kp_roll", -0.1)
+        self.kp_roll = rospy.get_param("~kp_roll", 0.1)
         self.ki_roll = rospy.get_param("~ki_roll", 0.0)
         self.kd_roll = rospy.get_param("~kd_roll", 0.0)
 
         # Pitch control gains
-        self.kp_pitch = rospy.get_param("~kp_pitch", -0.1)
+        self.kp_pitch = rospy.get_param("~kp_pitch", 0.1)
         self.ki_pitch = rospy.get_param("~ki_pitch", 0.0)
         self.kd_pitch = rospy.get_param("~kd_pitch", 0.0)
 
@@ -96,8 +96,8 @@ class ToolRollPitchStabilizer:
 
         current_roll, current_pitch = self.quaternion_to_roll_pitch(self.current_pose.pose.orientation)
 
-        roll_error = self.wrap_to_pi(self.reference_roll - current_roll)
-        pitch_error = self.wrap_to_pi(self.reference_pitch - current_pitch)
+        roll_error = self.wrap_to_pi(current_roll- self.reference_roll)
+        pitch_error = self.wrap_to_pi(current_pitch - self.reference_pitch)
 
         velocity_scale = self.velocity_override
 
