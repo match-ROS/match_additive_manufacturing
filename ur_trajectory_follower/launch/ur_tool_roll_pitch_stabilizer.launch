@@ -1,10 +1,10 @@
 <launch>
     <!-- Parameters -->
-    <arg name="kp_roll" default="1.0"/>
+    <arg name="kp_roll" default="0.1"/>
     <arg name="ki_roll" default="0.0"/>
     <arg name="kd_roll" default="0.0"/>
 
-    <arg name="kp_pitch" default="1.0"/>
+    <arg name="kp_pitch" default="0.1"/>
     <arg name="ki_pitch" default="0.0"/>
     <arg name="kd_pitch" default="0.0"/>
 

@@ -84,7 +84,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.029999999329447746
       Shaft Length: 0.05000000074505806
-      Topic: /mur620c/mir_path_transformed
+      Topic: /mur620c/mir_path_RViz
       Unreliable: false
       Value: true
     - Alpha: 0.699999988079071
@@ -118,7 +118,7 @@ Visualization Manager:
       Radius: 0.029999999329447746
       Shaft Diameter: 0.009999999776482582
       Shaft Length: 0.10000000149011612
-      Topic: /mur620c/ur_path_transformed
+      Topic: /mur620c/ur_path_RViz
       Unreliable: false
       Value: true
     - Alpha: 0.20000000298023224
@@ -491,8 +491,20 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        Laptop:
+          Value: true
+        bunker:
+          Value: true
+        current_pose:
+          Value: true
+        lookahead_point:
+          Value: true
         map:
           Value: false
+        mocap:
+          Value: true
+        mur620c:
+          Value: true
         mur620c/UR10_l/base:
           Value: false
         mur620c/UR10_l/base_ideal:
@@ -518,23 +530,23 @@ Visualization Manager:
         mur620c/UR10_r/base_link_inertia:
           Value: false
         mur620c/UR10_r/calibrated_ee_pose:
-          Value: false
+          Value: true
         mur620c/UR10_r/flange:
           Value: false
         mur620c/UR10_r/forearm_link:
-          Value: false
+          Value: true
         mur620c/UR10_r/gripper:
           Value: false
         mur620c/UR10_r/shoulder_link:
-          Value: false
+          Value: true
         mur620c/UR10_r/tool0:
           Value: false
         mur620c/UR10_r/upper_arm_link:
-          Value: false
+          Value: true
         mur620c/UR10_r/wrist_1_link:
-          Value: false
+          Value: true
         mur620c/UR10_r/wrist_2_link:
-          Value: false
+          Value: true
         mur620c/UR10_r/wrist_3_link:
           Value: false
         mur620c/back_laser_link:
@@ -623,8 +635,10 @@ Visualization Manager:
           Value: false
         mur620c/us_2_frame:
           Value: false
+        panda_ee:
+          Value: true
         target_point:
-          Value: false
+          Value: true
       Marker Alpha: 1
       Marker Scale: 1
       Name: TF
@@ -633,6 +647,19 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
+          current_pose:
+            {}
+          lookahead_point:
+            {}
+          mocap:
+            Laptop:
+              {}
+            bunker:
+              {}
+            mur620c:
+              {}
+            panda_ee:
+              {}
           mur620c/odom:
             mur620c/base_footprint:
               mur620c/base_link:
@@ -658,18 +685,18 @@ Visualization Manager:
                       {}
                   mur620c/camera_floor_left_depth_optical_frame:
                     {}
-                mur620c/camera_floor_right_link:
-                  mur620c/camera_floor_right_color_frame:
-                    mur620c/camera_floor_right_color_optical_frame:
-                      {}
-                  mur620c/camera_floor_right_depth_optical_frame:
-                    {}
                   mur620c/camera_infra1_frame:
                     mur620c/camera_infra1_optical_frame:
                       {}
                   mur620c/camera_infra2_frame:
                     mur620c/camera_infra2_optical_frame:
                       {}
+                mur620c/camera_floor_right_link:
+                  mur620c/camera_floor_right_color_frame:
+                    mur620c/camera_floor_right_color_optical_frame:
+                      {}
+                  mur620c/camera_floor_right_depth_optical_frame:
+                    {}
                 mur620c/fl_caster_rotation_link:
                   mur620c/fl_caster_wheel_link:
                     {}
@@ -713,6 +740,8 @@ Visualization Manager:
                   {}
                 mur620c/us_2_frame:
                   {}
+          target_point:
+            {}
         mur620c/UR10_l/wrist_3_link:
           mur620c/UR10_l/flange:
             mur620c/UR10_l/tool0:
@@ -1506,20 +1535,26 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -7.57999849319458
-      Class: rviz/TopDownOrtho
+      Class: rviz/ThirdPersonFollower
+      Distance: 5.393241882324219
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
+      Field of View: 0.7853981852531433
+      Focal Point:
+        X: 49.58952713012695
+        Y: 41.87485885620117
+        Z: 6.375233169819694e-06
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 182.93829345703125
+      Pitch: 1.3797968626022339
       Target Frame: <Fixed Frame>
-      X: 50.7447509765625
-      Y: 43.83329391479492
+      Yaw: 3.7153918743133545
     Saved: ~
 Window Geometry:
   Displays:
