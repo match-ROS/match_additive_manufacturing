@@ -16,7 +16,7 @@
     <!-- Topics -->
     <arg name="current_pose_topic" default="/global_nozzle_pose"/>
     <arg name="velocity_override_topic" default="/velocity_override"/>
-    <arg name="twist_topic" default="/ur_roll_pitch_twist_world"/>
+    <arg name="twist_topic" default="/ur_roll_pitch_twist"/>
 
     <node name="ur_tool_roll_pitch_stabilizer" pkg="ur_trajectory_follower" type="ur_tool_roll_pitch_stabilizer.py" output="screen">
         <param name="kp_roll" value="$(arg kp_roll)"/>
