@@ -347,12 +347,15 @@ class ROSGui(QWidget):
         self._flow_baseline["right"] = float(base_right)
         left_col = QVBoxLayout(); self.flow_left_label = QLabel("Left target (%)"); left_col.addWidget(self.flow_left_label); self.flow_left_slider = QSlider(); self.flow_left_slider.setOrientation(Qt.Horizontal); self.flow_left_slider.setRange(0,200); self.flow_left_slider.setTickInterval(20); self.flow_left_slider.setTickPosition(QSlider.TicksBelow); self.flow_left_spin = EnterSpinBox(); self.flow_left_spin.setRange(0,200); self.flow_left_spin.setValue(int(round(left_percent))); self.flow_left_slider.setValue(int(round(left_percent))); self.flow_left_slider.valueChanged.connect(self.flow_left_spin.setValue); self.flow_left_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_left_slider.setValue(v)); left_col.addWidget(self.flow_left_slider); left_col.addWidget(self.flow_left_spin)
         right_col = QVBoxLayout(); self.flow_right_label = QLabel("Right target (%)"); right_col.addWidget(self.flow_right_label); self.flow_right_slider = QSlider(); self.flow_right_slider.setOrientation(Qt.Horizontal); self.flow_right_slider.setRange(0,200); self.flow_right_slider.setTickInterval(20); self.flow_right_slider.setTickPosition(QSlider.TicksBelow); self.flow_right_spin = EnterSpinBox(); self.flow_right_spin.setRange(0,200); self.flow_right_spin.setValue(int(round(right_percent))); self.flow_right_slider.setValue(int(round(right_percent))); self.flow_right_slider.valueChanged.connect(self.flow_right_spin.setValue); self.flow_right_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_right_slider.setValue(v)); right_col.addWidget(self.flow_right_slider); right_col.addWidget(self.flow_right_spin)
-        self.flow_left_spin.valueChanged.connect(self._handle_flow_target_change)
-        self.flow_right_spin.valueChanged.connect(self._handle_flow_target_change)
         self._flow_target_timer = QTimer(self); self._flow_target_timer.setSingleShot(True); self._flow_target_timer.setInterval(700); self._flow_target_timer.timeout.connect(self._persist_pending_flow_targets); self._pending_flow_targets = (left_percent, right_percent)
         self._manual_target_timer = QTimer(self); self._manual_target_timer.setSingleShot(True); self._manual_target_timer.setInterval(300); self._manual_target_timer.timeout.connect(self._persist_pending_manual_targets)
         mid_col = QVBoxLayout(); self.manual_valve_btn = QPushButton("Manual Valve Control"); self.manual_valve_btn.setCheckable(True); self.manual_valve_btn.toggled.connect(self._toggle_manual_valve_mode); mid_col.addWidget(self.manual_valve_btn); self.flow_pid_enabled = QCheckBox("Flow PID Active"); self.flow_pid_enabled.setChecked(True); mid_col.addWidget(self.flow_pid_enabled); self.flow_hold_enabled = QCheckBox("Hold Valve Position"); self.flow_hold_enabled.setChecked(False); self.flow_hold_enabled.toggled.connect(self._handle_flow_hold_toggle); mid_col.addWidget(self.flow_hold_enabled); self.flow_baseline_left_label = QLabel("Normal L: {:.1f}%".format(self._flow_baseline["left"])); self.flow_baseline_right_label = QLabel("Normal R: {:.1f}%".format(self._flow_baseline["right"])); mid_col.addWidget(self.flow_baseline_left_label); mid_col.addWidget(self.flow_baseline_right_label); self.capture_flow_btn = QPushButton("Set Normal Flow (1s avg)"); self.capture_flow_btn.clicked.connect(self._capture_flow_baseline); mid_col.addWidget(self.capture_flow_btn)
+        self.send_flow_btn = QPushButton("Send Flow Targets")
+        self.send_flow_btn.clicked.connect(self._send_flow_targets)
+        mid_col.addWidget(self.send_flow_btn)
         targets_row.addLayout(left_col); targets_row.addLayout(right_col); targets_row.addLayout(mid_col); servo_outer_layout.addLayout(targets_row)
+        self.flow_left_spin.returnPressed.connect(self._send_flow_targets)
+        self.flow_right_spin.returnPressed.connect(self._send_flow_targets)
         zero_row = QHBoxLayout(); zl = QVBoxLayout(); zl.addWidget(QLabel("Left zero (raw)")); self.servo_left_zero_spin = QSpinBox(); self.servo_left_zero_spin.setRange(0,4095); self.servo_left_zero_spin.setValue(self.servo_calib['left']['zero']); zl.addWidget(self.servo_left_zero_spin); zr = QVBoxLayout(); zr.addWidget(QLabel("Right zero (raw)")); self.servo_right_zero_spin = QSpinBox(); self.servo_right_zero_spin.setRange(0,4095); self.servo_right_zero_spin.setValue(self.servo_calib['right']['zero']); zr.addWidget(self.servo_right_zero_spin); zb = QVBoxLayout(); send_zero_btn = QPushButton("Send Zero Position"); send_zero_btn.clicked.connect(self._send_zero_positions); calib_btn = QPushButton("Servo Calibration..."); calib_btn.clicked.connect(self.open_servo_calibration); zb.addWidget(QLabel(" ")); zb.addWidget(send_zero_btn); zb.addWidget(calib_btn); zero_row.addLayout(zl); zero_row.addLayout(zr); zero_row.addLayout(zb); servo_outer_layout.addLayout(zero_row); servo_box.setLayout(servo_outer_layout); print_functions_layout.addWidget(servo_box)
 
         nozzle_group = QGroupBox("Nozzle position")
@@ -458,6 +461,7 @@ class ROSGui(QWidget):
             "output_max": float(rospy.get_param("~flow_pid_output_max", 300.0)),
         }
         self._flow_pid_timer = QTimer(self); self._flow_pid_timer.setInterval(100); self._flow_pid_timer.timeout.connect(self._flow_pid_step); self._flow_pid_timer.start()
+        self.manual_valve_btn.setChecked(True)
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(2000)
 
@@ -576,6 +580,23 @@ class ROSGui(QWidget):
         except Exception as exc:
             print(f"Failed to persist manual valve targets: {exc}")
         self._send_percent_targets()
+
+    def _send_flow_targets(self):
+        if not hasattr(self, "flow_left_spin") or not hasattr(self, "flow_right_spin"):
+            return
+        left = float(self.flow_left_spin.value())
+        right = float(self.flow_right_spin.value())
+        if getattr(self, "_manual_valve_mode", False):
+            try:
+                self.ros_interface.persist_servo_targets(left, right)
+            except Exception as exc:
+                print(f"Failed to persist manual valve targets: {exc}")
+            self._send_percent_targets()
+        else:
+            try:
+                self.ros_interface.persist_flow_targets(left, right)
+            except Exception as exc:
+                print(f"Failed to persist flow targets: {exc}")
 
     def _toggle_manual_valve_mode(self, enabled: bool):
         self._manual_valve_mode = bool(enabled)
