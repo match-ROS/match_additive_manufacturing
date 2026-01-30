@@ -11,12 +11,12 @@ class ToolRollPitchStabilizer:
     """Stabilize tool orientation about base-frame X/Y (roll/pitch)."""
     def __init__(self):
         # Roll control gains
-        self.kp_roll = rospy.get_param("~kp_roll", 0.1)
+        self.kp_roll = rospy.get_param("~kp_roll", 0.01)
         self.ki_roll = rospy.get_param("~ki_roll", 0.0)
         self.kd_roll = rospy.get_param("~kd_roll", 0.0)
 
         # Pitch control gains
-        self.kp_pitch = rospy.get_param("~kp_pitch", 0.1)
+        self.kp_pitch = rospy.get_param("~kp_pitch", 0.01)
         self.ki_pitch = rospy.get_param("~ki_pitch", 0.0)
         self.kd_pitch = rospy.get_param("~kd_pitch", 0.0)
 
@@ -37,6 +37,7 @@ class ToolRollPitchStabilizer:
 
         pose_topic = rospy.get_param("~current_pose_topic", "/mur620c/UR10_r/ur_calibrated_pose")
         twist_topic = rospy.get_param("~twist_topic", "/ur_roll_pitch_twist")
+        # twist_topic = "/mur620c/UR10_r/twist_controller/command_collision_free"
 
         rospy.Subscriber(pose_topic, PoseStamped, self.pose_callback, queue_size=1)
 
@@ -115,7 +116,13 @@ class ToolRollPitchStabilizer:
         control_command.angular.y = omega_y
         control_command.angular.z = 0.0
 
+        # print(f"Roll error: {roll_error:.4f}, Pitch error: {pitch_error:.4f}")
         control_command_smoothed = self.smooth_output(control_command)
+        # print(
+            # f"Published angular velocities - Roll rate: {control_command_smoothed.angular.x:.4f}, "
+            # f"Pitch rate: {control_command_smoothed.angular.y:.4f}"
+        # )
+        # print("Publishing on topic:", self.pub_ur_velocity_world.name)
         self.pub_ur_velocity_world.publish(control_command_smoothed)
 
 

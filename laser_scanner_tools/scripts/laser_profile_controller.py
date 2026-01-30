@@ -44,7 +44,7 @@ class LaserProfileController(object):
         # max. Änderung gegenüber manuellem Override (z.B. 0.3 = ±30 Prozentpunkte)
         self.max_override_adjust = rospy.get_param("~max_override_adjust", 0.3)
         # Gain: wie stark der Höhenfehler in Override-Änderung übersetzt wird
-        self.height_override_gain = rospy.get_param("~height_override_gain", 0.02)
+        self.height_override_gain = rospy.get_param("~height_override_gain", 0.015)
         # Grenzen für den effektiven Override
         self.override_min = rospy.get_param("~override_min", 0.0)
         self.override_max = rospy.get_param("~override_max", 2.0)
@@ -57,7 +57,7 @@ class LaserProfileController(object):
 
         # Für Höhencheck
         self.target_layer_height = rospy.get_param("~target_layer_height", -10.0)
-        self.min_expected_height = rospy.get_param("~min_expected_height", -50.0)
+        self.min_expected_height = rospy.get_param("~min_expected_height", -90.0)
 
         # --- State ---
         self.ur_tcp_pose = None
@@ -198,7 +198,7 @@ class LaserProfileController(object):
         twist.linear.y = v_urbase[1]
         twist.linear.z = 0.0
 
-        self.cmd_pub.publish(twist)
+        #self.cmd_pub.publish(twist)
 
 
 if __name__ == "__main__":
