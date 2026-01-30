@@ -345,8 +345,8 @@ class ROSGui(QWidget):
         base_left, base_right = self.ros_interface.get_cached_flow_baseline()
         self._flow_baseline["left"] = float(base_left)
         self._flow_baseline["right"] = float(base_right)
-        left_col = QVBoxLayout(); self.flow_left_label = QLabel("Left target (%)"); left_col.addWidget(self.flow_left_label); self.flow_left_slider = QSlider(); self.flow_left_slider.setOrientation(Qt.Horizontal); self.flow_left_slider.setRange(0,200); self.flow_left_slider.setTickInterval(20); self.flow_left_slider.setTickPosition(QSlider.TicksBelow); self.flow_left_spin = EnterSpinBox(); self.flow_left_spin.setRange(0,200); self.flow_left_spin.setValue(int(round(left_percent))); self.flow_left_slider.setValue(int(round(left_percent))); self.flow_left_slider.valueChanged.connect(self.flow_left_spin.setValue); self.flow_left_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_left_slider.setValue(v)); left_col.addWidget(self.flow_left_slider); left_col.addWidget(self.flow_left_spin)
-        right_col = QVBoxLayout(); self.flow_right_label = QLabel("Right target (%)"); right_col.addWidget(self.flow_right_label); self.flow_right_slider = QSlider(); self.flow_right_slider.setOrientation(Qt.Horizontal); self.flow_right_slider.setRange(0,200); self.flow_right_slider.setTickInterval(20); self.flow_right_slider.setTickPosition(QSlider.TicksBelow); self.flow_right_spin = EnterSpinBox(); self.flow_right_spin.setRange(0,200); self.flow_right_spin.setValue(int(round(right_percent))); self.flow_right_slider.setValue(int(round(right_percent))); self.flow_right_slider.valueChanged.connect(self.flow_right_spin.setValue); self.flow_right_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_right_slider.setValue(v)); right_col.addWidget(self.flow_right_slider); right_col.addWidget(self.flow_right_spin)
+        left_col = QVBoxLayout(); self.flow_left_measured_label = QLabel("Measured: —"); self.flow_left_measured_label.setStyleSheet("border: 1px solid #999; padding: 2px;"); left_col.addWidget(self.flow_left_measured_label); self.flow_left_label = QLabel("Left target (%)"); left_col.addWidget(self.flow_left_label); self.flow_left_slider = QSlider(); self.flow_left_slider.setOrientation(Qt.Horizontal); self.flow_left_slider.setRange(0,200); self.flow_left_slider.setTickInterval(20); self.flow_left_slider.setTickPosition(QSlider.TicksBelow); self.flow_left_spin = EnterSpinBox(); self.flow_left_spin.setRange(0,200); self.flow_left_spin.setValue(int(round(left_percent))); self.flow_left_slider.setValue(int(round(left_percent))); self.flow_left_slider.valueChanged.connect(self.flow_left_spin.setValue); self.flow_left_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_left_slider.setValue(v)); left_col.addWidget(self.flow_left_slider); left_col.addWidget(self.flow_left_spin)
+        right_col = QVBoxLayout(); self.flow_right_measured_label = QLabel("Measured: —"); self.flow_right_measured_label.setStyleSheet("border: 1px solid #999; padding: 2px;"); right_col.addWidget(self.flow_right_measured_label); self.flow_right_label = QLabel("Right target (%)"); right_col.addWidget(self.flow_right_label); self.flow_right_slider = QSlider(); self.flow_right_slider.setOrientation(Qt.Horizontal); self.flow_right_slider.setRange(0,200); self.flow_right_slider.setTickInterval(20); self.flow_right_slider.setTickPosition(QSlider.TicksBelow); self.flow_right_spin = EnterSpinBox(); self.flow_right_spin.setRange(0,200); self.flow_right_spin.setValue(int(round(right_percent))); self.flow_right_slider.setValue(int(round(right_percent))); self.flow_right_slider.valueChanged.connect(self.flow_right_spin.setValue); self.flow_right_spin.valueChanged.connect(lambda v: 0 <= v <= 200 and self.flow_right_slider.setValue(v)); right_col.addWidget(self.flow_right_slider); right_col.addWidget(self.flow_right_spin)
         self._flow_target_timer = QTimer(self); self._flow_target_timer.setSingleShot(True); self._flow_target_timer.setInterval(700); self._flow_target_timer.timeout.connect(self._persist_pending_flow_targets); self._pending_flow_targets = (left_percent, right_percent)
         self._manual_target_timer = QTimer(self); self._manual_target_timer.setSingleShot(True); self._manual_target_timer.setInterval(300); self._manual_target_timer.timeout.connect(self._persist_pending_manual_targets)
         mid_col = QVBoxLayout(); self.manual_valve_btn = QPushButton("Manual Valve Control"); self.manual_valve_btn.setCheckable(True); self.manual_valve_btn.toggled.connect(self._toggle_manual_valve_mode); mid_col.addWidget(self.manual_valve_btn); self.flow_pid_enabled = QCheckBox("Flow PID Active"); self.flow_pid_enabled.setChecked(True); mid_col.addWidget(self.flow_pid_enabled); self.flow_hold_enabled = QCheckBox("Hold Valve Position"); self.flow_hold_enabled.setChecked(False); self.flow_hold_enabled.toggled.connect(self._handle_flow_hold_toggle); mid_col.addWidget(self.flow_hold_enabled); self.flow_baseline_left_label = QLabel("Normal L: {:.1f}%".format(self._flow_baseline["left"])); self.flow_baseline_right_label = QLabel("Normal R: {:.1f}%".format(self._flow_baseline["right"])); mid_col.addWidget(self.flow_baseline_left_label); mid_col.addWidget(self.flow_baseline_right_label); self.capture_flow_btn = QPushButton("Set Normal Flow (1s avg)"); self.capture_flow_btn.clicked.connect(self._capture_flow_baseline); mid_col.addWidget(self.capture_flow_btn)
@@ -461,6 +461,7 @@ class ROSGui(QWidget):
             "output_max": float(rospy.get_param("~flow_pid_output_max", 300.0)),
         }
         self._flow_pid_timer = QTimer(self); self._flow_pid_timer.setInterval(100); self._flow_pid_timer.timeout.connect(self._flow_pid_step); self._flow_pid_timer.start()
+        self._flow_measure_timer = QTimer(self); self._flow_measure_timer.setInterval(250); self._flow_measure_timer.timeout.connect(self._update_flow_measurements); self._flow_measure_timer.start()
         self.manual_valve_btn.setChecked(True)
         # Timer
         self.status_timer = QTimer(); self.status_timer.timeout.connect(self.ros_interface.update_button_status); self.status_timer.start(2000)
@@ -597,6 +598,22 @@ class ROSGui(QWidget):
                 self.ros_interface.persist_flow_targets(left, right)
             except Exception as exc:
                 print(f"Failed to persist flow targets: {exc}")
+
+    def _update_flow_measurements(self):
+        def format_measured(side: str):
+            actual = self.ros_interface.get_latest_flow_percent(side)
+            if actual is None:
+                return "Measured: —"
+            baseline = float(self._flow_baseline.get(side, 0.0))
+            if baseline > 1e-9:
+                pct_of_normal = (float(actual) / baseline) * 100.0
+                return f"Measured: {float(actual):.1f}%  |  Normal: {pct_of_normal:.0f}%"
+            return f"Measured: {float(actual):.1f}%  |  Normal: —"
+
+        if hasattr(self, "flow_left_measured_label"):
+            self.flow_left_measured_label.setText(format_measured("left"))
+        if hasattr(self, "flow_right_measured_label"):
+            self.flow_right_measured_label.setText(format_measured("right"))
 
     def _toggle_manual_valve_mode(self, enabled: bool):
         self._manual_valve_mode = bool(enabled)
