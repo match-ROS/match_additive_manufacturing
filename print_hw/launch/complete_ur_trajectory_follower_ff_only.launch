@@ -75,7 +75,7 @@
         <arg name="initial_path_index" value="$(arg initial_path_index)" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_tool_roll_pitch_stabilizer.launch">
-        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)ur_calibrated_pose" />
         <arg name="velocity_override_topic" value="/velocity_override" />
         <arg name="twist_topic" value="/ur_roll_pitch_twist_world" />
     </include>
