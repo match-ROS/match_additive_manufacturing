@@ -158,7 +158,7 @@ class ROSGui(QWidget):
         # Setup
         setup_group = QGroupBox("Setup Functions"); setup_layout = QVBoxLayout();
         setup_buttons = {
-            "Check Status": lambda: start_status_update(self),
+            "Launch Logitch Controller": lambda: self.ros_interface.launch_logitch_controller(),
             "Launch Drivers": lambda: launch_drivers(self),
             "Prepare Driver Cleanup Channel": lambda: self.ros_interface.prime_driver_cleanup_sessions(),
             "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),

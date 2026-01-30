@@ -1583,6 +1583,22 @@ class ROSInterface:
             target_robots=selected_robots,
         )
 
+    def launch_logitch_controller(self):
+        """Launches the Keyence scanner on the robots PC."""
+        selected_robots = self.gui.get_selected_robots()
+        if not selected_robots:
+            print("No robot selected. Skipping Logitch controller launch.")
+            return
+
+        command = (
+            "rosrun joy joy_node" 
+        )
+        _popen_with_debug(command, self.gui, shell=True)
+        command = (
+            f"roslaunch f710_ros f710_cmd_vel.launch mur_namespace:='{selected_robots[0]}'"
+        )
+        _popen_with_debug(command, self.gui, shell=True)
+
     def launch_flow_sensor_bridge(self):
         """Launches the foam volume flow sensor bridge on the robots."""
         selected_robots = self.gui.get_selected_robots()
@@ -2130,6 +2146,8 @@ def get_status_symbol(active, total):
 
 def open_rviz(gui):
     command = "roslaunch print_gui launch_rviz.launch"
+    _popen_with_debug(command, gui, shell=True)
+    command = "rosrun print_gui downsample_path_for_RViz.py"
     _popen_with_debug(command, gui, shell=True)
 
 def turn_on_arm_controllers(gui):
