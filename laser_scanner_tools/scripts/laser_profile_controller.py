@@ -19,10 +19,10 @@ class LaserProfileController(object):
             "/mur620c/UR10_r/twist_controller/command_collision_free"
         )
 
-        self.lateral_error_topic = rospy.get_param(
-            "~lateral_error_topic",
-            "/laser_profile/lateral_error"
-        )
+        # self.lateral_error_topic = rospy.get_param(
+        #     "~lateral_error_topic",
+        #     "/laser_profile/lateral_error"
+        # )
         self.height_error_topic = rospy.get_param(
             "~height_error_topic",
             "/laser_profile/height_error"
@@ -75,12 +75,12 @@ class LaserProfileController(object):
         # --- Subscribers ---
         rospy.Subscriber(self.tcp_pose_topic, PoseStamped,
                          self.ur_tcp_callback, queue_size=1)
-        rospy.Subscriber(self.lateral_error_topic, Float32,
-                         self.lateral_error_callback, queue_size=1)
+        # rospy.Subscriber(self.lateral_error_topic, Float32,
+        #                  self.lateral_error_callback, queue_size=1)
         rospy.Subscriber(self.height_error_topic, Float32,
-                         self.height_error_callback, queue_size=1)
-        rospy.Subscriber(self.lateral_pitch_topic, Float32,
-                 self.lateral_pitch_callback, queue_size=1)
+        #                  self.height_error_callback, queue_size=1)
+        # rospy.Subscriber(self.lateral_pitch_topic, Float32,
+        #          self.lateral_pitch_callback, queue_size=1)
         rospy.Subscriber(self.manual_override_topic, Float32,
                          self.manual_override_callback, queue_size=1)
 
@@ -96,8 +96,8 @@ class LaserProfileController(object):
     def ur_tcp_callback(self, msg: PoseStamped):
         self.ur_tcp_pose = msg
 
-    def lateral_error_callback(self, msg: Float32):
-        self.lateral_error = msg.data
+    # def lateral_error_callback(self, msg: Float32):
+    #     self.lateral_error = msg.data
 
     def height_error_callback(self, msg: Float32):
         self.height_error = msg.data
@@ -128,6 +128,7 @@ class LaserProfileController(object):
         if self.height_error is None:
             # Noch keine Höheninfo -> einfach manuellen Override durchreichen
             self.current_override = self.manual_override
+            rospy.logwarn_throttle(1.0, "No height_error received yet.")
         else:
             # Delta-Override proportional zum Höhenfehler
             # Vorzeichen: negativer Fehler -> +Delta, positiver Fehler -> -Delta
@@ -152,9 +153,9 @@ class LaserProfileController(object):
         if self.ur_tcp_pose is None:
             rospy.logwarn_throttle(1.0, "No TCP pose received yet.")
             return
-        if self.lateral_error is None:
-            rospy.logwarn_throttle(1.0, "No lateral_error received yet.")
-            return
+        # if self.lateral_error is None:
+        #     rospy.logwarn_throttle(1.0, "No lateral_error received yet.")
+        #     return
 
         # Override anhand Höhenfehler updaten
         self.update_override_from_height()
@@ -173,32 +174,32 @@ class LaserProfileController(object):
                 self.cmd_pub.publish(twist)
                 return
 
-        # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        v_lat = -self.k_p * self.lateral_error * self.lateral_pitch_m
-        v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
+        # # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
+        # v_lat = -self.k_p * self.lateral_error * self.lateral_pitch_m
+        # v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
-        # v_tcp: nur seitliche Bewegung entlang -Y des TCP
-        v_tcp = np.array([0.0, -v_lat, 0.0])
-        v_tcp = self.smooth_output(v_tcp)
+        # # v_tcp: nur seitliche Bewegung entlang -Y des TCP
+        # v_tcp = np.array([0.0, -v_lat, 0.0])
+        # v_tcp = self.smooth_output(v_tcp)
 
-        # --- TCP -> UR base Rotation ---
-        q = self.ur_tcp_pose.pose.orientation
-        qx, qy, qz, qw = q.x, q.y, q.z, q.w
+        # # --- TCP -> UR base Rotation ---
+        # q = self.ur_tcp_pose.pose.orientation
+        # qx, qy, qz, qw = q.x, q.y, q.z, q.w
 
-        R = np.array([
-            [1 - 2*qy*qy - 2*qz*qz,     2*qx*qy - 2*qz*qw,     2*qx*qz + 2*qy*qw],
-            [2*qx*qy + 2*qz*qw,     1 - 2*qx*qx - 2*qz*qz,     2*qy*qz - 2*qx*qw],
-            [2*qx*qz - 2*qy*qw,         2*qy*qz + 2*qx*qw,   1 - 2*qx*qx - 2*qy*qy]
-        ])
+        # R = np.array([
+        #     [1 - 2*qy*qy - 2*qz*qz,     2*qx*qy - 2*qz*qw,     2*qx*qz + 2*qy*qw],
+        #     [2*qx*qy + 2*qz*qw,     1 - 2*qx*qx - 2*qz*qz,     2*qy*qz - 2*qx*qw],
+        #     [2*qx*qz - 2*qy*qw,         2*qy*qz + 2*qx*qw,   1 - 2*qx*qx - 2*qy*qy]
+        # ])
 
-        v_urbase = R.dot(v_tcp)
+        # v_urbase = R.dot(v_tcp)
 
-        twist = Twist()
-        twist.linear.x = v_urbase[0]
-        twist.linear.y = v_urbase[1]
-        twist.linear.z = 0.0
+        # twist = Twist()
+        # twist.linear.x = v_urbase[0]
+        # twist.linear.y = v_urbase[1]
+        # twist.linear.z = 0.0
 
-        #self.cmd_pub.publish(twist)
+        # #self.cmd_pub.publish(twist)
 
 
 if __name__ == "__main__":

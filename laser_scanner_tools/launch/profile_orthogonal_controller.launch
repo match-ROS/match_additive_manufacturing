@@ -20,7 +20,7 @@
         <!-- Transformation parameters -->
         <param name="tcp_pose_topic" value="$(arg tcp_pose_topic)" />
         <param name="cmd_topic" value="$(arg cmd_topic)" />
-        <param name="lateral_error_topic" value="/laser_profile/lateral_error" />
+        <!-- <param name="lateral_error_topic" value="/laser_profile/lateral_error" /> -->
         <param name="height_error_topic" value="/laser_profile/height_error" />
     </node>
 </launch>

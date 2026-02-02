@@ -9,6 +9,10 @@
     <arg name="bias_gain" default="1.0" />
     <arg name="bias_sign" default="1.0" />
     <arg name="normalize_normal" default="true" />
+    <arg name="laser_lateral_error_topic" default="/laser_profile/lateral_error" />
+    <arg name="laser_lateral_scale" default="0.001" />
+    <arg name="laser_lateral_scale_param" default="/profiles_pitch_m" />
+    <arg name="laser_weight" default="1.0" />
     <arg name="reset_topic" default="/orthogonal_error_accumulator/reset" />
 
     <node
@@ -26,6 +30,10 @@
         <param name="bias_gain" value="$(arg bias_gain)" />
         <param name="bias_sign" value="$(arg bias_sign)" />
         <param name="normalize_normal" value="$(arg normalize_normal)" />
+        <param name="laser_lateral_error_topic" value="$(arg laser_lateral_error_topic)" />
+        <param name="laser_lateral_scale" value="$(arg laser_lateral_scale)" />
+        <param name="laser_lateral_scale_param" value="$(arg laser_lateral_scale_param)" />
+        <param name="laser_weight" value="$(arg laser_weight)" />
         <param name="reset_topic" value="$(arg reset_topic)" />
     </node>
 </launch>

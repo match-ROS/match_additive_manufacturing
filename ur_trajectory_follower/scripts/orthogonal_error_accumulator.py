@@ -6,7 +6,7 @@ from typing import Optional
 import rospy
 from geometry_msgs.msg import PoseStamped, Twist, Vector3
 from nav_msgs.msg import Path
-from std_msgs.msg import Bool, Int32
+from std_msgs.msg import Bool, Int32, Float32
 
 from helper.orthogonal_error_accumulator_core import (
     LayeredNearestNeighborAccumulator,
@@ -25,6 +25,24 @@ class OrthogonalErrorAccumulator:
         self.bias_gain = float(rospy.get_param("~bias_gain", 1.0))
         self.bias_sign = float(rospy.get_param("~bias_sign", 1.0))
         self.normalize_normal = bool(rospy.get_param("~normalize_normal", True))
+        self.laser_lateral_error_topic = rospy.get_param(
+            "~laser_lateral_error_topic", "/laser_profile/lateral_error"
+        )
+        self.laser_lateral_scale_param = rospy.get_param(
+            "~laser_lateral_scale_param", "/profiles_pitch_m"
+        )
+        if rospy.has_param(self.laser_lateral_scale_param):
+            self.laser_lateral_scale = float(
+                rospy.get_param(self.laser_lateral_scale_param)
+            )
+        else:
+            self.laser_lateral_scale = 0.001
+            rospy.logwarn(
+                "OrthogonalErrorAccumulator: using default laser_lateral_scale=%.6f; param '%s' not set",
+                self.laser_lateral_scale,
+                self.laser_lateral_scale_param,
+            )
+        self.laser_weight = float(rospy.get_param("~laser_weight", 1.0))
 
         self.path_topic = rospy.get_param("~path_topic", "/ur_path_transformed")
         self.goal_topic = rospy.get_param("~goal_topic", "/next_goal")
@@ -37,6 +55,7 @@ class OrthogonalErrorAccumulator:
         self._latest_normal: Optional[Vector3] = None
         self._latest_error: Optional[Twist] = None
         self._latest_index: Optional[int] = None
+        self._latest_laser_error: Optional[float] = None
 
         self._reference_points = []
         self._accumulator: Optional[LayeredNearestNeighborAccumulator] = None
@@ -52,6 +71,7 @@ class OrthogonalErrorAccumulator:
         rospy.Subscriber(self.goal_topic, PoseStamped, self._goal_cb)
         rospy.Subscriber(self.normal_topic, Vector3, self._normal_cb)
         rospy.Subscriber(self.error_topic, Twist, self._error_cb)
+        rospy.Subscriber(self.laser_lateral_error_topic, Float32, self._laser_error_cb)
         rospy.Subscriber(self.path_index_topic, Int32, self._index_cb)
         if self.reset_topic:
             rospy.Subscriber(self.reset_topic, Bool, self._reset_cb)
@@ -85,6 +105,9 @@ class OrthogonalErrorAccumulator:
 
     def _error_cb(self, msg: Twist):
         self._latest_error = msg
+
+    def _laser_error_cb(self, msg: Float32):
+        self._latest_laser_error = float(msg.data)
 
     def _index_cb(self, msg: Int32):
         self._latest_index = int(msg.data)
@@ -136,8 +159,24 @@ class OrthogonalErrorAccumulator:
         corrected.linear.z = err.z + bias_twist.linear.z
         corrected.angular = self._latest_error.angular
 
+        combined_scalar = (
+            corrected.linear.x * normal_vec[0]
+            + corrected.linear.y * normal_vec[1]
+            + corrected.linear.z * normal_vec[2]
+        )
+        if self._latest_laser_error is not None:
+            combined_scalar += (
+                self.laser_weight * self.laser_lateral_scale * self._latest_laser_error
+            )
+
+        combined = Twist()
+        combined.linear.x = combined_scalar * normal_vec[0]
+        combined.linear.y = combined_scalar * normal_vec[1]
+        combined.linear.z = combined_scalar * normal_vec[2]
+        combined.angular = self._latest_error.angular
+
         self.bias_pub.publish(bias_twist)
-        self.corrected_pub.publish(corrected)
+        self.corrected_pub.publish(combined)
         self.ref_index_pub.publish(ref_index)
         self.mean_pub.publish(stats.mean)
         self.count_pub.publish(stats.count)
