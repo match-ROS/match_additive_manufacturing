@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import sensor_msgs.point_cloud2 as pc2
 
 # ----------------- CONFIG -----------------
-bagfile = "record_20251210_141133_MuR.bag"
+bagfile = "record_20260202_110132_MuR.bag"
 scan_topic_pc2 = "/profiles"
 output_ply = "scans_export.ply"
 # -------------------------------------------
@@ -39,7 +39,7 @@ with rosbag.Bag(bagfile, "r") as bag:
     for topic, msg, t in bag.read_messages(topics=[scan_topic_pc2]):
 
         for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
-            points.append([p[0], p[1], p[2]*10.0])
+            points.append([p[0], p[1], p[2]*1.0])
 
 points = np.array(points)
 
