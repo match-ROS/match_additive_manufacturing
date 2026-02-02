@@ -17,7 +17,7 @@ class LaserProfileErrorEstimator(object):
 
         # Scanner-zu-Düse-Geometrie / Zeitversatz
         self.distance_scanner_to_nozzle = rospy.get_param("~distance_scanner_to_nozzle", 0.05)  # m
-        self.target_speed = rospy.get_param("~target_speed", 0.02)                              # m/s
+        self.target_speed = rospy.get_param("~target_speed", 0.2)                              # m/s
         self.profile_rate = rospy.get_param("~profile_rate", 40.0)                             # Hz
 
         # Filterparameter

@@ -2,11 +2,11 @@
 
   <arg name="robot_name"             default="mur620d" />
   <arg name="UR_prefix"              default="UR10_r" />
-  <arg name="start_index"            default="1300" />
-  <arg name="step"                   default="300" />
+  <arg name="start_index"            default="1450" />
+  <arg name="step"                   default="50" />
   <arg name="max_cycles"             default="999999" />
 
-  <arg name="spray_distance_up"      default="1.05" />
+  <arg name="spray_distance_up"      default="1.45" />
   <arg name="insert_delta"           default="0.2" />  <!-- 200 mm -->
   <arg name="node_start_delay"       default="0.0" />
 
