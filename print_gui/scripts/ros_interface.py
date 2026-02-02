@@ -739,30 +739,6 @@ class ROSInterface:
         self._start_signal_timer.timeout.connect(self._deactivate_start_signal)
 
         # Rosbag config
-        path_topics = self.get_path_topics()
-        self.rosbag_topics = [
-            # "/tf",
-            path_topics.get("ur_path_transformed", "/ur_path_transformed"),
-            path_topics.get("mir_path_transformed", "/mir_path_transformed"),
-            "/profiles"
-            "/path_index",
-            "/laser_profile_offset_cmd_vel",
-            "/orthogonal_error",
-            "/orthogonal_twist",
-            "/orthogonal_error_bias_mean",
-            "/orthogonal_error_sample_count",
-            "/orthogonal_error_reference_index",
-            "/ur_error_world"
-            "/mur620c/UR10_r/twist_controller/command_collision_free",
-            "/mur620c/UR10_r/twist_controller/controller_input",
-            "/ur_twist_direction_world",
-            "/servo_target_pos_left",
-            "/servo_target_pos_right",
-            "/mur620c/UR10_r/ur_calibrated_pose",
-            "/mur620c/UR10_r/global_tcp_pose",
-            "/mur620c/mir_pose_simple"
-        ]
-        self.rosbag_enabled = {t: True for t in self.rosbag_topics}
         self.rosbag_process = None
         self.rosbag_dir = os.path.expanduser("~/rosbags")  # fixer Ordner
         os.makedirs(self.rosbag_dir, exist_ok=True)
@@ -1022,6 +998,37 @@ class ROSInterface:
             "ur_path_transformed": self.resolve_path_topic("ur_path_transformed"),
             "ur_path_original": self.resolve_path_topic("ur_path_original"),
             "ur_path_normals": self.resolve_path_topic("ur_path_normals"),
+        }
+
+    def get_default_rosbag_settings(self) -> dict:
+        path_topics = self.get_path_topics()
+        return {
+            "/tf": {"local": False, "remote": False},
+            path_topics.get("ur_path_transformed", "/ur_path_transformed"): {"local": True, "remote": False},
+            path_topics.get("mir_path_transformed", "/mir_path_transformed"): {"local": True, "remote": False},
+            "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
+            "/profiles": {"local": False, "remote": True},
+            "/path_index": {"local": False, "remote": True},
+            "/orthogonal_error": {"local": False, "remote": True},
+            "/orthogonal_twist": {"local": False, "remote": True},
+            "/orthogonal_error_bias_mean": {"local": False, "remote": True},
+            "/orthogonal_error_sample_count": {"local": False, "remote": True},
+            "/orthogonal_error_reference_index": {"local": False, "remote": True},
+            "/ur_error_world": {"local": False, "remote": True},
+            "/mur620c/UR10_r/twist_controller/command_collision_free": {"local": False, "remote": True},
+            "/mur620c/UR10_r/twist_controller/controller_input": {"local": False, "remote": True},
+            "/ur_twist_direction_world": {"local": False, "remote": True},
+            "/servo_target_pos_left": {"local": False, "remote": True},
+            "/servo_target_pos_right": {"local": False, "remote": True},
+            "/foam_volume_flow_sensor/samples": {"local": True, "remote": False},
+            "/foam_volume_flow_sensor/left": {"local": True, "remote": False},
+            "/foam_volume_flow_sensor/right": {"local": True, "remote": False},
+            "/mur620c/UR10_r/ur_calibrated_pose": {"local": False, "remote": True},
+            "/mur620c/UR10_r/global_tcp_pose": {"local": False, "remote": True},
+            "/qualisys_map/mur620c/pose": {"local": True, "remote": False},
+            "/qualisys_map/nozzle/pose": {"local": True, "remote": False},
+            "/mur620c/UR10_r/global_tcp_pose_mocap": {"local": True, "remote": False},
+            "/mur620c/cmd_vel": {"local": True, "remote": False},
         }
 
     def get_cached_component_name(self) -> str:

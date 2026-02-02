@@ -283,32 +283,7 @@ class ROSGui(QWidget):
 
         ur_btn = QPushButton("UR Follow Trajectory"); ur_btn.clicked.connect(lambda _, f=ur_follow_trajectory: f(self, self.ur_follow_settings)); ur_settings_btn = QPushButton("Settings"); ur_settings_btn.clicked.connect(self.open_ur_settings); ur_settings_btn.setStyleSheet("background-color: lightgray;"); hbox = QHBoxLayout(); hbox.addWidget(ur_btn); hbox.addWidget(ur_settings_btn); print_functions_layout.addLayout(hbox)
         # --- Rosbag recording ---
-        path_topics = self.ros_interface.get_path_topics()
-        self.topic_settings = {
-            "/tf": {"local": False, "remote": False},
-            path_topics.get("ur_path_transformed", "/ur_path_transformed"): {"local": True, "remote": False},
-            path_topics.get("mir_path_transformed", "/mir_path_transformed"): {"local": True, "remote": False},
-            "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
-            "/profiles": {"local": False, "remote": True},
-            "/path_index": {"local": False, "remote": True},
-            "/orthogonal_error": {"local": False, "remote": True},
-            "/orthogonal_twist": {"local": False, "remote": True},
-            "/orthogonal_error_bias_mean": {"local": False, "remote": True},
-            "/orthogonal_error_sample_count": {"local": False, "remote": True},
-            "/orthogonal_error_reference_index": {"local": False, "remote": True},
-            "/ur_error_world": {"local": False, "remote": True},
-            "/mur620c/UR10_r/twist_controller/command_collision_free": {"local": False, "remote": True},
-            "/mur620c/UR10_r/twist_controller/controller_input": {"local": False, "remote": True},
-            "/ur_twist_direction_world": {"local": False, "remote": True},
-            "/servo_target_pos_left": {"local": False, "remote": True},
-            "/servo_target_pos_right": {"local": False, "remote": True},
-            "/mur620c/UR10_r/ur_calibrated_pose": {"local": False, "remote": True},
-            "/mur620c/UR10_r/global_tcp_pose": {"local": False, "remote": True},
-            "/qualisys_map/mur620c/pose": {"local": True, "remote": False},
-            "/qualisys_map/nozzle/pose": {"local": True, "remote": False},
-            "/mur620c/UR10_r/global_tcp_pose_mocap": {"local": True, "remote": False},
-            "/mur620c/cmd_vel": {"local": True, "remote": False},
-        }
+        self.topic_settings = self.ros_interface.get_default_rosbag_settings()
 
 
         # self.btn_rosbag_settings.clicked.connect(lambda: self.open_rosbag_settings())
