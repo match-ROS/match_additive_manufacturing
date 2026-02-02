@@ -42,7 +42,7 @@ class LaserProfileController(object):
             "/velocity_override"
         )
         # max. Änderung gegenüber manuellem Override (z.B. 0.3 = ±30 Prozentpunkte)
-        self.max_override_adjust = rospy.get_param("~max_override_adjust", 0.3)
+        self.max_override_adjust = rospy.get_param("~max_override_adjust", 0.4)
         # Gain: wie stark der Höhenfehler in Override-Änderung übersetzt wird
         self.height_override_gain = rospy.get_param("~height_override_gain", 0.015)
         # Grenzen für den effektiven Override
