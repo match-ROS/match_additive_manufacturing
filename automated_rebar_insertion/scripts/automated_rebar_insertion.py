@@ -34,8 +34,8 @@ class RebarAutomationNode:
         # --- Params
         self.robot_name = rospy.get_param("~robot_name", "mur620d")
         self.UR_prefix = rospy.get_param("~UR_prefix", "UR10_r")
-        self.start_index = int(rospy.get_param("~start_index", 1200))
-        self.step = int(rospy.get_param("~step", 50))
+        self.start_index = int(rospy.get_param("~start_index", 1300))
+        self.step = int(rospy.get_param("~step", 10))
         self.max_cycles = int(rospy.get_param("~max_cycles", 999999))  # safety
         self.cm_switch_srv = f"/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller"
         self.arm_controller_name = rospy.get_param("~arm_controller_name", "arm_controller")
@@ -43,9 +43,9 @@ class RebarAutomationNode:
         self.twist_cmd_topic = rospy.get_param("~twist_cmd_topic", f"/{self.robot_name}/{self.UR_prefix}/twist_controller/command_collision_free")
         self.twist_frame_id = rospy.get_param("~twist_frame_id", f"{self.robot_name}/base_link")
         self.twist_rate_hz = int(rospy.get_param("~twist_rate_hz", 250))
-        self.path_topic = rospy.get_param("~path_topic", "/ur_path_original")
+        self.path_topic = rospy.get_param("~path_topic", "/mur620c/ur_path_transformed")
 
-        self.spray_distance_up = float(rospy.get_param("~spray_distance_up", 0.65))
+        self.spray_distance_up = float(rospy.get_param("~spray_distance_up", 0.8))
         self.insert_delta = float(rospy.get_param("~insert_delta", 0.05))  # 50 mm
         self.spray_distance_down = self.spray_distance_up - self.insert_delta
 
@@ -97,7 +97,7 @@ class RebarAutomationNode:
         
         # Wait for initial messages / setup
         rospy.loginfo("RebarAutomationNode: waiting for initial topics...")
-        rospy.wait_for_message(self.path_topic, Path, timeout=5.0)  # oder warten bis self.ur_path != None
+        rospy.wait_for_message(self.path_topic, Path, timeout=15.0)  # oder warten bis self.ur_path != None
         rospy.loginfo("RebarAutomationNode: initial topics received.")
 
         # roslaunch UUID
@@ -124,7 +124,7 @@ class RebarAutomationNode:
     def run(self):
         idx = self.start_index
         # Initial move MiR to start index
-        self._run_mir_to_index(idx)
+        #self._run_mir_to_index(idx)
 
         for cycle in range(self.max_cycles):
             if rospy.is_shutdown():
@@ -138,7 +138,7 @@ class RebarAutomationNode:
             self._set_ur_digital_out(self.magnet_grip_pin, 0.0)
 
             # 1) Move UR to index (start pose)
-            self._wait_mir_stopped() # ensure MiR is stable before continuing 
+            #self._wait_mir_stopped() # ensure MiR is stable before continuing 
             #self._run_ur_to_index(idx, self.spray_distance_up)
             self.move_ur_to_index_fast(idx, self.spray_distance_up)
 
@@ -147,7 +147,7 @@ class RebarAutomationNode:
             self.move_relative_z_twist_c2(dz_m=-self.insert_delta, duration_s=1.95)  # 50 mm runter
             rospy.sleep(2.0)
             # move sideways to loosen rebar
-            self.move_relative_xy_twist_c2(dx_m=0.04, dy_m=0.0, duration_s=0.5)  # 20 mm vor
+            self.move_relative_xy_twist_c2(dx_m=0.05, dy_m=0.0, duration_s=0.5)  # 50 mm vor
             self._set_ur_digital_out(self.magnet_release_pin, 0.0)
 
             # 3) Retract fast (up)
@@ -155,7 +155,7 @@ class RebarAutomationNode:
 
             # 4) Move MiR to next index
             idx += self.step
-            self._run_mir_to_index(idx)
+            #self._run_mir_to_index(idx)
 
             # 5) Go to magazine sequence + close gripper
             #self._moveit_joints(self.prepos_joints)
@@ -187,7 +187,7 @@ class RebarAutomationNode:
             "initial_path_index": str(index),
             "spray_distance": f"{spray_distance:.3f}",
             "node_start_delay": f"{self.node_start_delay:.3f}",
-            # "planning_group": self.planning_group,  # keep default unless needed
+            "path_ns": "mur620c",
         }
         self._run_launch_blocking(self.ur_launch, args, f"UR->index (spray_distance={spray_distance:.3f})")
 
