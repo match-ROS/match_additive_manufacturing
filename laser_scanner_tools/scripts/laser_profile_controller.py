@@ -75,12 +75,8 @@ class LaserProfileController(object):
         # --- Subscribers ---
         rospy.Subscriber(self.tcp_pose_topic, PoseStamped,
                          self.ur_tcp_callback, queue_size=1)
-        # rospy.Subscriber(self.lateral_error_topic, Float32,
-        #                  self.lateral_error_callback, queue_size=1)
         rospy.Subscriber(self.height_error_topic, Float32,
-        #                  self.height_error_callback, queue_size=1)
-        # rospy.Subscriber(self.lateral_pitch_topic, Float32,
-        #          self.lateral_pitch_callback, queue_size=1)
+                         self.height_error_callback, queue_size=1)
         rospy.Subscriber(self.manual_override_topic, Float32,
                          self.manual_override_callback, queue_size=1)
 
@@ -153,14 +149,11 @@ class LaserProfileController(object):
         if self.ur_tcp_pose is None:
             rospy.logwarn_throttle(1.0, "No TCP pose received yet.")
             return
-        # if self.lateral_error is None:
-        #     rospy.logwarn_throttle(1.0, "No lateral_error received yet.")
-        #     return
 
         # Override anhand Höhenfehler updaten
         self.update_override_from_height()
 
-        # --- Optional: Höhencheck zum Sicherheits-Stop ---
+        # --- Optional: Höhencheck zum Sicherheits-Stop (Stop entfernt, da so ohne Nutzen) ---
         if self.height_error is not None:
             current_height = self.target_layer_height - self.height_error
             if current_height < self.min_expected_height:
@@ -170,36 +163,7 @@ class LaserProfileController(object):
                     current_height,
                     self.min_expected_height
                 )
-                twist = Twist()  # stoppen
-                self.cmd_pub.publish(twist)
                 return
-
-        # # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        # v_lat = -self.k_p * self.lateral_error * self.lateral_pitch_m
-        # v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
-
-        # # v_tcp: nur seitliche Bewegung entlang -Y des TCP
-        # v_tcp = np.array([0.0, -v_lat, 0.0])
-        # v_tcp = self.smooth_output(v_tcp)
-
-        # # --- TCP -> UR base Rotation ---
-        # q = self.ur_tcp_pose.pose.orientation
-        # qx, qy, qz, qw = q.x, q.y, q.z, q.w
-
-        # R = np.array([
-        #     [1 - 2*qy*qy - 2*qz*qz,     2*qx*qy - 2*qz*qw,     2*qx*qz + 2*qy*qw],
-        #     [2*qx*qy + 2*qz*qw,     1 - 2*qx*qx - 2*qz*qz,     2*qy*qz - 2*qx*qw],
-        #     [2*qx*qz - 2*qy*qw,         2*qy*qz + 2*qx*qw,   1 - 2*qx*qx - 2*qy*qy]
-        # ])
-
-        # v_urbase = R.dot(v_tcp)
-
-        # twist = Twist()
-        # twist.linear.x = v_urbase[0]
-        # twist.linear.y = v_urbase[1]
-        # twist.linear.z = 0.0
-
-        # #self.cmd_pub.publish(twist)
 
 
 if __name__ == "__main__":
