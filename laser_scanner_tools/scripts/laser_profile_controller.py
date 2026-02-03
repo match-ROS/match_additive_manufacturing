@@ -49,15 +49,14 @@ class LaserProfileController(object):
         self.override_min = rospy.get_param("~override_min", 0.0)
         self.override_max = rospy.get_param("~override_max", 2.2)
 
-        self.k_p = rospy.get_param("~k_p", 0.3)
+        self.k_p = rospy.get_param("~k_p", 0.8)
+        self.k_i = rospy.get_param("~k_i", 0.04)
+        self.k_d = rospy.get_param("~k_d", 0.1)
         self.lateral_pitch_m = rospy.get_param("~lateral_pitch_m", 0.001)
         self.max_vel = rospy.get_param("~max_vel", 0.15)
-        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.95)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.90)
         self.control_rate = rospy.get_param("~control_rate", 200.0)
 
-        # Für Höhencheck
-        self.target_layer_height = rospy.get_param("~target_layer_height", -10.0)
-        self.min_expected_height = rospy.get_param("~min_expected_height", -90.0)
 
         # --- State ---
         self.ur_tcp_pose = None
@@ -67,6 +66,11 @@ class LaserProfileController(object):
 
         self.manual_override = 1.0
         self.current_override = 1.0
+
+        # --- Init PID state ---
+        self.pid_integral = 0.0
+        self.prev_error = 0.0
+
 
         # --- Publisher ---
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=1)
@@ -148,6 +152,28 @@ class LaserProfileController(object):
 
     # ------------------------------------------------------------------
 
+    def compute_pid(self, error):
+        """Einfache PID-Regler-Implementierung."""
+        if not hasattr(self, 'pid_integral'):
+            self.pid_integral = 0.0
+            self.prev_error = 0.0
+
+        # Integralterm
+        self.pid_integral += error / self.control_rate
+
+        # Differentialterm
+        derivative = (error - self.prev_error) * self.control_rate
+
+        # PID-Ausgang
+        output = (self.k_p * error +
+                  self.k_i * self.pid_integral +
+                  self.k_d * derivative)
+
+        # Vorbereiten für nächsten Schritt
+        self.prev_error = error
+
+        return output
+
     def update(self):
         if self.ur_tcp_pose is None:
             rospy.logwarn_throttle(1.0, "No TCP pose received yet.")
@@ -159,22 +185,9 @@ class LaserProfileController(object):
         # Override anhand Höhenfehler updaten
         self.update_override_from_height()
 
-        # --- Optional: Höhencheck zum Sicherheits-Stop ---
-        if self.height_error is not None:
-            current_height = self.target_layer_height - self.height_error
-            if current_height < self.min_expected_height:
-                rospy.logwarn_throttle(
-                    5.0,
-                    "Profile point too low in controller: %.2f < %.2f",
-                    current_height,
-                    self.min_expected_height
-                )
-                twist = Twist()  # stoppen
-                self.cmd_pub.publish(twist)
-                return
 
         # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        v_lat = -self.k_p * self.lateral_error * self.lateral_pitch_m
+        v_lat = self.compute_pid(self.lateral_error* self.lateral_pitch_m)
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
         # v_tcp: nur seitliche Bewegung entlang -Y des TCP
@@ -198,7 +211,7 @@ class LaserProfileController(object):
         twist.linear.y = v_urbase[1]
         twist.linear.z = 0.0
 
-        #self.cmd_pub.publish(twist)
+        self.cmd_pub.publish(twist)
 
 
 if __name__ == "__main__":
