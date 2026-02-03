@@ -1,6 +1,16 @@
 <launch>
     <arg name="robot_name" default="mur620a" />
     <arg name="prefix_ur" default="UR10_r/" />
+    <arg name="metric" default="virtual line" />
+    <arg name="threshold" default="0.01" />
+    <arg name="initial_path_index" default="0" />
+    <arg name="nozzle_height_default" default="0.1" />
+    <arg name="start_condition_topic" default="/start_condition" />
+    <arg name="wait_for_start_condition" default="true" />
+    <arg name="path_ns" default="" doc="Namespace prefix for UR path/trajectory topics (with or without leading slash)." />
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
+    <arg name="ur_path_topic" default="$(arg path_ns_prefix)/ur_path_transformed" />
+    <arg name="ur_path_normals_topic" default="$(arg path_ns_prefix)/ur_path_normals" />
 
     <remap from="/global_nozzle_pose" to="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
 
@@ -9,19 +19,15 @@
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
     </include>
     
-    <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir'] -->
+    <!-- combine: ['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/laser_profile_offset_cmd_vel', '/ur_roll_pitch_twist'] -->
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
+        <arg name="twist_topics" value="['/ur_twist_mir_compensation', '/ur_twist_world_in_mir', '/laser_profile_offset_cmd_vel', '/ur_roll_pitch_twist']"/>
         <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command"/>
     </include>
 
     <node name="twist_combiner_world" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
-        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world']</rosparam>
+        <rosparam param="twist_topics" subst_value="true">['/orthogonal_twist', '/ur_twist_direction_world', '/ur_roll_pitch_twist']</rosparam>
         <remap from="combined_twist" to="/ur_twist_world"/>
-    </node>
-
-    <node name="twist_combiner_profile_offset" pkg="ur_trajectory_follower" type="combine_twists.py" output="screen">
-        <rosparam param="twist_topics" subst_value="true">['/ur_twist_world', '/laser_profile_offset_cmd_vel']</rosparam>
-        <remap from="combined_twist" to="/ur_twist_world_offset"/>
     </node>
 
     <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch" >
@@ -38,20 +44,49 @@
     </node>
 
     <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch" >
-        <arg name="virtual_line_threshold" value="0.001" />
+        <arg name="metric" value="$(arg metric)" />
+        <arg name="threshold" value="$(arg threshold)" />
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
+        <arg name="path_ns" value="$(arg path_ns)" />
+        <arg name="path_topic" value="$(arg ur_path_topic)" />
+        <arg name="normals_topic" value="$(arg ur_path_normals_topic)" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch" >
         <arg name="robot_name" value="$(arg robot_name)" />
     </include>
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
+        <arg name="path_ns" value="$(arg path_ns)" />
         <arg name="ff_only" value="true" />
+        <arg name="nozzle_height_default" value="$(arg nozzle_height_default)" />
+        <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
+        <arg name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
         <remap from="/ur_twist_world_offset" to="/ur_error_world" />
+    </include>
+    <include file="$(find ur_trajectory_follower)/launch/ur_yaw_controller.launch">
+        <arg name="path_ns" value="$(arg path_ns)" />
+        <arg name="path_topic" value="$(arg ur_path_topic)" />
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="velocity_override_topic" value="/velocity_override" />
+        <arg name="twist_topic" value="/ur_rotation_twist_world" />
+        <arg name="initial_path_index" value="$(arg initial_path_index)" />
+    </include>
+    <include file="$(find ur_trajectory_follower)/launch/ur_tool_roll_pitch_stabilizer.launch">
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)tcp_pose" />
+        <arg name="velocity_override_topic" value="/velocity_override" />
+        <arg name="twist_topic" value="/ur_roll_pitch_twist" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_correction.launch">
         <arg name="orthogonal_error_correction_topic" value="/orthogonal_error" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/orthogonal_error_accumulator.launch">
+        <arg name="path_topic" value="$(arg ur_path_topic)" />
+        <arg name="goal_topic" value="$(arg path_ns_prefix)/next_goal" />
+        <arg name="normal_topic" value="$(arg path_ns_prefix)/normal_vector" />
+        <arg name="path_index_topic" value="$(arg path_ns_prefix)/path_index" />
+        <arg name="orthogonal_error_topic" value="/orthogonal_error" />
         <arg name="layer_delta_z" value="0.01" />
         <arg name="nn_window" value="50" />
     </include>
@@ -64,12 +99,4 @@
         <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_ff.yaml" />
     </include>
     
-    <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
-        <arg name="node_name" value="pid_twist_controller_orthogonal" />
-        <arg name="input_twist_topic" value="/orthogonal_error_corrected" />
-        <!-- <arg name="output_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" /> -->
-        <arg name="output_twist_topic" value="/orthogonal_twist" />
-        <arg name="pid_values_path" value="$(find ur_trajectory_follower)/config/pid_twist_controller_direction_orthogonal.yaml" />
-    </include>
-
 </launch>

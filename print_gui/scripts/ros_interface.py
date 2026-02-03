@@ -2730,13 +2730,20 @@ def ur_follow_trajectory(gui, ur_follow_settings: dict):
 
     ur = selected_urs[0]
 
-    cmd_template = (
-        "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
-        "robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
-        "threshold:={threshold} initial_path_index:={initial_path_index} "
-        "nozzle_height_default:={spray_distance} "
-        "ur_path_topic:={ur_path_topic} ur_path_normals_topic:={ur_normals_topic}"
-    )
+    if gui.get_simulation_mode():
+        cmd_template = (
+            "roslaunch ur_trajectory_follower complete_ur_trajectory_follower_ff_only.launch "
+            "robot_name:={robot} prefix_ur:={ur}/"
+        )
+        path_ns_arg = ""
+    else:
+        cmd_template = (
+            "roslaunch print_hw complete_ur_trajectory_follower_ff_only.launch "
+            "robot_name:={robot} prefix_ur:={ur}/ metric:='{metric}' "
+            "threshold:={threshold} initial_path_index:={initial_path_index} "
+            "nozzle_height_default:={spray_distance} "
+            "ur_path_topic:={ur_path_topic} ur_path_normals_topic:={ur_normals_topic}"
+        )
 
     _run_remote_commands(
         gui,
