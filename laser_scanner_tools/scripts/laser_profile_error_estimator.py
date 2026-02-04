@@ -13,7 +13,7 @@ class LaserProfileErrorEstimator(object):
 
         # Ziel-Schichthöhe
         self.target_layer_height = rospy.get_param("~target_layer_height", -15.0)  # z.B. mm
-        self.height_half_width = rospy.get_param("~height_half_width", 50)         # Punkte links/rechts
+        self.height_half_width = rospy.get_param("~height_half_width", 40)         # Punkte links/rechts
 
         # Scanner-zu-Düse-Geometrie / Zeitversatz
         self.distance_scanner_to_nozzle = rospy.get_param("~distance_scanner_to_nozzle", 0.05)  # m
@@ -22,7 +22,7 @@ class LaserProfileErrorEstimator(object):
 
         # Filterparameter
         self.filter_half_width = rospy.get_param("~filter_half_width", 5)       # für Höhenfehler (symmetrisch)
-        self.lateral_ma_window = rospy.get_param("~lateral_ma_window", 5)       # gleitender Mittelwert lateral
+        self.lateral_ma_window = rospy.get_param("~lateral_ma_window", 15)       # gleitender Mittelwert lateral
         self.min_expected_height = rospy.get_param("~min_expected_height", -100.0)
 
         # Geschwindigkeitsoverride

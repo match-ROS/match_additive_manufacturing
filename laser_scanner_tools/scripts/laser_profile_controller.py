@@ -44,17 +44,18 @@ class LaserProfileController(object):
         # max. Änderung gegenüber manuellem Override (z.B. 0.3 = ±30 Prozentpunkte)
         self.max_override_adjust = rospy.get_param("~max_override_adjust", 0.4)
         # Gain: wie stark der Höhenfehler in Override-Änderung übersetzt wird
-        self.height_override_gain = rospy.get_param("~height_override_gain", 0.010)
+        self.height_override_gain = rospy.get_param("~height_override_gain", 0.008)
         # Grenzen für den effektiven Override
         self.override_min = rospy.get_param("~override_min", 0.0)
         self.override_max = rospy.get_param("~override_max", 2.2)
 
-        self.k_p = rospy.get_param("~k_p", 0.8)
+        self.k_p = rospy.get_param("~k_p", 1.2)
         self.k_i = rospy.get_param("~k_i", 0.04)
-        self.k_d = rospy.get_param("~k_d", 0.1)
+        self.k_d = rospy.get_param("~k_d", 0.0)
+        self.I_max = rospy.get_param("~I_max", 0.1)
         self.lateral_pitch_m = rospy.get_param("~lateral_pitch_m", 0.001)
         self.max_vel = rospy.get_param("~max_vel", 0.15)
-        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.90)
+        self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.96)
         self.control_rate = rospy.get_param("~control_rate", 200.0)
 
 
@@ -70,6 +71,7 @@ class LaserProfileController(object):
         # --- Init PID state ---
         self.pid_integral = 0.0
         self.prev_error = 0.0
+
 
 
         # --- Publisher ---
@@ -160,6 +162,8 @@ class LaserProfileController(object):
 
         # Integralterm
         self.pid_integral += error / self.control_rate
+        # Anti-Windup
+        self.pid_integral = np.clip(self.pid_integral, -self.I_max, self.I_max)
 
         # Differentialterm
         derivative = (error - self.prev_error) * self.control_rate
@@ -187,7 +191,7 @@ class LaserProfileController(object):
 
 
         # --- Lateralgeschwindigkeit in TCP-Frame (Y-Achse) ---
-        v_lat = self.compute_pid(self.lateral_error* self.lateral_pitch_m)
+        v_lat = -1.0 *  self.compute_pid(self.lateral_error* self.lateral_pitch_m) 
         v_lat = np.clip(v_lat, -self.max_vel, self.max_vel)
 
         # v_tcp: nur seitliche Bewegung entlang -Y des TCP
@@ -211,7 +215,7 @@ class LaserProfileController(object):
         twist.linear.y = v_urbase[1]
         twist.linear.z = 0.0
 
-        self.cmd_pub.publish(twist)
+        #self.cmd_pub.publish(twist)
 
 
 if __name__ == "__main__":
