@@ -11,6 +11,7 @@ class URJoyTwist:
 
         self.scale_x = rospy.get_param("~scale_x", 0.1)
         self.scale_y = rospy.get_param("~scale_y", 0.1)
+        self.scale_z = rospy.get_param("~scale_z", 0.1)
         self.alpha   = rospy.get_param("~alpha", 0.1)
         self.timeout = rospy.get_param("~timeout", 1.5)
 
@@ -19,6 +20,7 @@ class URJoyTwist:
 
         self.x_filt = 0.0
         self.y_filt = 0.0
+        self.z_filt = 0.0
         self.last_cmd_time = rospy.Time(0)
 
         self.pub = rospy.Publisher(
@@ -33,14 +35,18 @@ class URJoyTwist:
     def joy_cb(self, msg):
         x_raw = self.scale_x * msg.axes[4]
         y_raw = self.scale_y * msg.axes[3]
+        z_raw = self.scale_z * msg.axes[0]
 
         self.x_filt = self.alpha * x_raw + (1 - self.alpha) * self.x_filt
         self.y_filt = self.alpha * y_raw + (1 - self.alpha) * self.y_filt
+        self.z_filt = self.alpha * z_raw + (1 - self.alpha) * self.z_filt
 
         if x_raw == 0.0:
             self.x_filt = 0.0
         if y_raw == 0.0:
             self.y_filt = 0.0  
+        if z_raw == 0.0:
+            self.z_filt = 0.0
     
         self.last_cmd_time = rospy.Time.now()
 
@@ -48,12 +54,14 @@ class URJoyTwist:
         twist = Twist()
 
         if (rospy.Time.now() - self.last_cmd_time).to_sec() < self.timeout:
-            v = self.Rz @ [self.x_filt, self.y_filt, 0.0]
+            v = self.Rz @ [self.x_filt, self.y_filt, self.z_filt]
             twist.linear.x = v[0]
             twist.linear.y = v[1]
+            twist.angular.z = v[2]
         else:
             twist.linear.x = 0.0
             twist.linear.y = 0.0
+            twist.angular.z = 0.0
 
         self.pub.publish(twist)
 

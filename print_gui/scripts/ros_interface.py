@@ -2614,6 +2614,7 @@ def mir_follow_trajectory(gui):
             f"robot_name:={robot} initial_path_index:={initial_idx} "
             f"mir_path_topic:={mir_path_topic} mir_path_timestamps_topic:={mir_timestamps_topic} "
             f"mir_path_velocity_topic:={mir_velocity_topic}{path_ns_arg}"
+            f"trajectory_index_topic:=/{robot}/path_index_modified"
         )],
         use_workspace_debug=True,
         target_robots=selected_robots,

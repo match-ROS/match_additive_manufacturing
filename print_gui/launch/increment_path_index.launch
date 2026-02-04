@@ -1,6 +1,6 @@
 <launch>
     <!-- Argument für die Liste der Roboter -->
-    <arg name="path_index_topic" default="mur620c/path_index" />
+    <arg name="path_index_topic" default="/mur620c/path_index_modified" />
     <arg name="initial_path_index" default="0" />
 
     <node pkg="print_gui" type="increment_path_index.py" name="increment_path_index" output="screen">
