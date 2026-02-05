@@ -13,11 +13,11 @@ class LaserProfileErrorEstimator(object):
 
         # Ziel-Schichthöhe
         self.target_layer_height = rospy.get_param("~target_layer_height", -15.0)  # z.B. mm
-        self.height_half_width = rospy.get_param("~height_half_width", 40)         # Punkte links/rechts
+        self.height_half_width = rospy.get_param("~height_half_width", 20)         # Punkte links/rechts
 
         # Scanner-zu-Düse-Geometrie / Zeitversatz
         self.distance_scanner_to_nozzle = rospy.get_param("~distance_scanner_to_nozzle", 0.05)  # m
-        self.target_speed = rospy.get_param("~target_speed", 0.2)                              # m/s
+        self.target_speed = rospy.get_param("~target_speed", 0.4)                              # m/s
         self.profile_rate = rospy.get_param("~profile_rate", 40.0)                             # Hz
 
         # Filterparameter
@@ -148,8 +148,10 @@ class LaserProfileErrorEstimator(object):
             )
             # Seitliche Korrektur bleibt, Höhenfehler kannst du trotzdem loggen
             # (h_filtered wird trotzdem publiziert)
-
-        self.height_error_pub.publish(Float32(data=h_filtered))
+        # get latest raw height error for logging
+        latest_raw_height_error = self.raw_height[-1] if self.raw_height else 0.0
+        
+        self.height_error_pub.publish(Float32(data=latest_raw_height_error))
 
 
 if __name__ == "__main__":

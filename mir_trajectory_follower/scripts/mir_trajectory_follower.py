@@ -49,10 +49,10 @@ class PurePursuitNode:
         self.K_orientation = rospy.get_param("~K_orientation", 0.5)  # Orientation error multiplier
         self.K_idx = rospy.get_param("~K_idx", 0.02)  # Index error multiplier
         self.mir_path_topic = self._normalize_topic(rospy.get_param("~mir_path_topic", "/mir_path_transformed"))
-        self.mir_pose_topic = self._normalize_topic(rospy.get_param("~mir_pose_topic", "/mur620a/mir_pose_simple"))
+        self.mir_pose_topic = self._normalize_topic(rospy.get_param("~mir_pose_topic", "/mur620c/mir_pose_simple"))
         self.mir_path_velocity_topic = self._normalize_topic(rospy.get_param("~mir_path_velocity_topic", "/mir_path_velocity"))
-        self.cmd_vel_topic = self._normalize_topic(rospy.get_param("~cmd_vel_topic", "/mur620a/mobile_base_controller/cmd_vel"))
-        self.trajectory_index_topic = self._normalize_topic(rospy.get_param("~trajectory_index_topic", "/trajectory_index"))
+        self.cmd_vel_topic = self._normalize_topic(rospy.get_param("~cmd_vel_topic", "/mur620c/mobile_base_controller/cmd_vel"))
+        self.trajectory_index_topic = self._normalize_topic(rospy.get_param("~trajectory_index_topic", "mur620c/trajectory_index"))
         self.layer_progress_topic = self._normalize_topic(rospy.get_param("~layer_progress_topic", "/layer_progress"))
         self.control_rate = rospy.get_param("~control_rate", 100)
         self.dT = rospy.get_param("~dT", 0.3)  # Time between trajectory points in seconds

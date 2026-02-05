@@ -5,11 +5,11 @@
     <arg name="initial_path_index" default="-1" />
     <arg name="path_ns" default="" doc="Namespace prefix for MIR path topics (with or without leading slash)." />
     <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')" />
-    <arg name="mir_path_topic" default="$(arg path_ns_prefix)/mir_path_transformed" />
-    <arg name="mir_path_timestamps_topic" default="$(arg path_ns_prefix)/mir_path_timestamps" />
-    <arg name="mir_path_velocity_topic" default="$(arg path_ns_prefix)/mir_path_velocity" />
-    <arg name="path_index_topic" default="$(arg path_ns_prefix)/path_index" />
-    <arg name="trajectory_index_topic" default="$(arg path_ns_prefix)/path_index_modified" />
+    <arg name="mir_path_topic" default="$(arg robot_name)/mir_path_transformed" />
+    <arg name="mir_path_timestamps_topic" default="$(arg robot_name)/mir_path_timestamps" />
+    <arg name="mir_path_velocity_topic" default="$(arg robot_name)/mir_path_velocity" />
+    <arg name="path_index_topic" default="$(arg robot_name)/path_index" />
+    <arg name="trajectory_index_topic" default="$(arg robot_name)/path_index_modified" />
     <!-- Node that runs the path transformer script -->
     <node name="mir_trajectory_follower" pkg="mir_trajectory_follower" type="mir_trajectory_follower.py" output="screen">
         <!-- Transformation parameters -->
@@ -34,9 +34,9 @@
     </node> -->
 
     <node name="mir_index_offset_applier" pkg="mir_trajectory_follower" type="mir_index_offset_applier.py" output="screen">
-        <param name="gain" value="0.0" />
+        <param name="gain" value="0.5" />
         <param name="rounding" value="round" />
-        <param name="offset_topic" value="$(arg path_ns_prefix)/mir_index_offset" />
+        <param name="offset_topic" value="$(arg robot_name)/mir_index_offset" />
         <param name="ur_index_topic" value="$(arg path_index_topic)" />
         <param name="out_topic" value="$(arg trajectory_index_topic)" />
         <param name="start_signal_topic" value="$(arg start_condition_topic)" />
