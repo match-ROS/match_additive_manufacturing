@@ -29,17 +29,17 @@ class GoToGoal:
         self.drive_start_x = None
         self.drive_start_y = None
         self.drive_fraction = 0.8
-
+        self.robot_name = rospy.get_param("~robot_name", "mur620d")
 
         rospy.Subscriber(
-            "/mur620c/mir_pose_simple",
+            f"/{self.robot_name}/mir_pose_simple",
             Pose,
             self.pose_cb,
             queue_size=1
         )
 
         self.cmd_pub = rospy.Publisher(
-            "/mur620c/cmd_vel",
+            f"/{self.robot_name}/cmd_vel",
             Twist,
             queue_size=1
         )
