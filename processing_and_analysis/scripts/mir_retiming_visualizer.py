@@ -27,6 +27,11 @@ class RetimingVisualizer:
     def __init__(self):
         self.path = None
         rospy.Subscriber("/mur620c/mir_path_original", Path, self.cb)
+        self.ur_path = None
+        rospy.Subscriber("/mur620c/ur_path_original", Path, self.cb_ur)
+
+    def cb_ur(self, msg):
+        self.ur_path = msg
 
     def cb(self, msg):
         self.path = msg
@@ -35,6 +40,31 @@ class RetimingVisualizer:
         rospy.loginfo("Waiting for MiR path...")
         while not rospy.is_shutdown() and self.path is None:
             rospy.sleep(0.1)
+
+    def extract_ur_xy(self):
+
+        if self.ur_path is None:
+            rospy.logwarn("UR path not received!")
+            return None, None
+
+        xs, ys = [], []
+
+        for p in self.ur_path.poses:
+            xs.append(p.pose.position.x)
+            ys.append(p.pose.position.y)
+
+        return np.array(xs), np.array(ys)
+
+    def compute_ur_base(self, x, y, yaw):
+
+        mount_x = 0.549
+        mount_y = -0.318
+
+        base_x = x + np.cos(yaw)*mount_x - np.sin(yaw)*mount_y
+        base_y = y + np.sin(yaw)*mount_x + np.cos(yaw)*mount_y
+
+        return base_x, base_y
+
 
     def extract_arrays(self, poses):
         xs, ys, yaw = [], [], []
@@ -117,6 +147,18 @@ class RetimingVisualizer:
 
         s = self.equivalent_arc_length(x, y, yaw)
 
+        ur_x, ur_y = self.extract_ur_xy()
+
+        base_x, base_y = self.compute_ur_base(x, y, yaw)
+
+        # simple index alignment
+        min_len = min(len(base_x), len(ur_x))
+        dist = np.sqrt(
+            (base_x[:min_len] - ur_x[:min_len])**2 +
+            (base_y[:min_len] - ur_y[:min_len])**2
+        )
+
+
         s_target = np.linspace(0, s[-1], len(s))
         i_target = np.interp(s_target, s, np.arange(len(s)))
         d0 = i_target - np.arange(len(s))
@@ -126,32 +168,60 @@ class RetimingVisualizer:
 
         fig, axs = plt.subplots(2,2, figsize=(12,8))
 
-        axs[0,0].plot(x,y)
-        axs[0,0].set_title("MiR Path Geometry")
-        axs[0,0].axis("equal")
+        plt.figure()
+        plt.plot(x,y)
+        plt.axis("equal")
+        plt.title("MiR Geometry")
+        plt.savefig("geometry.pdf")
+        plt.close()
 
-        axs[0,1].plot(s, label="s(k)")
-        axs[0,1].plot(s_target, label="target")
-        axs[0,1].legend()
-        axs[0,1].set_title("Equivalent Arc-Length")
 
-        axs[1,0].plot(d0, label="d^(0)")
-        axs[1,0].plot(d, label="scaled")
-        axs[1,0].legend()
-        axs[1,0].set_title("Index Offset")
+        plt.figure()
+        plt.plot(s, label="s(k)")
+        plt.plot(s_target, label="target")
+        plt.legend()
+        plt.title("Arc Length Mapping")
+        plt.savefig("arc_length.pdf")
+        plt.close()
 
-        v = np.diff(s)
-        axs[1,1].plot(v)
-        axs[1,1].set_title("Velocity Proxy")
 
-        plt.tight_layout()
-        plt.show()
+        plt.figure()
+        plt.plot(d0, label="d0")
+        plt.plot(d, label="scaled")
+        plt.legend()
+        plt.title("Index Offset")
+        plt.savefig("offset.pdf")
+        plt.close()
+
+        plt.figure()
+        plt.plot(np.diff(s))
+        plt.title("Velocity Proxy")
+        plt.savefig("velocity.pdf")
+        plt.close()
+
+        plt.figure()
+        plt.plot(dist)
+        plt.axhline(1.1, linestyle="--", label="reach limit")
+        plt.legend()
+        plt.title("UR Reach Utilization")
+        plt.savefig("reachability.pdf")
+        plt.close()
+
+        plt.figure()
+        plt.plot(base_x, base_y, label="UR base")
+        plt.plot(ur_x, ur_y, label="UR TCP")
+        plt.axis("equal")
+        plt.legend()
+        plt.title("Base vs TCP")
+        plt.savefig("base_tcp_xy.pdf")
+        plt.close()
+
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--layers", type=str, default="1-2",
+    parser.add_argument("--layers", type=str, default="2",
                         help="Layer selection: e.g. 1, 1-3, 2,4")
     args, unknown = parser.parse_known_args()
 
