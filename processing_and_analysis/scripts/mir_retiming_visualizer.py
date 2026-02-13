@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from nav_msgs.msg import Path
 import tf.transformations as tf
 import argparse
+from std_msgs.msg import Float32MultiArray
 
 def parse_layer_selection(sel, max_layer):
 
@@ -29,6 +30,12 @@ class RetimingVisualizer:
         rospy.Subscriber("/mur620c/mir_path_original", Path, self.cb)
         self.ur_path = None
         rospy.Subscriber("/mur620c/ur_path_original", Path, self.cb_ur)
+        self.index_offset = None
+        rospy.Subscriber(
+            "/mur620c/mir_index_offset",
+            Float32MultiArray,
+            self.cb_offset
+        )
 
     def cb_ur(self, msg):
         self.ur_path = msg
@@ -36,9 +43,13 @@ class RetimingVisualizer:
     def cb(self, msg):
         self.path = msg
 
+    def cb_offset(self, msg):
+        self.index_offset = np.array(msg.data)
+
+
     def wait_for_path(self):
-        rospy.loginfo("Waiting for MiR path...")
-        while not rospy.is_shutdown() and self.path is None:
+        rospy.loginfo("Waiting for MiR and UR path...")
+        while not rospy.is_shutdown() and self.path is None or self.ur_path is None:
             rospy.sleep(0.1)
 
     def extract_ur_xy(self):
@@ -54,6 +65,35 @@ class RetimingVisualizer:
             ys.append(p.pose.position.y)
 
         return np.array(xs), np.array(ys)
+
+    def apply_index_offset(self, x, y, yaw, offset):
+
+        idx = np.arange(len(x)) + offset
+        idx = np.clip(idx, 0, len(x)-1)
+
+        x_i = np.interp(idx, np.arange(len(x)), x)
+        y_i = np.interp(idx, np.arange(len(y)), y)
+        yaw_i = np.interp(idx, np.arange(len(yaw)), yaw)
+
+        return x_i, y_i, yaw_i
+
+
+    def compute_reach(self, base_x, base_y, ur_x, ur_y):
+
+        n = min(len(base_x), len(ur_x))
+
+        return np.sqrt(
+            (base_x[:n] - ur_x[:n])**2 +
+            (base_y[:n] - ur_y[:n])**2
+        )
+
+    def velocity_proxy(self, x, y):
+
+        dx = np.diff(x)
+        dy = np.diff(y)
+
+        return np.sqrt(dx**2 + dy**2)
+
 
     def compute_ur_base(self, x, y, yaw):
 
@@ -112,7 +152,7 @@ class RetimingVisualizer:
 
         last_z = None
 
-        for pose in self.path.poses:
+        for i, pose in enumerate(self.path.poses):
 
             z = pose.pose.position.z
 
@@ -123,7 +163,7 @@ class RetimingVisualizer:
                 layers.append(current)
                 current = []
 
-            current.append(pose)
+            current.append((i, pose))  # ← index speichern!
             last_z = z
 
         if current:
@@ -132,24 +172,44 @@ class RetimingVisualizer:
         return layers
 
 
+
     def visualize(self):
 
         layers = self.split_layers()
-
         selected = parse_layer_selection(layer_selection, len(layers))
 
         poses = []
+        indices = []
+
         for i in selected:
-            poses.extend(layers[i-1])
+            for idx, pose in layers[i-1]:
+                poses.append(pose)
+                indices.append(idx)
+
+        indices = np.array(indices)
+        offset_layer = self.index_offset[indices]
+
 
 
         x, y, yaw, t = self.extract_arrays(poses)
+        x0, y0, yaw0 = x, y, yaw
+        x1, y1, yaw1 = self.apply_index_offset(
+            x0, y0, yaw0, offset_layer
+        )
 
         s = self.equivalent_arc_length(x, y, yaw)
 
         ur_x, ur_y = self.extract_ur_xy()
 
         base_x, base_y = self.compute_ur_base(x, y, yaw)
+        bx0, by0 = self.compute_ur_base(x0, y0, yaw0)
+        bx1, by1 = self.compute_ur_base(x1, y1, yaw1)
+        # d0 = self.compute_reach(bx0, by0, ur_x, ur_y)
+        # d1 = self.compute_reach(bx1, by1, ur_x, ur_y)
+        v0 = self.velocity_proxy(x0, y0)
+        v1 = self.velocity_proxy(x1, y1)
+        d_reach_no = self.compute_reach(bx0, by0, ur_x, ur_y)
+        d_reach_off = self.compute_reach(bx1, by1, ur_x, ur_y)
 
         # simple index alignment
         min_len = min(len(base_x), len(ur_x))
@@ -161,10 +221,10 @@ class RetimingVisualizer:
 
         s_target = np.linspace(0, s[-1], len(s))
         i_target = np.interp(s_target, s, np.arange(len(s)))
-        d0 = i_target - np.arange(len(s))
+        d_arc = i_target - np.arange(len(s))
 
         alpha = 0.6
-        d = alpha * d0
+        d = alpha * d_arc
 
         fig, axs = plt.subplots(2,2, figsize=(12,8))
 
@@ -186,8 +246,9 @@ class RetimingVisualizer:
 
 
         plt.figure()
-        plt.plot(d0, label="d0")
+        plt.plot(d_arc, label="arc-length")
         plt.plot(d, label="scaled")
+        plt.plot(offset_layer, label="final optimizer")
         plt.legend()
         plt.title("Index Offset")
         plt.savefig("offset.pdf")
@@ -200,16 +261,28 @@ class RetimingVisualizer:
         plt.close()
 
         plt.figure()
-        plt.plot(dist)
-        plt.axhline(1.1, linestyle="--", label="reach limit")
+        plt.plot(d_reach_no, label="no offset")
+        plt.plot(d_reach_off, label="with offset")
+        plt.axhline(1.2, linestyle="--", label="limit")
         plt.legend()
-        plt.title("UR Reach Utilization")
-        plt.savefig("reachability.pdf")
+        plt.title("Reach Utilization Comparison")
+        plt.savefig("reach_comparison.pdf")
         plt.close()
+
+        plt.figure()
+        plt.plot(v0, label="no offset")
+        plt.plot(v1, label="with offset")
+        plt.legend()
+        plt.title("MiR Velocity Comparison")
+        plt.savefig("velocity_comparison.pdf")
+        plt.close()
+
 
         plt.figure()
         plt.plot(base_x, base_y, label="UR base")
         plt.plot(ur_x, ur_y, label="UR TCP")
+        plt.plot(x, y, "--", label="MiR path")
+
         plt.axis("equal")
         plt.legend()
         plt.title("Base vs TCP")

@@ -79,7 +79,7 @@ class LocalRetimingOptimizerNode:
 
         # Weights for combined objective (speed + acceleration)
         self.w_speed = float(rospy.get_param("~w_speed", 1.0))
-        self.w_accel = float(rospy.get_param("~w_accel", 0.002))
+        self.w_accel = float(rospy.get_param("~w_accel", 0.001))
 
         # Topics
         self.mir_path_topic = rospy.get_param("~mir_path_topic", "/mur620c/mir_path_original")
@@ -119,13 +119,13 @@ class LocalRetimingOptimizerNode:
         self.max_iters = int(rospy.get_param("~max_iters", 2600))
 
         # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
-        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.002))  # top 10% segments
-        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.002))  # bottom 20% segments
+        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.02))  # top 10% segments
+        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.02))  # bottom 20% segments
 
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.01))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 2.0))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
@@ -702,7 +702,7 @@ class LocalRetimingOptimizerNode:
         plt.ylabel("speed [m/s]")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(self.plot_path, dpi=1600)
+        plt.savefig(self.plot_path, dpi=160)
         rospy.loginfo(f"Saved speed plot: {self.plot_path}")
 
     def plot_xy_first_layer(self,
