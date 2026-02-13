@@ -171,6 +171,72 @@ class RetimingVisualizer:
 
         return layers
 
+    def plot_velocity_colormap(self,
+                            x0, y0,
+                            x1, y1,
+                            ur_x, ur_y,
+                            filename="velocity_colormap.pdf"):
+
+        # --- velocity proxies ---
+        v0 = self.velocity_proxy(x0, y0)
+        v1 = self.velocity_proxy(x1, y1)
+
+        n = min(len(v0), len(v1), len(ur_x)-1)
+
+        eps = 1.0
+        ratio = (v1[:n]+eps) / (v0[:n] + eps)
+
+        delta = (ratio - 1.0) * 3.0  
+
+        vmax = np.max(np.abs(delta))
+        if vmax < 1e-6:
+            vmax = 1.0
+
+        colors = delta / vmax
+
+        cmap = plt.get_cmap("coolwarm")
+
+        plt.figure(figsize=(7,7))
+
+        # --- MiR colored ---
+        plt.scatter(
+            x1[:n],
+            y1[:n],
+            c=colors,
+            cmap=cmap,
+            s=10,
+            label="MiR (retimed)"
+        )
+
+        # --- UR colored ---
+        plt.scatter(
+            ur_x[:n],
+            ur_y[:n],
+            c=colors,
+            cmap=cmap,
+            s=10,
+            marker="x",
+            label="UR TCP"
+        )
+
+        # original MiR reference
+        plt.plot(x0, y0, "--", linewidth=1,
+                label="MiR original")
+
+        plt.axis("equal")
+
+        cbar = plt.colorbar()
+        cbar.set_label(
+            "velocity change\n(orange = faster, blue = slower)"
+        )
+
+        plt.title("Retiming Effect on MiR and UR Trajectories")
+        plt.legend()
+
+        plt.savefig(filename)
+        plt.close()
+
+
 
 
     def visualize(self):
@@ -288,6 +354,13 @@ class RetimingVisualizer:
         plt.title("Base vs TCP")
         plt.savefig("base_tcp_xy.pdf")
         plt.close()
+
+        self.plot_velocity_colormap(
+            x0, y0,
+            x1, y1,
+            ur_x, ur_y
+        )
+
 
 
 
