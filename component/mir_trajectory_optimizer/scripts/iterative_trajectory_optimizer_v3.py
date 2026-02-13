@@ -119,13 +119,13 @@ class LocalRetimingOptimizerNode:
         self.max_iters = int(rospy.get_param("~max_iters", 2600))
 
         # Diese Parameter nutzen wir jetzt für die Index-Optimierung:
-        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.02))  # top 10% segments
-        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.02))  # bottom 20% segments
+        self.k_fast_frac = float(rospy.get_param("~k_fast_frac", 0.01))  # top 10% segments
+        self.k_slow_frac = float(rospy.get_param("~k_slow_frac", 0.01))  # bottom 20% segments
 
         # Grenzen im Indexraum
         self.di_max = float(rospy.get_param("~di_max", 1000.0))      # max |index offset|
         self.min_step = float(rospy.get_param("~min_step", 0.01))   # min i_eff-Schritt
-        self.max_step = float(rospy.get_param("~max_step", 1.5))   # max i_eff-Schritt
+        self.max_step = float(rospy.get_param("~max_step", 3.5))   # max i_eff-Schritt
 
         # Objective
         self.obj_mode = rospy.get_param("~objective", "l2")  # "peak" or "l2"
