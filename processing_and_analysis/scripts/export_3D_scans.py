@@ -20,9 +20,13 @@ bag_glob = "*.bag"
 
 # --- Z-REPAIR (duplicate a z-slab and shift down) ---
 enable_z_repair = True
-z_copy_min = 0.30   # [m]
-z_copy_max = 0.70   # [m]
-z_offset = -0.4    # [m] (30 cm down)
+z_copy_min = 0.20   # [m]
+z_copy_max = 0.40   # [m]
+z_offset = -0.2    # [m] (30 cm down)
+
+# --- Per-bag Z shift (by filename prefix) ---
+special_prefix = "record_20260205"
+special_z_shift = 0.80  # [m] shift in +z
 
 # -------------------------------------------
 
@@ -75,6 +79,11 @@ def main():
         print(f"[INFO] Reading: {os.path.basename(bagfile)}")
         msg_idx = 0
 
+        base = os.path.basename(bagfile)
+        bag_z_shift = special_z_shift if base.startswith(special_prefix) else 0.0
+        if bag_z_shift != 0.0:
+            print(f"[INFO] Applying +{bag_z_shift} m z-shift to: {base}")
+
         with rosbag.Bag(bagfile, "r") as bag:
             for topic, msg, t in bag.read_messages(topics=[scan_topic_pc2]):
                 total_msgs += 1
@@ -91,7 +100,7 @@ def main():
                 for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
                     # keep only every point_density-th point
                     if p_idx % point_density == 0:
-                        points_list.append([float(p[0]), float(p[1]), float(p[2])])
+                        points_list.append([float(p[0]), float(p[1]), float(p[2]) + bag_z_shift])
                     p_idx += 1
 
     if not points_list:
