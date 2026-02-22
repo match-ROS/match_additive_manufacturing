@@ -4,10 +4,11 @@ import glob
 import rosbag
 import numpy as np
 import sensor_msgs.point_cloud2 as pc2
+import csv
+import matplotlib.pyplot as plt
 
 # ----------------- CONFIG -----------------
 scan_topic_pc2 = "/profiles"
-output_ply = "scans_export_merged.ply"
 
 # Keep every x-th profile message (1 = keep all, 2 = keep every 2nd, ...)
 profile_density = 1
@@ -18,44 +19,20 @@ point_density = 5
 # Optional: only consider bags matching pattern (default: all .bag files)
 bag_glob = "*.bag"
 
-# --- Z-REPAIR (duplicate a z-slab and shift down) ---
-enable_z_repair = True
-z_copy_min = 0.0   # [m]
-z_copy_max = 0.0   # [m]
-z_offset = -0.0    # [m] (30 cm down)
-
 # --- Per-bag Z shift (by filename prefix) ---
 special_prefix = "record_20260205"
 special_z_shift = 0.80  # [m] shift in +z
 
-# -------------------------------------------
-
-# -- extract box ---
+# --- ROI trigger box (if ANY point of profile is inside -> take profile max) ---
 x_min = 48.8
 x_max = 49.3
 y_min = 43.5
 y_max = 44.0
 
-
-
-def save_ply(filename, points: np.ndarray):
-    """Save Nx3 points as ASCII PLY file."""
-    if points.size == 0:
-        raise RuntimeError("No points to save (points array is empty).")
-
-    N = points.shape[0]
-    with open(filename, "w") as f:
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {N}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        f.write("end_header\n")
-        for x, y, z in points:
-            f.write(f"{x} {y} {z}\n")
-
-    print(f"[OK] Saved PLY file: {filename} ({N} points)")
+# Outputs
+output_csv = "profile_maxima.csv"
+output_plot = "profile_maxima_xz.png"
+# -------------------------------------------
 
 
 def validate_density(name: str, x: int):
@@ -69,27 +46,27 @@ def main():
 
     cwd = os.getcwd()
     bagfiles = sorted(glob.glob(os.path.join(cwd, bag_glob)))
-
     if not bagfiles:
         raise FileNotFoundError(f"No bag files found in {cwd} matching '{bag_glob}'")
 
-    print(f"[INFO] Found {len(bagfiles)} bag(s) in {cwd}")
-    print(f"[INFO] Topic: {scan_topic_pc2}")
-    print(f"[INFO] profile_density={profile_density} (keep every {profile_density}th message)")
-    print(f"[INFO] point_density={point_density} (keep every {point_density}th point)")
+    maxima = []  # rows: [bag, msg_idx_used, stamp, x, y, z]
 
-    points_list = []
     total_msgs = 0
     used_msgs = 0
 
-    for bagfile in bagfiles:
-        print(f"[INFO] Reading: {os.path.basename(bagfile)}")
-        msg_idx = 0
+    print(f"[INFO] Found {len(bagfiles)} bag(s) in {cwd}")
+    print(f"[INFO] Topic: {scan_topic_pc2}")
+    print(f"[INFO] profile_density={profile_density}, point_density={point_density}")
+    print(f"[INFO] ROI: x[{x_min},{x_max}], y[{y_min},{y_max}]")
 
+    for bagfile in bagfiles:
         base = os.path.basename(bagfile)
         bag_z_shift = special_z_shift if base.startswith(special_prefix) else 0.0
         if bag_z_shift != 0.0:
             print(f"[INFO] Applying +{bag_z_shift} m z-shift to: {base}")
+
+        msg_idx = 0
+        used_idx_in_bag = 0
 
         with rosbag.Bag(bagfile, "r") as bag:
             for topic, msg, t in bag.read_messages(topics=[scan_topic_pc2]):
@@ -101,45 +78,59 @@ def main():
                     continue
 
                 used_msgs += 1
+                used_idx_in_bag += 1
 
-                # iterate points in PointCloud2
+                # Collect current profile points (downsampled)
+                profile_pts = []
+                roi_hit = False
+
                 p_idx = 0
                 for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
-                    # keep only every point_density-th point
-                    if p_idx % point_density == 0:
-                        x, y, z = float(p[0]), float(p[1]), float(p[2]) + bag_z_shift
-                        if x_min <= x <= x_max and y_min <= y <= y_max:
-                            points_list.append([x, y, z])
+                    if p_idx % point_density != 0:
+                        p_idx += 1
+                        continue
+
+                    x, y, z = float(p[0]), float(p[1]), float(p[2]) + bag_z_shift
+                    profile_pts.append((x, y, z))
+
+                    if (x_min <= x <= x_max) and (y_min <= y <= y_max):
+                        roi_hit = True
+
                     p_idx += 1
 
-    if not points_list:
-        raise RuntimeError(
-            "No points collected. Check topic name, densities, and whether bags contain data."
-        )
+                if not profile_pts:
+                    continue
 
-    points = np.asarray(points_list, dtype=np.float32)
-    print(f"[INFO] Messages processed: {total_msgs}, messages used: {used_msgs}")
-    print(f"[INFO] Total points: {points.shape[0]}")
+                if roi_hit:
+                    # "Maximum des Profils" = Punkt mit größtem z
+                    xM, yM, zM = max(profile_pts, key=lambda q: q[2])
+                    stamp = msg.header.stamp.to_sec() if hasattr(msg, "header") else float(t.to_sec())
+                    maxima.append([base, used_idx_in_bag, stamp, xM, yM, zM])
 
-    # ---- Z-REPAIR: copy z-slab and insert shifted copy ----
-    if enable_z_repair:
-        z = points[:, 2]
-        mask = (z >= z_copy_min) & (z <= z_copy_max)
-        slab = points[mask].copy()
+    if not maxima:
+        raise RuntimeError("No maxima collected. Either ROI never hit, or no points read.")
 
-        if slab.size == 0:
-            print("[WARN] Z-repair enabled, but no points found in the given z-range.")
-        else:
-            slab[:, 2] += z_offset  # shift in z
-            points = np.vstack([points, slab])
-            print(f"[INFO] Z-repair: duplicated {slab.shape[0]} points from "
-                  f"[{z_copy_min}, {z_copy_max}] m and shifted by {z_offset} m.")
-            print(f"[INFO] Total points after Z-repair: {points.shape[0]}")
+    # Write CSV
+    with open(output_csv, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["bag", "profile_idx_used", "stamp_s", "x", "y", "z"])
+        w.writerows(maxima)
 
-    print(f"[INFO] Messages processed: {total_msgs}, messages used: {used_msgs}")
-    print(f"[INFO] Total points: {points.shape[0]}")
+    print(f"[OK] Wrote CSV: {output_csv} ({len(maxima)} maxima)")
 
-    save_ply(output_ply, points)
+    # Plot x vs z
+    xs = [r[3] for r in maxima]
+    zs = [r[5] for r in maxima]
+
+    plt.figure()
+    plt.plot(xs, zs, marker=".", linestyle="-")
+    plt.xlabel("x")
+    plt.ylabel("z")
+    plt.title("Profile maxima trajectory (x-z)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_plot, dpi=200)
+    print(f"[OK] Saved plot: {output_plot}")
 
 
 if __name__ == "__main__":
