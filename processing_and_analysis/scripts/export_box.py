@@ -15,6 +15,8 @@ profile_density = 1
 
 # Keep every x-th point within a message (1 = keep all, 2 = keep every 2nd, ...)
 point_density = 5
+min_cluster_points = 10      # how many points must be near the max point (incl. itself)
+cluster_radius_m = 0.02      # [m] radius around max point
 
 # Optional: only consider bags matching pattern (default: all .bag files)
 bag_glob = "*.bag"
@@ -31,7 +33,7 @@ y_max = 44.0
 
 # Outputs
 output_csv = "profile_maxima.csv"
-output_plot = "profile_maxima_xz.png"
+output_plot = "profile_maxima_xz.pdf"
 # -------------------------------------------
 
 
@@ -104,8 +106,15 @@ def main():
                 if roi_hit:
                     # "Maximum des Profils" = Punkt mit größtem z
                     xM, yM, zM = max(profile_pts, key=lambda q: q[2])
-                    stamp = msg.header.stamp.to_sec() if hasattr(msg, "header") else float(t.to_sec())
-                    maxima.append([base, used_idx_in_bag, stamp, xM, yM, zM])
+
+                    # --- validity check: enough nearby points around (xM,yM,zM) ---
+                    pts_np = np.asarray(profile_pts, dtype=np.float64)  # shape (N,3)
+                    d2 = np.sum((pts_np - np.array([xM, yM, zM]))**2, axis=1)
+                    neighbor_count = int(np.count_nonzero(d2 <= (cluster_radius_m**2)))
+
+                    if neighbor_count >= min_cluster_points:
+                        stamp = msg.header.stamp.to_sec() if hasattr(msg, "header") else float(t.to_sec())
+                        maxima.append([base, used_idx_in_bag, stamp, xM, yM, zM])
 
     if not maxima:
         raise RuntimeError("No maxima collected. Either ROI never hit, or no points read.")
@@ -123,7 +132,7 @@ def main():
     zs = [r[5] for r in maxima]
 
     plt.figure()
-    plt.plot(xs, zs, marker=".", linestyle="-")
+    plt.scatter(xs, zs, s=8)   # no lines
     plt.xlabel("x")
     plt.ylabel("z")
     plt.title("Profile maxima trajectory (x-z)")
