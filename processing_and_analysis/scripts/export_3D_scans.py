@@ -13,7 +13,7 @@ output_ply = "scans_export_merged.ply"
 profile_density = 1
 
 # Keep every x-th point within a message (1 = keep all, 2 = keep every 2nd, ...)
-point_density = 50
+point_density = 30
 
 # Optional: only consider bags matching pattern (default: all .bag files)
 bag_glob = "*.bag"

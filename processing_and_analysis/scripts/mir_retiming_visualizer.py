@@ -6,6 +6,7 @@ from nav_msgs.msg import Path
 import tf.transformations as tf
 import argparse
 from std_msgs.msg import Float32MultiArray
+from matplotlib.colors import LinearSegmentedColormap
 
 def parse_layer_selection(sel, max_layer):
 
@@ -186,7 +187,7 @@ class RetimingVisualizer:
         eps = 1.0
         ratio = (v1[:n]+eps) / (v0[:n] + eps)
 
-        delta = (ratio - 1.0) * 3.0  
+        delta = (ratio - 1.0) * 5.0  
 
         vmax = np.max(np.abs(delta))
         if vmax < 1e-6:
@@ -194,24 +195,31 @@ class RetimingVisualizer:
 
         colors = delta / vmax
 
-        cmap = plt.get_cmap("coolwarm")
+        #cmap = plt.get_cmap("coolwarm")
+        cmap = LinearSegmentedColormap.from_list(
+            "gray_to_green",
+            ["#b1e629", "#e7e7e7", "#696969"]
+        )
+
+        # grün = #9fbf54 #b1e629
+        # #c2c3c3 #696969
+        # rot = #e8adbd #e23566 #e2517a #d76b8a
 
         plt.figure(figsize=(7,7))
 
         # --- MiR colored ---
         plt.scatter(
-            x1[:n],
-            y1[:n],
+            y1[:n],      # statt x1
+            x1[:n],      # statt y1
             c=colors,
             cmap=cmap,
             s=10,
             label="MiR (retimed)"
         )
 
-        # --- UR colored ---
         plt.scatter(
-            ur_x[:n],
             ur_y[:n],
+            ur_x[:n],
             c=colors,
             cmap=cmap,
             s=10,
@@ -219,15 +227,13 @@ class RetimingVisualizer:
             label="UR TCP"
         )
 
-        # original MiR reference
-        plt.plot(x0, y0, "--", linewidth=1,
-                label="MiR original")
+        plt.plot(y0, x0, "--", linewidth=1, label="MiR original")
 
         plt.axis("equal")
 
         cbar = plt.colorbar()
         cbar.set_label(
-            "velocity change\n(orange = faster, blue = slower)"
+            "velocity change\n(red = faster, green = slower)"
         )
 
         plt.title("Retiming Effect on MiR and UR Trajectories")
