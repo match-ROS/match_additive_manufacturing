@@ -154,6 +154,10 @@ def build_layers_from_profiles(profile_entries, jump_threshold=0.10):
             "deviation": deviation,
         })
 
+    # remove layers with fewer than 20 points
+    layers = [layer for layer in layers if len(layer["profiles"]) >= 20]
+
+
     return layers
 
 
@@ -223,9 +227,9 @@ def plot_layers_3d(layers,
         )
 
         hp = layer["highest_point"]
-        if hp is not None:
-            ax.scatter(hp[0], hp[1], hp[2], s=80, color="red", marker="x", linewidths=2)
-            ax.text(hp[0], hp[1], hp[2], f"  L{layer['layer_idx']}", color="red", fontsize=8)
+        # if hp is not None:
+        #     ax.scatter(hp[0], hp[1], hp[2], s=80, color="red", marker="x", linewidths=2)
+        #     ax.text(hp[0], hp[1], hp[2], f"  L{layer['layer_idx']}", color="red", fontsize=8)
 
     ax.set_xlabel("X [m]")
     ax.set_ylabel("Y [m]")
@@ -250,9 +254,10 @@ def plot_layers_3d(layers,
         ax.legend(loc="best", fontsize=8)
 
     plt.tight_layout()
-    plt.savefig(output_png, dpi=300)
-    plt.savefig(output_pdf, format="pdf")
-    plt.close()
+    # plt.savefig(output_png, dpi=300)
+    # plt.savefig(output_pdf, format="pdf")
+    # plt.close()
+    plt.show()
 
 
 def main():
@@ -261,7 +266,7 @@ def main():
     )
     parser.add_argument("--bag", type=str, default="profiles_roi_merged.bag")
     parser.add_argument("--topic", type=str, default="/profiles")
-    parser.add_argument("--jump-threshold", type=float, default=0.10,
+    parser.add_argument("--jump-threshold", type=float, default=0.20,
                         help="Distance threshold in meters for detecting a new layer")
     parser.add_argument("--center-mode", type=str, default="median", choices=["median", "mean"],
                         help="How to compute representative profile center")
@@ -269,7 +274,7 @@ def main():
     parser.add_argument("--csv", type=str, default="layer_max_deviation.csv")
     parser.add_argument("--layers3d-png", type=str, default="layers_3d.png")
     parser.add_argument("--layers3d-pdf", type=str, default="layers_3d.pdf")
-    parser.add_argument("--max-points-per-layer", type=int, default=5000)
+    parser.add_argument("--max-points-per-layer", type=int, default=15000)
 
     args = parser.parse_args()
 
@@ -284,7 +289,7 @@ def main():
             if pts.shape[0] == 0:
                 continue
 
-            center_xy = compute_profile_center(pts, mode=args.center_mode)
+            center_xy = compute_profile_center(pts, mode="max")
             max_z = compute_profile_max_z(pts)
 
             profile_entries.append({
