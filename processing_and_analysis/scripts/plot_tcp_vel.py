@@ -28,7 +28,7 @@ def calculate_velocity_in_xy_plane(bag_file_path, window_size_pos=100):
     positions = []
     timestamps = []
 
-    for topic, msg, t in bag.read_messages(topics='/mur620c/UR10_r/global_tcp_pose_mocap'):
+    for topic, msg, t in bag.read_messages(topics='/mur620c/UR10_r/global_tcp_pose'):
         x = msg.pose.position.x
         y = msg.pose.position.y
         positions.append((x, y))
@@ -119,8 +119,8 @@ def interpolate_and_subtract(vel_timestamps, velocities,
 
 # --- Beispielaufruf ---
 
-bag_tcp_path    = 'record_20251210_141133_GUI-PC.bag'   # TCP-Pose / Mocap
-bag_offset_path = 'record_20251210_141133_MuR.bag'      # Offset-Vel / Twist
+bag_tcp_path    = 'record_20251209_173205_MuR.bag'   # TCP-Pose / Mocap
+bag_offset_path = 'record_20251209_173205_MuR.bag'      # Offset-Vel / Twist
 
 # Fenstergröße für Positions-Glättung (anpassen nach Bedarf)
 window_size_pos = 200
@@ -131,21 +131,11 @@ vel_timestamps, velocities = calculate_velocity_in_xy_plane(
     window_size_pos=window_size_pos
 )
 
-print("Anzahl der Geschwindigkeitswerte (TCP):", len(velocities))
-
-# 2) Offset-Geschwindigkeiten aus Bag 2
-offset_ts, offset_speeds = read_offset_velocities(bag_offset_path)
-
-# 3) Interpolation + Subtraktion
-common_ts, vel_common, offset_interp, corrected_speed = interpolate_and_subtract(
-    vel_timestamps, velocities, offset_ts, offset_speeds
-)
-
 # 4) Plot
 plt.figure(figsize=(10, 6))
-#plt.plot(vel_timestamps, velocities, label='TCP speed XY (roh)')
+plt.plot(vel_timestamps, velocities, label='TCP speed XY (roh)')
 #plt.plot(common_ts, offset_interp, label='|offset vel| (interpoliert)')
-plt.plot(common_ts, corrected_speed, label='TCP speed - |offset vel|')
+#plt.plot(common_ts, corrected_speed, label='TCP speed - |offset vel|')
 plt.xlabel('Zeit (Sekunden)')
 plt.ylabel('Geschwindigkeit (m/s)')
 plt.title('TCP-Geschwindigkeit mit Abzug der seitlichen Korrektur')

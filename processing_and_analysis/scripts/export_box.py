@@ -26,10 +26,10 @@ special_prefix = "record_20260205"
 special_z_shift = 0.80  # [m] shift in +z
 
 # --- ROI trigger box (if ANY point of profile is inside -> take profile max) ---
-x_min = 48.8
-x_max = 49.3
-y_min = 43.5
-y_max = 44.0
+x_min = 50.955 - 0.37/2
+x_max = 50.955 + 0.37
+y_min = 43.686 - 0.506/2
+y_max = 43.686 + 0.506/2
 
 # Outputs
 output_csv = "profile_maxima.csv"
@@ -52,6 +52,7 @@ def main():
         raise FileNotFoundError(f"No bag files found in {cwd} matching '{bag_glob}'")
 
     maxima = []  # rows: [bag, msg_idx_used, stamp, x, y, z]
+    points = []  # for optional point cloud export (not used here)
 
     total_msgs = 0
     used_msgs = 0
@@ -93,10 +94,11 @@ def main():
                         continue
 
                     x, y, z = float(p[0]), float(p[1]), float(p[2]) + bag_z_shift
-                    profile_pts.append((x, y, z))
+                    
 
                     if (x_min <= x <= x_max) and (y_min <= y <= y_max):
                         roi_hit = True
+                        profile_pts.append((x, y, z))
 
                     p_idx += 1
 
@@ -106,6 +108,9 @@ def main():
                 if roi_hit:
                     # "Maximum des Profils" = Punkt mit größtem z
                     xM, yM, zM = max(profile_pts, key=lambda q: q[2])
+
+                    # save point to list
+                    points.append((xM, yM, zM))
 
                     # --- validity check: enough nearby points around (xM,yM,zM) ---
                     pts_np = np.asarray(profile_pts, dtype=np.float64)  # shape (N,3)
@@ -131,15 +136,28 @@ def main():
     xs = [r[3] for r in maxima]
     zs = [r[5] for r in maxima]
 
-    plt.figure()
-    plt.scatter(xs, zs, s=8)   # no lines
-    plt.xlabel("x")
-    plt.ylabel("z")
-    plt.title("Profile maxima trajectory (x-z)")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(output_plot, dpi=200)
-    print(f"[OK] Saved plot: {output_plot}")
+    # 3D Plot of points
+    if profile_pts:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        px, py, pz = zip(*profile_pts)
+        ax.scatter(px, py, pz, s=8, c='b', marker='o')
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.set_title("3D Scatter Plot of Points")
+        plt.tight_layout()
+        plt.show()
+
+    # plt.figure()
+    # plt.scatter(xs, zs, s=8)   # no lines
+    # plt.xlabel("x")
+    # plt.ylabel("z")
+    # plt.title("Profile maxima trajectory (x-z)")
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.savefig(output_plot, dpi=200)
+    # print(f"[OK] Saved plot: {output_plot}")
 
 
 if __name__ == "__main__":
