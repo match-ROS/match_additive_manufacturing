@@ -196,6 +196,40 @@ def save_layer_csv(layers, output_csv):
                 hx, hy, hz
             ))
 
+def filter_profile_outliers_z(points_xyz, mad_scale=3.5):
+    """
+    Remove vertical outliers in one profile using a robust MAD-based filter.
+
+    Parameters:
+        points_xyz: Nx3 numpy array
+        mad_scale: threshold factor, typical values 2.5 ... 5.0
+
+    Returns:
+        filtered_points_xyz: Mx3 numpy array
+    """
+    if points_xyz.shape[0] == 0:
+        return points_xyz
+
+    z = points_xyz[:, 2]
+    z_med = np.median(z)
+
+    abs_dev = np.abs(z - z_med)
+    mad = np.median(abs_dev)
+
+    # fallback if profile is almost perfectly flat
+    if mad < 1e-12:
+        return points_xyz.copy()
+
+    robust_z_score = abs_dev / (1.4826 * mad)
+    mask = robust_z_score <= mad_scale
+
+    filtered = points_xyz[mask]
+
+    # avoid returning empty profile
+    if filtered.shape[0] == 0:
+        return points_xyz.copy()
+
+    return filtered
 
 def plot_layers_3d(layers,
                    output_png="layers_3d.png",
@@ -275,6 +309,8 @@ def main():
     parser.add_argument("--layers3d-png", type=str, default="layers_3d.png")
     parser.add_argument("--layers3d-pdf", type=str, default="layers_3d.pdf")
     parser.add_argument("--max-points-per-layer", type=int, default=15000)
+    parser.add_argument("--outlier-mad-scale", type=float, default=3.5,
+                    help="MAD threshold for removing z-outliers in each profile")
 
     args = parser.parse_args()
 
@@ -289,15 +325,19 @@ def main():
             if pts.shape[0] == 0:
                 continue
 
-            center_xy = compute_profile_center(pts, mode="max")
-            max_z = compute_profile_max_z(pts)
+            pts_filtered = filter_profile_outliers_z(pts, mad_scale=args.outlier_mad_scale)
+            if pts_filtered.shape[0] == 0:
+                continue
+
+            center_xy = compute_profile_center(pts_filtered, mode=args.center_mode)
+            max_z = compute_profile_max_z(pts_filtered)
 
             profile_entries.append({
                 "t": t.to_sec(),
                 "center_xy": center_xy,
-                "points_xyz": pts,
+                "points_xyz": pts_filtered,      # bereinigte Punkte speichern
                 "profile_max_z": max_z,
-                "n_points": pts.shape[0],
+                "n_points": pts_filtered.shape[0],
             })
 
     if len(profile_entries) == 0:
