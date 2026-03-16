@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sensor_msgs.point_cloud2 as pc2
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def extract_points_from_message(msg):
@@ -42,6 +43,7 @@ def extract_points_from_message(msg):
             type(msg), getattr(msg, "_type", "unknown")
         )
     )
+
 
 
 def compute_profile_center(points_xyz, mode="median"):
@@ -231,61 +233,82 @@ def filter_profile_outliers_z(points_xyz, mad_scale=3.5):
 
     return filtered
 
+from matplotlib.colors import LinearSegmentedColormap
+
+
 def plot_layers_3d(layers,
                    output_png="layers_3d.png",
                    output_pdf="layers_3d.pdf",
-                   max_points_per_layer=5000,
+                   point_stride=50,
                    elev=25,
                    azim=-60):
+
     fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111, projection="3d")
 
-    cmap = plt.get_cmap("tab20")
+    # Custom color map (dark gray -> gray -> green)
+    colors = ["#696969", "#d1d1d1" , "#b1e629"]
+    cmap = LinearSegmentedColormap.from_list("layer_cmap", colors)
 
+    n_layers = 10
+
+    color_index = 1
+    print("number of layers: {}".format(len(layers)))
     for i, layer in enumerate(layers):
+
         pts = layer["points_xyz"]
         if pts.shape[0] == 0:
             continue
 
-        color = cmap(i % 20)
+        # plot every Nth point
+        pts_plot = pts[::point_stride]
 
-        if pts.shape[0] > max_points_per_layer:
-            idx = np.linspace(0, pts.shape[0] - 1, max_points_per_layer).astype(int)
-            pts_plot = pts[idx]
-        else:
-            pts_plot = pts
-
+        color = cmap(color_index / max(1, n_layers - 1))
+        if i in {2, 4, 6, 8, 9, 10, 15, 17}:
+            color_index += 1
         ax.scatter(
-            pts_plot[:, 0], pts_plot[:, 1], pts_plot[:, 2],
-            s=1, color=color, alpha=0.8, label=f"Layer {layer['layer_idx']}"
+            pts_plot[:, 0],
+            pts_plot[:, 1],
+            pts_plot[:, 2],
+            s=2,
+            color=color,
+            alpha=0.9
         )
 
+        # mark highest point
         hp = layer["highest_point"]
-        # if hp is not None:
-        #     ax.scatter(hp[0], hp[1], hp[2], s=80, color="red", marker="x", linewidths=2)
-        #     ax.text(hp[0], hp[1], hp[2], f"  L{layer['layer_idx']}", color="red", fontsize=8)
+        if hp is not None:
+            pass
+            # ax.scatter(
+            #     hp[0], hp[1], hp[2],
+            #     s=120,
+            #     color="red",
+            #     marker="x",
+            #     linewidths=2
+            # )
 
     ax.set_xlabel("X [m]")
     ax.set_ylabel("Y [m]")
     ax.set_zlabel("Z [m]")
-    ax.set_title("3D view of layers with highest point per layer")
+    ax.set_title("3D view of detected layers")
+
     ax.view_init(elev=elev, azim=azim)
 
+    # Equal scaling
     all_nonempty = [layer["points_xyz"] for layer in layers if layer["points_xyz"].shape[0] > 0]
+
     if all_nonempty:
         all_pts = np.vstack(all_nonempty)
+
         mins = np.min(all_pts, axis=0)
         maxs = np.max(all_pts, axis=0)
 
         max_range = np.max(maxs - mins)
         mids = 0.5 * (mins + maxs)
 
-        ax.set_xlim(mids[0] - max_range / 2, mids[0] + max_range / 2)
-        ax.set_ylim(mids[1] - max_range / 2, mids[1] + max_range / 2)
-        ax.set_zlim(mids[2] - max_range / 2, mids[2] + max_range / 2)
-
-    if len(layers) <= 15:
-        ax.legend(loc="best", fontsize=8)
+        ax.set_xlim(mids[0] - max_range/2, mids[0] + max_range/2)
+        ax.set_ylim(mids[1] - max_range/2, mids[1] + max_range/2)
+        ax.set_zlim(mids[2] - max_range/2, mids[2] + max_range/2)
 
     plt.tight_layout()
     # plt.savefig(output_png, dpi=300)
@@ -293,6 +316,38 @@ def plot_layers_3d(layers,
     # plt.close()
     plt.show()
 
+def plot_deviation_vs_layer(layers, output_pdf="deviation_vs_layer.pdf"):
+    """
+    Plot deviation vs layer index.
+    """
+
+    layer_ids = []
+    deviations = []
+
+    for layer in layers:
+        if not np.isnan(layer["deviation"]):
+            if layer["layer_idx"] < 11 or layer["layer_idx"] > 13:
+                layer_ids.append(layer["layer_idx"])
+                deviations.append(layer["deviation"])
+
+    plt.figure(figsize=(10,5))
+
+    plt.plot(
+        layer_ids,
+        deviations,
+        marker="o",
+        linewidth=2,
+        markersize=6
+    )
+
+    plt.xlabel("Layer number")
+    plt.ylabel("Deviation [m]")
+    plt.title("Layer height control performance")
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.savefig(output_pdf)
+    plt.close()
 
 def main():
     parser = argparse.ArgumentParser(
@@ -357,7 +412,11 @@ def main():
         layers,
         output_png=args.layers3d_png,
         output_pdf=args.layers3d_pdf,
-        max_points_per_layer=args.max_points_per_layer
+    )
+
+    plot_deviation_vs_layer(
+        layers,
+        output_pdf="layer_height_deviation.pdf"
     )
 
     print("Done.")
