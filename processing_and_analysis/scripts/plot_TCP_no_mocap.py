@@ -18,14 +18,14 @@ TOPIC_MOCAP = "/mur620c/UR10_r/global_tcp_pose_mocap"
 TOPIC_PROFILES = "/profiles"
 
 Z_THRESHOLD_MOCAP = 0.87
-XY_SHIFT = -0.0
 
-SMOOTH_WINDOW = 15  # odd number recommended
+SMOOTH_WINDOW_MOCAP = 15      # smoothing for measured path
+SMOOTH_WINDOW_REF = 9         # light smoothing for reconstructed reference
 
 # Outlier removal for profile point clouds
 NEIGHBOR_RADIUS = 0.005       # 5 mm
-MIN_NEIGHBORS = 8             # point survives if enough neighbors in XY
-MIN_POINTS_AFTER_FILTER = 5   # minimum number of points to accept profile
+MIN_NEIGHBORS = 8
+MIN_POINTS_AFTER_FILTER = 5
 
 # Layer end detection from reconstructed maxima
 START_RETURN_THRESHOLD = 0.05   # 5 cm
@@ -43,10 +43,16 @@ def moving_average(data, window_size=15):
         return data.copy()
 
     window_size = min(window_size, len(data))
+    if window_size < 3:
+        return data.copy()
+
     if window_size % 2 == 0:
         window_size += 1
         if window_size > len(data):
             window_size -= 1
+
+    if window_size < 3:
+        return data.copy()
 
     pad = window_size // 2
     padded = np.pad(data, (pad, pad), mode='edge')
@@ -58,8 +64,6 @@ def pairwise_xy_neighbor_filter(points_xyz, radius=0.005, min_neighbors=8):
     """
     Removes isolated outliers by checking how many neighbors each point has
     within a given XY radius.
-
-    points_xyz: Nx3 numpy array
     """
     if len(points_xyz) == 0:
         return points_xyz
@@ -67,7 +71,6 @@ def pairwise_xy_neighbor_filter(points_xyz, radius=0.005, min_neighbors=8):
     xy = points_xyz[:, :2]
     keep_mask = np.zeros(len(points_xyz), dtype=bool)
 
-    # O(N^2), but usually fine for profile-sized clouds
     for i in range(len(points_xyz)):
         d2 = np.sum((xy - xy[i]) ** 2, axis=1)
         neighbor_count = np.count_nonzero(d2 <= radius * radius) - 1
@@ -112,9 +115,7 @@ def extract_first_contiguous_layer_segment(bag_path, topic_mocap, z_threshold=0.
 
 
 def read_xyz_from_pointcloud2(msg):
-    """
-    Convert sensor_msgs/PointCloud2 to Nx3 numpy array.
-    """
+    """Convert sensor_msgs/PointCloud2 to Nx3 numpy array."""
     pts = []
     for p in point_cloud2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
         pts.append([p[0], p[1], p[2]])
@@ -133,10 +134,6 @@ def get_profile_maximum(points_xyz,
                         min_points_after_filter=5):
     """
     Remove outliers and return highest point in filtered profile.
-    Returns:
-        max_point (3,)
-        filtered_points (Nx3)
-    If no valid result exists, returns (None, filtered_points).
     """
     if len(points_xyz) == 0:
         return None, points_xyz
@@ -163,13 +160,7 @@ def reconstruct_reference_from_profiles(bag_path,
                                         min_neighbors=8,
                                         min_points_after_filter=5):
     """
-    Reads /profiles PointCloud2 data and reconstructs the comparison trajectory
-    from the highest point of each filtered profile.
-
-    End of first layer detection:
-    - store first maximum
-    - only stop after the maxima trajectory has once been >10 cm away
-    - and later returns within <5 cm of the first maximum
+    Reconstruct reference trajectory from highest point of each filtered profile.
     """
     ref_x = []
     ref_y = []
@@ -189,7 +180,7 @@ def reconstruct_reference_from_profiles(bag_path,
             num_profiles_total += 1
 
             pts = read_xyz_from_pointcloud2(msg)
-            max_point, filtered_pts = get_profile_maximum(
+            max_point, _ = get_profile_maximum(
                 pts,
                 neighbor_radius=neighbor_radius,
                 min_neighbors=min_neighbors,
@@ -234,28 +225,48 @@ def reconstruct_reference_from_profiles(bag_path,
     }
 
 
-def plot_xy_comparison(x_ref, y_ref,
+def align_path_start(x_path, y_path, x_ref_start, y_ref_start):
+    """
+    Shift path so that its first point coincides with reference start.
+    """
+    if len(x_path) == 0:
+        return x_path, y_path, 0.0, 0.0
+
+    dx = x_ref_start - x_path[0]
+    dy = y_ref_start - y_path[0]
+
+    return x_path + dx, y_path + dy, dx, dy
+
+
+def plot_xy_comparison(x_ref_raw, y_ref_raw,
+                       x_ref_smooth, y_ref_smooth,
                        x_mocap_raw, y_mocap_raw,
-                       x_mocap_filtered, y_mocap_filtered):
+                       x_mocap_smooth, y_mocap_smooth):
     plt.figure(figsize=(10, 8))
+    PLOT_STRIDE = 10
+    # if len(x_ref_raw) > 0:
+    #     plt.plot(x_ref_raw, y_ref_raw, '.', markersize=2, alpha=0.25,
+    #              label='Referenz roh')
 
-    if len(x_ref) > 0:
-        plt.plot(x_ref, y_ref, '-', linewidth=2, label='Referenz: Mittelpunkt vorherige Schicht')
-        plt.plot(x_ref[0], y_ref[0], 'o', markersize=8, label='Start Referenz')
+    if len(x_ref_smooth) > 0:
+        plt.plot(x_ref_smooth[::PLOT_STRIDE], y_ref_smooth[::PLOT_STRIDE], '-', linewidth=2.2,
+                 label='Referenz geglättet')
+        plt.plot(x_ref_smooth[0], y_ref_smooth[0], 'o', markersize=8,
+                 label='Start Referenz')
 
-    if len(x_mocap_raw) > 0:
-        plt.plot(x_mocap_raw, y_mocap_raw, '.', markersize=2, alpha=0.35,
-                 label='Istpfad roh (1. Layer, verschoben)')
+    # if len(x_mocap_raw) > 0:
+    #     plt.plot(x_mocap_raw, y_mocap_raw, '.', markersize=2, alpha=0.35,
+    #              label='Istpfad roh')
 
-    if len(x_mocap_filtered) > 0:
-        plt.plot(x_mocap_filtered, y_mocap_filtered, '-', linewidth=2,
-                 label='Istpfad geglättet (1. Layer, verschoben)')
-        plt.plot(x_mocap_filtered[0], y_mocap_filtered[0], 'o', markersize=8,
+    if len(x_mocap_smooth) > 0:
+        plt.plot(x_mocap_smooth[::PLOT_STRIDE], y_mocap_smooth[::PLOT_STRIDE], '-', linewidth=2,
+                 label='Istpfad geglättet')
+        plt.plot(x_mocap_smooth[0], y_mocap_smooth[0], 'o', markersize=8,
                  label='Start Istpfad')
 
     plt.xlabel("X [m]")
     plt.ylabel("Y [m]")
-    plt.title("Istpfad der ersten Lage vs. rekonstruierte Referenz aus /profiles")
+    plt.title("Istpfad der ersten Lage vs. Referenz aus vorheriger Schicht")
     plt.axis("equal")
     plt.grid(True)
     plt.legend()
@@ -265,20 +276,17 @@ def plot_xy_comparison(x_ref, y_ref,
 
 def main():
     # ------------------------------------------------------------
-    # 1) Read first contiguous first-layer mocap segment
+    # 1) Ist-Pfad aus Mocap
     # ------------------------------------------------------------
     x_mocap, y_mocap, z_mocap, t_mocap = extract_first_contiguous_layer_segment(
         BAG_MOCAP, TOPIC_MOCAP, Z_THRESHOLD_MOCAP
     )
 
-    x_mocap_shifted = x_mocap + XY_SHIFT
-    y_mocap_shifted = y_mocap + XY_SHIFT
-
-    x_mocap_smooth = moving_average(x_mocap_shifted, SMOOTH_WINDOW)
-    y_mocap_smooth = moving_average(y_mocap_shifted, SMOOTH_WINDOW)
+    x_mocap_smooth = moving_average(x_mocap, SMOOTH_WINDOW_MOCAP)
+    y_mocap_smooth = moving_average(y_mocap, SMOOTH_WINDOW_MOCAP)
 
     # ------------------------------------------------------------
-    # 2) Reconstruct comparison trajectory from profile maxima
+    # 2) Referenz aus Profil-Maxima
     # ------------------------------------------------------------
     ref = reconstruct_reference_from_profiles(
         BAG_PROFILES,
@@ -290,35 +298,54 @@ def main():
         min_points_after_filter=MIN_POINTS_AFTER_FILTER
     )
 
-    x_ref = ref["x"]
-    y_ref = ref["y"]
+    x_ref_raw = ref["x"]
+    y_ref_raw = ref["y"]
+
+    # leichte XY-Glättung der Referenz
+    x_ref_smooth = moving_average(x_ref_raw, SMOOTH_WINDOW_REF)
+    y_ref_smooth = moving_average(y_ref_raw, SMOOTH_WINDOW_REF)
 
     # ------------------------------------------------------------
-    # 3) Output info
+    # 3) Ist-Pfad auf Referenz-Start ausrichten
+    # ------------------------------------------------------------
+    if len(x_ref_smooth) > 0 and len(x_mocap) > 0:
+        x_mocap_aligned, y_mocap_aligned, dx_align, dy_align = align_path_start(
+            x_mocap, y_mocap, x_ref_smooth[0], y_ref_smooth[0]
+        )
+        x_mocap_smooth_aligned, y_mocap_smooth_aligned, _, _ = align_path_start(
+            x_mocap_smooth, y_mocap_smooth, x_ref_smooth[0], y_ref_smooth[0]
+        )
+    else:
+        x_mocap_aligned, y_mocap_aligned = x_mocap, y_mocap
+        x_mocap_smooth_aligned, y_mocap_smooth_aligned = x_mocap_smooth, y_mocap_smooth
+        dx_align, dy_align = 0.0, 0.0
+
+    # ------------------------------------------------------------
+    # 4) Output
     # ------------------------------------------------------------
     print("----- Mocap -----")
     print("Number of mocap points in first contiguous layer segment: {}".format(len(x_mocap)))
-
-    if len(x_mocap) == 0:
-        print("No first layer segment found in mocap data (z < {}).".format(Z_THRESHOLD_MOCAP))
 
     print("\n----- Profiles -----")
     print("Total profiles read: {}".format(ref["num_profiles_total"]))
     print("Valid profiles used: {}".format(ref["num_profiles_valid"]))
     print("Invalid/skipped profiles: {}".format(ref["num_profiles_invalid"]))
-    print("Reference points reconstructed: {}".format(len(x_ref)))
+    print("Reference points reconstructed: {}".format(len(x_ref_raw)))
     print("Layer closure detected: {}".format(ref["layer_finished"]))
 
-    if len(x_ref) == 0:
-        print("No valid reference trajectory could be reconstructed from /profiles.")
+    print("\n----- Alignment -----")
+    print("Applied start alignment shift:")
+    print("dx = {:.6f} m".format(dx_align))
+    print("dy = {:.6f} m".format(dy_align))
 
     # ------------------------------------------------------------
-    # 4) Plot
+    # 5) Plot
     # ------------------------------------------------------------
     plot_xy_comparison(
-        x_ref, y_ref,
-        x_mocap_shifted, y_mocap_shifted,
-        x_mocap_smooth, y_mocap_smooth
+        x_ref_raw, y_ref_raw,
+        x_ref_smooth, y_ref_smooth,
+        x_mocap_aligned, y_mocap_aligned,
+        x_mocap_smooth_aligned, y_mocap_smooth_aligned
     )
 
 
