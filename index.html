@@ -3,192 +3,176 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Print-While-Drive | match</title>
+  <title>Print-While-Drive | Project Page</title>
   <meta name="description" content="Project page for Print-While-Drive for robotic large-scale additive manufacturing." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg-grid"></div>
-  <header class="site-header">
-    <div class="container nav">
-      <a class="brand" href="#top">match</a>
-      <nav>
-        <a href="#abstract">Abstract</a>
-        <a href="#contributions">Contributions</a>
-        <a href="#framework">Framework</a>
-        <a href="#repo">Code</a>
-        <a href="#citation">Citation</a>
-      </nav>
-    </div>
-  </header>
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="index.html">match · Print-While-Drive</a>
+    <nav>
+      <a href="index.html#video">Video</a>
+      <a href="index.html#chapters">Chapters</a>
+      <a href="index.html#gallery">Gallery</a>
+      <a href="paper.pdf">Paper</a>
+      <a href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">Code</a>
+    </nav>
+  </div>
+</header>
 
-  <main id="top">
-    <section class="hero container">
-      <div class="hero-copy">
-        <div class="pill">Project Page</div>
-        <h1>Print-While-Drive for robotic large-scale additive manufacturing</h1>
-        <p class="subtitle">It came, it moves, it’s printing.</p>
-        <p class="authors">Tobias Recker, Lukas Lachmayer, Hauke Heeren, Torge Kolditz, Annika Raatz</p>
-        <p class="affiliation">Institute of Assembly Technology and Robotics, Leibniz University Hannover</p>
-        <div class="cta-row">
-          <a class="button primary" href="paper.pdf">Read Paper</a>
-          <a class="button" href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
-          <a class="button" href="https://doi.org/10.5281/zenodo.14507474" target="_blank" rel="noopener noreferrer">DOI</a>
-        </div>
-      </div>
-      <div class="hero-visual card">
-        <img src="assets/page-01.png" alt="Graphical abstract of the print-while-drive framework" />
-      </div>
-    </section>
-
-    <section id="abstract" class="container section two-col">
+<main>
+  <section class="hero container">
+    <div class="hero-grid">
       <div>
-        <h2>Overview</h2>
-        <p>
-          This work investigates trajectory planning, motion control, and compensation strategies for mobile robotic additive manufacturing in motion. Instead of repeatedly stopping and repositioning, the system performs uninterrupted large-scale deposition while the mobile platform keeps moving.
-        </p>
-        <p>
-          The study centers on a polyurethane foam structure of roughly 3 × 4 × 2 m and extends the workflow to coordinated multi-robot fabrication, including reinforcement and post-processing operations.
-        </p>
-      </div>
-      <div class="highlight-box">
-        <h3>Why it matters</h3>
-        <p>
-          Print-while-drive can fabricate structures larger than the static workspace of a single printer while avoiding repeated interruptions and segment boundaries.
-        </p>
-      </div>
-    </section>
-
-    <section id="contributions" class="container section">
-      <h2>Main contributions</h2>
-      <div class="card-grid three">
-        <article class="card pad">
-          <span class="kicker">01</span>
-          <h3>Coupled trajectory planning</h3>
-          <p>A planning approach for TCP and mobile base motion that respects collision avoidance, reachability, nonholonomic motion, and process constraints.</p>
-        </article>
-        <article class="card pad">
-          <span class="kicker">02</span>
-          <h3>Integrated control framework</h3>
-          <p>A coordinated MiR/UR control architecture for continuous print-while-drive operation with constant-process execution in mind.</p>
-        </article>
-        <article class="card pad">
-          <span class="kicker">03</span>
-          <h3>Online compensation</h3>
-          <p>Laser-based feedback for geometric referencing and disturbance compensation during fabrication of large-scale components.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="framework" class="container section">
-      <div class="section-head">
-        <h2>Framework</h2>
-        <p>A full-stack pipeline from CAD input to executed robotic fabrication.</p>
-      </div>
-      <div class="framework-layout">
-        <div class="card media-card">
-          <img src="assets/page-09.png" alt="Framework diagram from preprocessing to processing and as-built verification" />
+        <div class="eyebrow">Project page</div>
+        <h1>Print-While-Drive for robotic large-scale additive manufacturing</h1>
+        <p class="hero-meta">Tobias Recker, Lukas Lachmayer, Hauke Heeren, Torge Kolditz, Annika Raatz</p>
+        <p class="hero-meta">Institute of Assembly Technology and Robotics · Leibniz University Hannover</p>
+        <p class="chapter-lead">A clean academic project page for the journal paper, centered on uninterrupted mobile additive manufacturing, coupled trajectory planning, retiming, robot control, and evaluation.</p>
+        <div class="button-row">
+          <a class="button primary" href="paper.pdf">Read paper</a>
+          <a class="button" href="#video">Watch video</a>
+          <a class="button" href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">GitHub repository</a>
         </div>
-        <div class="stack">
-          <div class="card pad">
-            <h3>Pre-processing</h3>
-            <p>CAD geometry, process parameters, and robot characteristics are used to generate the TCP trajectory and the extended mobile-platform trajectory.</p>
-          </div>
-          <div class="card pad">
-            <h3>Processing</h3>
-            <p>A ROS-based execution stage imports production files, retimes trajectories, runs robot controllers, and executes the fabrication process.</p>
-          </div>
-          <div class="card pad">
-            <h3>As-built feedback</h3>
-            <p>Recorded data can be processed into a digital representation of the built component, enabling verification and future digital-twin updates.</p>
-          </div>
+        <div class="stats">
+          <div class="stat"><strong>3 × 4 × 2 m</strong><span class="small">Demonstrator scale</span></div>
+          <div class="stat"><strong>5 chapters</strong><span class="small">Dedicated overview pages</span></div>
+          <div class="stat"><strong>11 images</strong><span class="small">Landing-page rotating stack</span></div>
         </div>
       </div>
-    </section>
-
-    <section class="container section">
-      <div class="section-head">
-        <h2>Planning details</h2>
-        <p>Selected figures from the paper.</p>
+      <div class="hero-card pad">
+        <img src="assets/planning/initialPose.png" alt="Planning view of the mobile manipulator and target geometry" style="border-radius:14px; border:1px solid var(--line);" />
       </div>
-      <div class="gallery">
-        <figure class="card gallery-item">
-          <img src="assets/page-10.png" alt="Trajectory planning constraints for nonholonomic print-while-drive" />
-          <figcaption>Planning must balance nonholonomic base motion, arm reach limits, offset mounting, and collision clearance.</figcaption>
-        </figure>
-        <figure class="card gallery-item">
-          <img src="assets/page-11.png" alt="Kinodynamic sampling and artificial potential field planning" />
-          <figcaption>The planner combines kinodynamic sampling with artificial potential fields to choose feasible base poses.</figcaption>
-        </figure>
-        <figure class="card gallery-item">
-          <img src="assets/page-13.png" alt="Trajectory retiming and index-offset optimization results" />
-          <figcaption>Post-planning retiming smooths the MiR trajectory and reduces peak velocities while preserving feasibility.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section id="repo" class="container section">
-      <div class="section-head">
-        <h2>Repository</h2>
-        <p>Packages and entry points from the public codebase.</p>
-      </div>
-      <div class="repo-grid">
-        <div class="card pad repo-card">
-          <h3>Core packages</h3>
-          <ul>
-            <li><code>ur_trajectory_follower</code></li>
-            <li><code>mir_trajectory_follower</code></li>
-            <li><code>print_sim</code></li>
-            <li><code>print_hw</code></li>
-            <li><code>print_gui</code></li>
-            <li><code>parse_mir_path</code> / <code>parse_ur_path</code></li>
-          </ul>
-        </div>
-        <div class="card pad repo-card">
-          <h3>Quick start</h3>
-          <pre><code>git clone https://github.com/match-ROS/match_additive_manufacturing.git
-cd match_additive_manufacturing
-./setup.sh
-source devel/setup.bash
-roslaunch print_sim run_simulation_complete.launch</code></pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="container section callout">
-      <div class="callout-box">
-        <div>
-          <h2>Use this on GitHub Pages</h2>
-          <p>Upload the files to a repository named <code>&lt;username&gt;.github.io</code> or to a <code>docs/</code> folder and enable Pages in the repository settings.</p>
-        </div>
-        <a class="button primary" href="README_DEPLOY.md">Deployment Notes</a>
-      </div>
-    </section>
-
-    <section id="citation" class="container section">
-      <div class="section-head">
-        <h2>Citation</h2>
-        <p>You can replace this with the final BibTeX once the journal metadata is fixed.</p>
-      </div>
-      <div class="card pad citation-card">
-<pre><code>@article{recker2026printwhiledrive,
-  title   = {Print-While-Drive for robotic large-scale additive manufacturing: It came, it moves, it's printing.},
-  author  = {Recker, Tobias and Lachmayer, Lukas and Heeren, Hauke and Kolditz, Torge and Raatz, Annika},
-  year    = {2026},
-  note    = {Project page placeholder citation; update with final journal metadata}
-}</code></pre>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container footer-row">
-      <p>match · Mobile robotic additive manufacturing</p>
-      <p><a href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">GitHub</a></p>
     </div>
-  </footer>
+  </section>
+
+  <section id="video" class="section container">
+    <div class="paper-summary">
+      <div>
+        <div class="eyebrow">Main video</div>
+        <h2>Project video</h2>
+        <p>The embedded YouTube video is the best option here. It keeps the GitHub repository light, streams efficiently, and avoids pushing a 100&nbsp;MB file into the Pages repo.</p>
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/IAT_a7R-n6Y" title="Print-While-Drive project video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+      </div>
+      <aside class="note">
+        <h3 style="margin-bottom:10px;">Overview</h3>
+        <p>This page introduces the overall framework and links to separate chapter overviews for Printing Process, Trajectory Planning, Trajectory Retiming, Robot Control, and Evaluation.</p>
+        <p class="small" style="margin-top:10px;">To replace the main video later, only change the YouTube embed link in <code>index.html</code>.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="gallery" class="section container">
+    <div class="landing-showcase">
+      <div>
+        <div class="eyebrow">Landing-page image stack</div>
+        <h2>Visual highlights</h2>
+        <p>This rotating stack is meant for the 11 landing-page images you mentioned. It avoids a long vertical list while still letting visitors browse the visuals quickly.</p>
+        <div class="stack-controls">
+          <button type="button" data-stack-prev>Previous</button>
+          <button type="button" data-stack-next>Next</button>
+          <span class="stack-counter" data-stack-counter></span>
+        </div>
+        <div class="asset-box" style="margin-top:18px;">
+          <strong>Where to put the JPGs</strong>
+          <p class="small" style="margin-top:8px;">Replace the placeholders in <code>assets/landing/</code> with files named <code>landing-01.jpg</code> to <code>landing-11.jpg</code>.</p>
+        </div>
+      </div>
+      <div class="stack-stage" data-stack>
+        <div class="stack-card"><img src="assets/landing/landing-01.svg" alt="Landing image 1 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-02.svg" alt="Landing image 2 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-03.svg" alt="Landing image 3 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-04.svg" alt="Landing image 4 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-05.svg" alt="Landing image 5 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-06.svg" alt="Landing image 6 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-07.svg" alt="Landing image 7 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-08.svg" alt="Landing image 8 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-09.svg" alt="Landing image 9 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-10.svg" alt="Landing image 10 placeholder"></div>
+        <div class="stack-card"><img src="assets/landing/landing-11.svg" alt="Landing image 11 placeholder"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="chapters" class="section container">
+    <div class="eyebrow">Chapter pages</div>
+    <h2>Explore the paper by topic</h2>
+    <p>Each chapter has its own clean overview page, ready for additional figures, captions, and short explanatory text.</p>
+    <div class="overview-grid">
+      <article class="overview-card">
+        <h3>Printing Process</h3>
+        <p>Material process, nozzle setup, process constraints, and why uninterrupted deposition matters.</p>
+        <a class="button" href="printing-process.html">Open page</a>
+      </article>
+      <article class="overview-card">
+        <h3>Trajectory Planning</h3>
+        <p>From TCP slicing to nonholonomic platform planning with reach and collision constraints.</p>
+        <a class="button" href="trajectory-planning.html">Open page</a>
+      </article>
+      <article class="overview-card">
+        <h3>Trajectory Retiming</h3>
+        <p>Index-offset based post-processing for smoother MiR motion and lower peak velocities.</p>
+        <a class="button" href="trajectory-retiming.html">Open page</a>
+      </article>
+      <article class="overview-card">
+        <h3>Robot Control</h3>
+        <p>Coupled MiR/UR control, laser feedback, and online correction during fabrication.</p>
+        <a class="button" href="robot-control.html">Open page</a>
+      </article>
+      <article class="overview-card">
+        <h3>Evaluation</h3>
+        <p>Experimental results, reconstruction, process quality, and performance of the full framework.</p>
+        <a class="button" href="evaluation.html">Open page</a>
+      </article>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="eyebrow">Planning preview</div>
+    <h2>First figures already inserted</h2>
+    <div class="figure-grid">
+      <figure class="figure">
+        <img src="assets/planning/initialPose.png" alt="Initial planning pose">
+        <figcaption>Planning view for the coupled mobile manipulator and target geometry.</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/planning/initialPoseCorner.png" alt="Corner planning view">
+        <figcaption>Corner case illustrating the planning geometry around the target structure.</figcaption>
+      </figure>
+      <figure class="figure">
+        <img src="assets/planning/scene.gif" alt="Planning animation gif">
+        <figcaption>Animated planning preview using your uploaded GIF.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="eyebrow">Assets</div>
+    <h2>What to replace next</h2>
+    <div class="grid-2">
+      <div class="asset-box">
+        <strong>Landing page</strong>
+        <p class="small">Put your 11 JPGs into <code>assets/landing/</code> and name them <code>landing-01.jpg</code> to <code>landing-11.jpg</code>. Then replace the <code>.svg</code> references in <code>index.html</code> with <code>.jpg</code>.</p>
+      </div>
+      <div class="asset-box">
+        <strong>Chapter pages</strong>
+        <p class="small">Each chapter page already points to its own folder under <code>assets/</code>. You only need to drop your images into the matching folder and update the file extension if needed.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="container row">
+    <div class="small">match · Mobile additive manufacturing project page</div>
+    <div class="small"><a href="README_ASSETS.md">Asset instructions</a></div>
+  </div>
+</footer>
+<script src="script.js"></script>
 </body>
 </html>
