@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Print-While-Drive | match</title>
+  <meta name="description" content="Project page for Print-While-Drive for robotic large-scale additive manufacturing." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="#top">match</a>
+      <nav>
+        <a href="#abstract">Abstract</a>
+        <a href="#contributions">Contributions</a>
+        <a href="#framework">Framework</a>
+        <a href="#repo">Code</a>
+        <a href="#citation">Citation</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero container">
+      <div class="hero-copy">
+        <div class="pill">Project Page</div>
+        <h1>Print-While-Drive for robotic large-scale additive manufacturing</h1>
+        <p class="subtitle">It came, it moves, it’s printing.</p>
+        <p class="authors">Tobias Recker, Lukas Lachmayer, Hauke Heeren, Torge Kolditz, Annika Raatz</p>
+        <p class="affiliation">Institute of Assembly Technology and Robotics, Leibniz University Hannover</p>
+        <div class="cta-row">
+          <a class="button primary" href="paper.pdf">Read Paper</a>
+          <a class="button" href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+          <a class="button" href="https://doi.org/10.5281/zenodo.14507474" target="_blank" rel="noopener noreferrer">DOI</a>
+        </div>
+      </div>
+      <div class="hero-visual card">
+        <img src="assets/page-01.png" alt="Graphical abstract of the print-while-drive framework" />
+      </div>
+    </section>
+
+    <section id="abstract" class="container section two-col">
+      <div>
+        <h2>Overview</h2>
+        <p>
+          This work investigates trajectory planning, motion control, and compensation strategies for mobile robotic additive manufacturing in motion. Instead of repeatedly stopping and repositioning, the system performs uninterrupted large-scale deposition while the mobile platform keeps moving.
+        </p>
+        <p>
+          The study centers on a polyurethane foam structure of roughly 3 × 4 × 2 m and extends the workflow to coordinated multi-robot fabrication, including reinforcement and post-processing operations.
+        </p>
+      </div>
+      <div class="highlight-box">
+        <h3>Why it matters</h3>
+        <p>
+          Print-while-drive can fabricate structures larger than the static workspace of a single printer while avoiding repeated interruptions and segment boundaries.
+        </p>
+      </div>
+    </section>
+
+    <section id="contributions" class="container section">
+      <h2>Main contributions</h2>
+      <div class="card-grid three">
+        <article class="card pad">
+          <span class="kicker">01</span>
+          <h3>Coupled trajectory planning</h3>
+          <p>A planning approach for TCP and mobile base motion that respects collision avoidance, reachability, nonholonomic motion, and process constraints.</p>
+        </article>
+        <article class="card pad">
+          <span class="kicker">02</span>
+          <h3>Integrated control framework</h3>
+          <p>A coordinated MiR/UR control architecture for continuous print-while-drive operation with constant-process execution in mind.</p>
+        </article>
+        <article class="card pad">
+          <span class="kicker">03</span>
+          <h3>Online compensation</h3>
+          <p>Laser-based feedback for geometric referencing and disturbance compensation during fabrication of large-scale components.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="framework" class="container section">
+      <div class="section-head">
+        <h2>Framework</h2>
+        <p>A full-stack pipeline from CAD input to executed robotic fabrication.</p>
+      </div>
+      <div class="framework-layout">
+        <div class="card media-card">
+          <img src="assets/page-09.png" alt="Framework diagram from preprocessing to processing and as-built verification" />
+        </div>
+        <div class="stack">
+          <div class="card pad">
+            <h3>Pre-processing</h3>
+            <p>CAD geometry, process parameters, and robot characteristics are used to generate the TCP trajectory and the extended mobile-platform trajectory.</p>
+          </div>
+          <div class="card pad">
+            <h3>Processing</h3>
+            <p>A ROS-based execution stage imports production files, retimes trajectories, runs robot controllers, and executes the fabrication process.</p>
+          </div>
+          <div class="card pad">
+            <h3>As-built feedback</h3>
+            <p>Recorded data can be processed into a digital representation of the built component, enabling verification and future digital-twin updates.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container section">
+      <div class="section-head">
+        <h2>Planning details</h2>
+        <p>Selected figures from the paper.</p>
+      </div>
+      <div class="gallery">
+        <figure class="card gallery-item">
+          <img src="assets/page-10.png" alt="Trajectory planning constraints for nonholonomic print-while-drive" />
+          <figcaption>Planning must balance nonholonomic base motion, arm reach limits, offset mounting, and collision clearance.</figcaption>
+        </figure>
+        <figure class="card gallery-item">
+          <img src="assets/page-11.png" alt="Kinodynamic sampling and artificial potential field planning" />
+          <figcaption>The planner combines kinodynamic sampling with artificial potential fields to choose feasible base poses.</figcaption>
+        </figure>
+        <figure class="card gallery-item">
+          <img src="assets/page-13.png" alt="Trajectory retiming and index-offset optimization results" />
+          <figcaption>Post-planning retiming smooths the MiR trajectory and reduces peak velocities while preserving feasibility.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="repo" class="container section">
+      <div class="section-head">
+        <h2>Repository</h2>
+        <p>Packages and entry points from the public codebase.</p>
+      </div>
+      <div class="repo-grid">
+        <div class="card pad repo-card">
+          <h3>Core packages</h3>
+          <ul>
+            <li><code>ur_trajectory_follower</code></li>
+            <li><code>mir_trajectory_follower</code></li>
+            <li><code>print_sim</code></li>
+            <li><code>print_hw</code></li>
+            <li><code>print_gui</code></li>
+            <li><code>parse_mir_path</code> / <code>parse_ur_path</code></li>
+          </ul>
+        </div>
+        <div class="card pad repo-card">
+          <h3>Quick start</h3>
+          <pre><code>git clone https://github.com/match-ROS/match_additive_manufacturing.git
+cd match_additive_manufacturing
+./setup.sh
+source devel/setup.bash
+roslaunch print_sim run_simulation_complete.launch</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="container section callout">
+      <div class="callout-box">
+        <div>
+          <h2>Use this on GitHub Pages</h2>
+          <p>Upload the files to a repository named <code>&lt;username&gt;.github.io</code> or to a <code>docs/</code> folder and enable Pages in the repository settings.</p>
+        </div>
+        <a class="button primary" href="README_DEPLOY.md">Deployment Notes</a>
+      </div>
+    </section>
+
+    <section id="citation" class="container section">
+      <div class="section-head">
+        <h2>Citation</h2>
+        <p>You can replace this with the final BibTeX once the journal metadata is fixed.</p>
+      </div>
+      <div class="card pad citation-card">
+<pre><code>@article{recker2026printwhiledrive,
+  title   = {Print-While-Drive for robotic large-scale additive manufacturing: It came, it moves, it's printing.},
+  author  = {Recker, Tobias and Lachmayer, Lukas and Heeren, Hauke and Kolditz, Torge and Raatz, Annika},
+  year    = {2026},
+  note    = {Project page placeholder citation; update with final journal metadata}
+}</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-row">
+      <p>match · Mobile robotic additive manufacturing</p>
+      <p><a href="https://github.com/match-ROS/match_additive_manufacturing" target="_blank" rel="noopener noreferrer">GitHub</a></p>
+    </div>
+  </footer>
+</body>
+</html>
