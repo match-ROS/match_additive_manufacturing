@@ -188,7 +188,7 @@
   
   <script type="module">
     import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
     import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
   
     const container = document.getElementById('pointcloud-viewer');
@@ -209,7 +209,25 @@
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
   
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new TrackballControls(camera, renderer.domElement);
+    controls.dynamicDampingFactor = 0.12;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+
+    controls.screenSpacePanning = true;
+
+    controls.rotateSpeed = 0.8;
+    controls.zoomSpeed = 1.2;
+    controls.panSpeed = 0.8;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.enableRotate = true;
     controls.enableDamping = true;
   
     scene.add(new THREE.AxesHelper(0.5));
@@ -229,7 +247,7 @@
   
         const material = new THREE.PointsMaterial({
           size: 0.01,
-          color: 0x1f5faa
+          vertexColors: true
         });
   
         const points = new THREE.Points(geometry, material);
@@ -239,8 +257,13 @@
         const size = new THREE.Vector3();
         box.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z);
+        controls.minDistance = 0.05;
+        controls.maxDistance = maxDim * 10;
+        controls.minPolarAngle = 0;
+        controls.maxPolarAngle = Math.PI;
   
-        camera.position.set(0, 0, Math.max(1, maxDim * 2));
+        // camera.position.set(0, 0, Math.max(1, maxDim * 2));
+        camera.position.set(maxDim * 0.8, maxDim * 0.6, maxDim * 1.2);
         controls.target.set(0, 0, 0);
         controls.update();
       },
