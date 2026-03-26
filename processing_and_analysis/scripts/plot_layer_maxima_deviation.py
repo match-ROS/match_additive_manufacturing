@@ -157,7 +157,7 @@ def build_layers_from_profiles(profile_entries, jump_threshold=0.10):
         })
 
     # remove layers with fewer than 20 points
-    layers = [layer for layer in layers if len(layer["profiles"]) >= 20]
+    #layers = [layer for layer in layers if len(layer["profiles"]) >= 20]
 
 
     return layers
@@ -250,7 +250,7 @@ def plot_layers_3d(layers,
     colors = ["#696969", "#d1d1d1" , "#b1e629"]
     cmap = LinearSegmentedColormap.from_list("layer_cmap", colors)
 
-    n_layers = 10
+    n_layers = 17
 
     color_index = 1
     print("number of layers: {}".format(len(layers)))
@@ -264,8 +264,8 @@ def plot_layers_3d(layers,
         pts_plot = pts[::point_stride]
 
         color = cmap(color_index / max(1, n_layers - 1))
-        if i in {2, 4, 6, 8, 9, 10, 15, 17}:
-            color_index += 1
+        
+        color_index += 1
         ax.scatter(
             pts_plot[:, 0],
             pts_plot[:, 1],
@@ -428,7 +428,7 @@ def main():
     print("3D PDF saved to:    {}".format(args.layers3d_pdf))
     print("")
 
-    for layer in layers[:10]:
+    for layer in layers:
         print(
             "Layer {:3d}: profiles={}, points={}, median_profile_max_z={:.4f}, layer_max_z={:.4f}, deviation={:.4f}".format(
                 layer["layer_idx"],

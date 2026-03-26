@@ -257,7 +257,7 @@ def compute_path_error(actual_xy, target_xy):
         }
 
     return {
-        "error_mean": float(np.mean(errors)),
+        "error_mean": float(np.mean(abs((errors)))),
         "error_std": float(np.std(errors)),
         "error_max": float(np.max(errors)),
         "errors": errors,

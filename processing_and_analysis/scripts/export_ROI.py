@@ -23,11 +23,10 @@ OUTPUT_BAG = "profiles_roi_merged.bag"
 OUTPUT_PLY = "profiles_roi_points.ply"
 
 # --- ROI trigger box (used exactly as provided) ---
-x_min = 50.595 - 0.37 / 2.0
-x_max = 50.595 + 0.37
-y_min = 43.686 - 0.506 / 2.0
-y_max = 43.686 + 0.506 / 2.0
-
+x_min = 50.595 - 1.37 
+x_max = 50.595 + 1.37
+y_min = 43.686 - 1.506 
+y_max = 43.686 + 1.506 
 
 # ============================================================
 # Helper functions

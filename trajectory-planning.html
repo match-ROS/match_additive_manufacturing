@@ -32,15 +32,29 @@
       <div>
         <div class="eyebrow">Chapter overview</div>
         <h1>Trajectory Planning</h1>
-        <p class="chapter-lead">This page is set up for the coupled planning problem between the TCP path and the nonholonomic MiR base.</p>
-        <ul class="chapter-list">
-          <li>Introduce the slicing-based TCP targets and the process-constrained feed-rate timing.</li><li>Use figures for reach issues, collision corridors, and the eccentric UR mounting geometry.</li><li>Add the APF and kinodynamic sampling illustrations that explain how feasible platform states are selected.</li>
-        </ul>
+        <p class="chapter-lead">
+          Trajectory planning is formulated as a coupled problem between the predefined tool center point (TCP) path and the nonholonomic mobile base. While the TCP trajectory is derived from the slicing process and must be followed with high accuracy, the mobile platform trajectory must be generated such that reachability, collision avoidance, and kinematic feasibility are ensured at all times.
+          </p>
+          
+          <ul class="chapter-list">
+            <li>
+              The TCP path is defined by the additive manufacturing process and imposes strict geometric and temporal constraints, including a continuous feed-rate and fixed path progression.
+            </li>
+            <li>
+              Due to the eccentric mounting of the manipulator on the mobile platform, base motions directly affect the reachable workspace, requiring coordinated base–manipulator planning.
+            </li>
+            <li>
+              The feasible platform motion is constrained by a narrow corridor between collision with the printed structure and violation of the manipulator reach limits.
+            </li>
+            <li>
+              A combination of artificial potential fields and kinodynamic sampling is used to evaluate candidate platform states and generate a feasible trajectory along the TCP path.
+            </li>
+          </ul>
       </div>
       <div class="asset-box">
-        <strong>Asset folder</strong>
-        <p class="small" style="margin-top:8px;">Place the final images for this page in <code>assets/trajectory-planning/</code>.</p>
-        <p class="small">Current placeholders expect these files: <code>planning-01.jpg</code>, <code>planning-02.jpg</code>, and <code>planning-03.jpg</code>.</p>
+        <img src="assets/trajectory-planning/sceneVideo.gif" 
+             alt="Trajectory planning animation" 
+             class="chapter-gif">
       </div>
     </div>
   </section>
@@ -49,15 +63,15 @@
     <div class="figure-grid">
       <figure class="figure">
         <img src="assets/trajectory-planning/planning-01.svg" alt="Trajectory Planning placeholder 1">
-        <figcaption>Replace with the first key figure for trajectory planning.</figcaption>
+        <figcaption>Coupled TCP and mobile base trajectory illustrating the offset relationship and kinematic dependency between both subsystems.</figcaption>
       </figure>
       <figure class="figure">
         <img src="assets/trajectory-planning/planning-02.svg" alt="Trajectory Planning placeholder 2">
-        <figcaption>Replace with a second explanatory figure, photo, or plot.</figcaption>
+        <figcaption>Feasible motion corridor defined by collision avoidance and manipulator reachability constraints along the planned path.</figcaption>
       </figure>
       <figure class="figure">
         <img src="assets/trajectory-planning/planning-03.svg" alt="Trajectory Planning placeholder 3">
-        <figcaption>Replace with a third supporting visual or result graphic.</figcaption>
+        <figcaption>Trajectory generation using potential fields and kinodynamic sampling to select feasible platform states along the TCP trajectory.</figcaption>
       </figure>
     </div>
   </section>
