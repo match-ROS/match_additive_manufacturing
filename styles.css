@@ -55,7 +55,11 @@ p{margin:0 0 14px;color:var(--muted)}
 }
 .pad{padding:24px}
 .hero-meta{font-size:.98rem;color:var(--muted)}
-.button-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+.button-row {
+  width: 100%;
+  max-width: 1000px;
+  margin: 20px auto;
+}
 .button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line-strong);background:#fff;font-weight:600}
 .button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .button:hover{transform:translateY(-1px)}
