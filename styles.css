@@ -82,6 +82,12 @@ p{margin:0 0 14px;color:var(--muted)}
 .figure{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
 .figure img{aspect-ratio:auto;object-fit:cover;width:100%}
 .figure figcaption{padding:14px 16px;font-size:.95rem;color:var(--muted)}
+.figure-video {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+}
 .subnav{display:flex;flex-wrap:wrap;gap:12px}
 .subnav a{padding:10px 14px;border:1px solid var(--line-strong);border-radius:999px;background:#fff;color:var(--muted)}
 .subnav a.active,.subnav a:hover{color:var(--ink);border-color:#b9c7d6}
