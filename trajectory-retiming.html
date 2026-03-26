@@ -32,15 +32,29 @@
       <div>
         <div class="eyebrow">Chapter overview</div>
         <h1>Trajectory Retiming</h1>
-        <p class="chapter-lead">This page is reserved for the post-planning optimization that smooths MiR motion without changing the geometric path.</p>
-        <ul class="chapter-list">
-          <li>Show the motivation for retiming: reduced jerk, lower peak velocity, and better localization quality.</li><li>Add the arc-length mapping, index-offset plots, and reach-utilization comparisons.</li><li>Use one figure for the final visual explanation of where the platform slows down or speeds up.</li>
-        </ul>
+        <p class="chapter-lead">
+          Trajectory retiming is applied after geometric planning in order to smooth the motion of the mobile platform without modifying the underlying path. The objective is to redistribute the temporal progression along the fixed MiR trajectory such that velocity and acceleration peaks are reduced while the total execution time and the timing of the TCP trajectory remain unchanged.
+          </p>
+          
+          <ul class="chapter-list">
+            <li>
+              The initially planned trajectory is geometrically feasible, but its time-parameterization leads to discontinuous velocity profiles, excessive jerk, and unnecessarily high platform velocities, particularly in convex sections of the print path.
+            </li>
+            <li>
+              Retiming is formulated as an index-offset reparameterization that stretches dynamically demanding trajectory regions in time and compresses less critical segments.
+            </li>
+            <li>
+              An equivalent arc-length representation is used that accounts not only for translational motion, but also for rotation-induced motion of the eccentrically mounted manipulator base.
+            </li>
+            <li>
+              The resulting index offset is scaled and refined such that reachability constraints are preserved while peak velocity is reduced and the required compensatory motion of the manipulator becomes smoother.
+            </li>
+          </ul>
       </div>
       <div class="asset-box">
-        <strong>Asset folder</strong>
-        <p class="small" style="margin-top:8px;">Place the final images for this page in <code>assets/trajectory-retiming/</code>.</p>
-        <p class="small">Current placeholders expect these files: <code>retiming-01.jpg</code>, <code>retiming-02.jpg</code>, and <code>retiming-03.jpg</code>.</p>
+        <img src="assets/trajectory-retiming/La202603100956.png" 
+             alt="overview" 
+             class="chapter-gif">
       </div>
     </div>
   </section>
@@ -48,16 +62,16 @@
   <section class="section container">
     <div class="figure-grid">
       <figure class="figure">
-        <img src="assets/trajectory-retiming/retiming-01.svg" alt="Trajectory Retiming placeholder 1">
-        <figcaption>Replace with the first key figure for trajectory retiming.</figcaption>
+        <img src="assets/trajectory-retiming/arc_length.png" alt="Trajectory Retiming placeholder 1">
+        <figcaption>Arc-length-based reparameterization of the fixed MiR trajectory used to derive the retimed index progression.</figcaption>
       </figure>
       <figure class="figure">
-        <img src="assets/trajectory-retiming/retiming-02.svg" alt="Trajectory Retiming placeholder 2">
-        <figcaption>Replace with a second explanatory figure, photo, or plot.</figcaption>
+        <img src="assets/trajectory-retiming/reach_comparison.png" alt="Trajectory Retiming placeholder 2">
+        <figcaption>Comparison of reach utilization and MiR velocity before and after retiming, illustrating smoother motion with reduced peak velocity.</figcaption>
       </figure>
       <figure class="figure">
-        <img src="assets/trajectory-retiming/retiming-03.svg" alt="Trajectory Retiming placeholder 3">
-        <figcaption>Replace with a third supporting visual or result graphic.</figcaption>
+        <img src="assets/trajectory-retiming/La202603100956.png" alt="Trajectory Retiming placeholder 3">
+        <figcaption>Spatial visualization of the retiming effect, highlighting where the mobile platform slows down or accelerates relative to the initial trajectory.</figcaption>
       </figure>
     </div>
   </section>
