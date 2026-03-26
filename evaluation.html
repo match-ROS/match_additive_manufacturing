@@ -32,16 +32,29 @@
       <div>
         <div class="eyebrow">Chapter overview</div>
         <h1>Evaluation</h1>
-        <p class="chapter-lead">This page is prepared for results, as-built evaluation, and experimentally observed benefits of the full framework.</p>
-        <ul class="chapter-list">
-          <li>Add demonstrator photos, reconstructed geometry, and quantitative result plots.</li><li>Highlight velocity reduction, reach behavior, and final print quality.</li><li>You can also place before/after comparisons or disturbance-compensation results here.</li>
-        </ul>
+        <p class="chapter-lead">
+          The evaluation assesses the proposed framework at three levels: trajectory tracking of the coupled robot system, closed-loop compensation of process disturbances during printing, and geometric agreement between the planned and the as-built component. Together, these experiments quantify both the control performance and the manufacturing quality of the full print-while-drive system.
+          </p>
+          
+          <ul class="chapter-list">
+            <li>
+              The robot control system is first evaluated independently of active height correction in order to assess TCP velocity tracking and path-following accuracy under continuous mobile operation.
+            </li>
+            <li>
+              The Layer Height Controller is then tested under a controlled disturbance, where an integrated HT pipe introduces a local height error that must be compensated online through feed-rate adaptation.
+            </li>
+            <li>
+              Finally, the as-built geometry is reconstructed from the recorded line-laser profiles and compared with the target model to assess global part accuracy and systematic process deviations.
+            </li>
+            <li>
+              Beyond validating the control concept, the evaluation also shows that the same laser data used for online control can be reused to generate a digital twin of the fabricated component.
+            </li>
+          </ul>
       </div>
       <div class="asset-box">
-        <strong>Asset folder</strong>
-        <p class="small" style="margin-top:8px;">Place the final images for this page in <code>assets/evaluation/</code>.</p>
-        <p class="small">Current placeholders expect these files: <code>evaluation-01.jpg</code>, <code>evaluation-02.jpg</code>, and <code>evaluation-03.jpg</code>.</p>
-      </div>
+        <div class="viewer-box">
+          <div id="pointcloud-viewer"></div>
+        </div>
     </div>
   </section>
 
@@ -49,15 +62,15 @@
     <div class="figure-grid">
       <figure class="figure">
         <img src="assets/evaluation/evaluation-01.svg" alt="Evaluation placeholder 1">
-        <figcaption>Replace with the first key figure for evaluation.</figcaption>
+        <figcaption>Measured TCP trajectory and velocity tracking during continuous print-while-drive operation, illustrating the performance of the coupled robot control system.</figcaption>
       </figure>
       <figure class="figure">
         <img src="assets/evaluation/evaluation-02.svg" alt="Evaluation placeholder 2">
-        <figcaption>Replace with a second explanatory figure, photo, or plot.</figcaption>
+        <figcaption>Height-disturbance compensation after integration of an HT pipe, showing how the Layer Height Controller gradually restores the nominal layer height.</figcaption>
       </figure>
       <figure class="figure">
         <img src="assets/evaluation/evaluation-03.svg" alt="Evaluation placeholder 3">
-        <figcaption>Replace with a third supporting visual or result graphic.</figcaption>
+        <figcaption>Reconstructed as-built point cloud aligned with the target geometry, highlighting the final component quality and the distribution of geometric deviations.</figcaption>
       </figure>
     </div>
   </section>
@@ -68,5 +81,83 @@
     <div class="small"><a href="README_ASSETS.md">Asset instructions</a></div>
   </div>
 </footer>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+  
+    const container = document.getElementById('pointcloud-viewer');
+  
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf6f7f9);
+  
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      container.clientWidth / container.clientHeight,
+      0.001,
+      10000
+    );
+    camera.position.set(0, 0, 2);
+  
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+  
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+  
+    scene.add(new THREE.AxesHelper(0.5));
+  
+    const light = new THREE.HemisphereLight(0xffffff, 0x888888, 1.2);
+    scene.add(light);
+  
+    const loader = new PLYLoader();
+    loader.load(
+      'assets/evaluation/pointcloud.ply',
+      (geometry) => {
+        console.log('PLY loaded:', geometry);
+        geometry.computeBoundingBox();
+        console.log('Bounding box:', geometry.boundingBox);
+  
+        geometry.center();
+  
+        const material = new THREE.PointsMaterial({
+          size: 0.01,
+          color: 0x1f5faa
+        });
+  
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+  
+        const box = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+  
+        camera.position.set(0, 0, Math.max(1, maxDim * 2));
+        controls.target.set(0, 0, 0);
+        controls.update();
+      },
+      undefined,
+      (error) => console.error('PLY load error:', error)
+    );
+  
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
 </body>
 </html>
