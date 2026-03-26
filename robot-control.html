@@ -32,15 +32,28 @@
       <div>
         <div class="eyebrow">Chapter overview</div>
         <h1>Robot Control</h1>
-        <p class="chapter-lead">This page focuses on the coupled control architecture, path index logic, and laser-feedback based process correction.</p>
-        <ul class="chapter-list">
-          <li>Use the full control architecture figure as the central illustration on this page.</li><li>Add dedicated visuals for the layer-height controller, laser center controller, and velocity override logic.</li><li>Explain how MiR and UR trajectories are adjusted online while maintaining process consistency.</li>
-        </ul>
+        <p class="chapter-lead">
+          The control framework coordinates the mobile platform, the manipulator, and the material process within a unified architecture. It combines trajectory tracking, path-index-based progression, and laser-feedback-driven compensation in order to maintain a stable deposition process despite platform motion, process disturbances, and localization inaccuracies.
+          </p>
+          <ul class="chapter-list">
+            <li>
+              The MiR and UR trajectories are tracked by dedicated controllers whose motions are tightly coupled, since any movement of the mobile base directly induces motion at the TCP.
+            </li>
+            <li>
+              A laser-feedback module measures the previously deposited strand and provides both a layer-height error for process correction and a lateral error for geometric alignment.
+            </li>
+            <li>
+              The velocity override controller adapts the feedforward motion online, allowing the system to increase or decrease local material deposition by modifying the traversal speed.
+            </li>
+            <li>
+              Additional compensation is required within the UR controller to counteract TCP motion induced by platform translation and rotation while preserving the process-specified TCP trajectory.
+            </li>
+          </ul>
       </div>
       <div class="asset-box">
-        <strong>Asset folder</strong>
-        <p class="small" style="margin-top:8px;">Place the final images for this page in <code>assets/robot-control/</code>.</p>
-        <p class="small">Current placeholders expect these files: <code>control-01.jpg</code>, <code>control-02.jpg</code>, and <code>control-03.jpg</code>.</p>
+        <img src="assets/robot-control/La202603091353.png" 
+             alt="overview" 
+             class="chapter-gif">
       </div>
     </div>
   </section>
@@ -48,16 +61,16 @@
   <section class="section container">
     <div class="figure-grid">
       <figure class="figure">
-        <img src="assets/robot-control/control-01.svg" alt="Robot Control placeholder 1">
-        <figcaption>Replace with the first key figure for robot control.</figcaption>
+        <img src="assets/robot-control/La202603091353.png" alt="Robot Control placeholder 1">
+        <figcaption>Overall control architecture combining planning, path progression, robot control, and laser-feedback-based process compensation.</figcaption>
       </figure>
       <figure class="figure">
-        <img src="assets/robot-control/control-02.svg" alt="Robot Control placeholder 2">
-        <figcaption>Replace with a second explanatory figure, photo, or plot.</figcaption>
+        <img src="assets/robot-control/profiles_vec.png" alt="Robot Control placeholder 2">
+        <figcaption>Laser-based correction of strand height and lateral alignment using profile measurements of the previously deposited layer.</figcaption>
       </figure>
       <figure class="figure">
         <img src="assets/robot-control/control-03.svg" alt="Robot Control placeholder 3">
-        <figcaption>Replace with a third supporting visual or result graphic.</figcaption>
+        <figcaption>Coupled MiR–UR control with velocity override and TCP-motion compensation during continuous deposition.</figcaption>
       </figure>
     </div>
   </section>
