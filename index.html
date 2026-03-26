@@ -10,6 +10,67 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
+
+<script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+  import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+  import { PLYLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/PLYLoader.js';
+
+  const container = document.getElementById('pointcloud-viewer');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf6f7f9);
+
+  const camera = new THREE.PerspectiveCamera(
+    45,
+    container.clientWidth / container.clientHeight,
+    0.01,
+    1000
+  );
+  camera.position.set(1.5, 1.5, 1.5);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  scene.add(new THREE.AxesHelper(0.3));
+
+  const light = new THREE.HemisphereLight(0xffffff, 0x888888, 1.2);
+  scene.add(light);
+
+  const loader = new PLYLoader();
+  loader.load('assets/evaluation/pointcloud.ply', function (geometry) {
+    geometry.computeVertexNormals();
+
+    const material = new THREE.PointsMaterial({
+      size: 0.005,
+      vertexColors: geometry.hasAttribute('color')
+    });
+
+    const points = new THREE.Points(geometry, material);
+    geometry.center();
+    scene.add(points);
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  });
+</script>
+
+
 <body>
 <header class="site-header">
   <div class="container nav">
@@ -73,7 +134,15 @@
     </div>
   </section>
   
-
+  <section class="section container">
+    <div class="eyebrow">Interactive 3D View</div>
+    <h2>Reconstructed point cloud</h2>
+    <p class="chapter-lead">
+      Interactive visualization of the reconstructed as-built geometry derived from the in-process laser measurements.
+    </p>
+  
+    <div id="pointcloud-viewer" style="width:100%; height:600px; border-radius:12px; overflow:hidden; background:#f6f7f9;"></div>
+  </section>
 
  
 
