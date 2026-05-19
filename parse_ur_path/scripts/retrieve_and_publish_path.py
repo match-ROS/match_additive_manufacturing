@@ -4,6 +4,7 @@ import os
 import importlib
 import math
 import rospy
+import numpy as np
 from geometry_msgs.msg import PoseStamped, Vector3
 from nav_msgs.msg import Path
 import tf.transformations as tf
@@ -63,6 +64,10 @@ class PathTransfomer:
         self.rx = rospy.get_param('~rx', 0.0)
         self.ry = rospy.get_param('~ry', 0.0)
         self.rz = rospy.get_param('~rz', 0.0)
+        self.flip_normal = rospy.get_param('~flip_normal', False)
+        self.flip_tangent = rospy.get_param('~flip_tangent', False)
+        self.tool_z_source = rospy.get_param('~tool_z_source', 'normal')
+        self.tool_x_source = rospy.get_param('~tool_x_source', 'tangent')
 
         # Prepare Path messages
         self.original_path = Path()
@@ -97,30 +102,89 @@ class PathTransfomer:
     
     def compute_normals(self):
         normals = []
-        x_coords, y_coords = self.x_coords, self.y_coords
-        centroid = (sum(x_coords)/len(x_coords), sum(y_coords)/len(y_coords))
-
         rospy.logwarn("computing normals")
-        
-        for i in range(self.start_index, len(x_coords)-1):
-            # Compute the normal vector to the path at each point
-            dx = x_coords[i+1] - x_coords[i-1]
-            dy = y_coords[i+1] - y_coords[i-1]
-            norm = math.sqrt(dx**2 + dy**2)
-            normal = (dy/norm, -dx/norm)
-             # Create a vector from the current point to the centroid
-            # vec_to_centroid = (centroid[0] - x_coords[i], centroid[1] - y_coords[i])
-            
-            # # If the dot product is positive, the normal is pointing toward the centroid,
-            # # else flip it to make it point inward.
-            # if normal[0]*vec_to_centroid[0] + normal[1]*vec_to_centroid[1] < 0:
-            #     normal = (-normal[0], -normal[1])
 
-            normals.append(normal) # TODO: Richtung?
-        normals.append(normals[-1])  # to have the same length as the path
+        if self.transformed_path.poses:
+            for pose_stamped in self.transformed_path.poses:
+                orientation = pose_stamped.pose.orientation
+                quat = np.array([orientation.x, orientation.y, orientation.z, orientation.w], dtype=float)
+                quat_norm = np.linalg.norm(quat)
+                if quat_norm < 1e-6:
+                    normal = np.array([0.0, 0.0, 1.0])
+                else:
+                    quat /= quat_norm
+                    rotation = tf.quaternion_matrix(quat)
+                    normal = rotation[0:3, 2]
+                normals.append(normal)
+        else:
+            x_coords = self.x_coords
+            for i in range(self.start_index, len(x_coords) - 1):
+                _, normal = self._compute_tangent_and_normal(i)
+                normals.append(normal)
+        if normals:
+            normals.append(normals[-1])  # to have the same length as the path
         self.normals = Vector3Array()
-        self.normals.vectors = [Vector3(x=n[0], y=n[1], z=0) for n in normals]
+        self.normals.vectors = [Vector3(x=n[0], y=n[1], z=n[2]) for n in normals]
         return normals
+
+    def _compute_tangent_and_normal(self, i):
+        last_i = len(self.x_coords) - 2
+        if i <= self.start_index:
+            i_prev = i
+            i_next = min(i + 1, last_i)
+        elif i >= last_i:
+            i_prev = max(i - 1, self.start_index)
+            i_next = i
+        else:
+            i_prev = i - 1
+            i_next = i + 1
+
+        dx = self.x_coords[i_next] - self.x_coords[i_prev]
+        dy = self.y_coords[i_next] - self.y_coords[i_prev]
+        dz = self.z_coords[i_next] - self.z_coords[i_prev]
+
+        tangent = np.array([dx, dy, dz], dtype=float)
+        if self.flip_tangent:
+            tangent *= -1.0
+        tangent_norm = np.linalg.norm(tangent)
+        if tangent_norm < 1e-6:
+            tangent = np.array([1.0, 0.0, 0.0])
+        else:
+            tangent = tangent / tangent_norm
+
+        normal = np.array([dy, -dx, 0.0], dtype=float)
+        if self.flip_normal:
+            normal *= -1.0
+        normal_norm = np.linalg.norm(normal)
+        if normal_norm < 1e-6:
+            normal = np.array([0.0, 1.0, 0.0])
+        else:
+            normal = normal / normal_norm
+
+        # Enforce orthogonality between tangent and normal.
+        tangent = tangent - np.dot(tangent, normal) * normal
+        tangent_norm = np.linalg.norm(tangent)
+        if tangent_norm < 1e-6:
+            tangent = np.array([1.0, 0.0, 0.0])
+        else:
+            tangent = tangent / tangent_norm
+
+        return tangent, normal
+
+    @staticmethod
+    def _orientation_from_axes(x_axis, y_axis, z_axis):
+        rotation = np.eye(4)
+        rotation[0:3, 0] = x_axis
+        rotation[0:3, 1] = y_axis
+        rotation[0:3, 2] = z_axis
+        return tf.quaternion_from_matrix(rotation)
+
+    @staticmethod
+    def _normalize_axis(vec, fallback):
+        norm = np.linalg.norm(vec)
+        if norm < 1e-6:
+            return fallback
+        return vec / norm
 
     def apply_transformation(self, poses, tx, ty, tz, rx, ry, rz, timestamps=None):
         if timestamps is None:
@@ -174,9 +238,31 @@ class PathTransfomer:
             pose_stamped.pose.position.x = self.x_coords[i]
             pose_stamped.pose.position.y = self.y_coords[i]
             pose_stamped.pose.position.z = self.z_coords[i]  
-            
-            orientation = math.atan2(self.y_coords[i+1] - self.y_coords[i], self.x_coords[i+1] - self.x_coords[i])
-            q = tf.quaternion_from_euler(0, 0, orientation)
+
+            tangent, normal = self._compute_tangent_and_normal(i)
+            binormal = np.cross(tangent, normal)
+            binormal = self._normalize_axis(binormal, np.array([0.0, 0.0, 1.0]))
+
+            axis_map = {
+                'tangent': tangent,
+                'normal': normal,
+                'binormal': binormal,
+            }
+            z_axis = axis_map.get(self.tool_z_source, normal)
+            x_axis = axis_map.get(self.tool_x_source, tangent)
+
+            z_axis = self._normalize_axis(z_axis, np.array([0.0, 0.0, 1.0]))
+            x_axis = self._normalize_axis(x_axis, np.array([1.0, 0.0, 0.0]))
+
+            if abs(np.dot(z_axis, x_axis)) > 0.95:
+                fallback_x = axis_map['tangent'] if self.tool_z_source != 'tangent' else axis_map['normal']
+                x_axis = self._normalize_axis(fallback_x, np.array([1.0, 0.0, 0.0]))
+
+            y_axis = np.cross(z_axis, x_axis)
+            y_axis = self._normalize_axis(y_axis, np.array([0.0, 0.0, 1.0]))
+            x_axis = np.cross(y_axis, z_axis)
+            x_axis = self._normalize_axis(x_axis, np.array([1.0, 0.0, 0.0]))
+            q = self._orientation_from_axes(x_axis, y_axis, z_axis)
             pose_stamped.pose.orientation.x = q[0]
             pose_stamped.pose.orientation.y = q[1]
             pose_stamped.pose.orientation.z = q[2]

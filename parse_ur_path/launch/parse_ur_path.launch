@@ -6,6 +6,10 @@
     <arg name="rx" default="0.0" />
     <arg name="ry" default="0.0" />
     <arg name="rz" default="0.0" />
+    <arg name="flip_normal" default="false" />
+    <arg name="flip_tangent" default="false" />
+    <arg name="tool_z_source" default="normal" />
+    <arg name="tool_x_source" default="tangent" />
     <arg name="path_ns" default="" />
     <group ns="$(arg path_ns)">
         <!-- Node that runs the path transformer script -->
@@ -20,6 +24,10 @@
             <param name="rx" value="$(arg rx)" />
             <param name="ry" value="$(arg ry)" />
             <param name="rz" value="$(arg rz)" />
+            <param name="flip_normal" value="$(arg flip_normal)" />
+            <param name="flip_tangent" value="$(arg flip_tangent)" />
+            <param name="tool_z_source" value="$(arg tool_z_source)" />
+            <param name="tool_x_source" value="$(arg tool_x_source)" />
             <param name="path_namespace" value="$(arg path_ns)" />
         </node>
     </group>

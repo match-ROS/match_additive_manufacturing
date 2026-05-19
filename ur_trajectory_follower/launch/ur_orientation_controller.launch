@@ -1,0 +1,32 @@
+<launch>
+    <!-- Parameters -->
+    <arg name="kp_orientation" default="1.0"/>
+    <arg name="ki_orientation" default="0.0"/>
+    <arg name="kd_orientation" default="0.0"/>
+
+    <arg name="output_smoothing_coeff" default="0.9"/>
+    <arg name="initial_path_index" default="-1"/>
+
+    <!-- Topics -->
+    <arg name="path_ns" default="" doc="Namespace prefix for UR path topics (with or without leading slash)."/>
+    <arg name="path_ns_prefix" default="$(eval '/' + path_ns.strip('/') if path_ns else '')"/>
+    <arg name="path_topic" default="$(arg path_ns_prefix)/ur_path_transformed"/>
+    <arg name="current_pose_topic" default="/global_nozzle_pose"/>
+    <arg name="path_index_topic" default="$(arg path_ns_prefix)/path_index"/>
+    <arg name="velocity_override_topic" default="/velocity_override"/>
+    <arg name="twist_topic" default="/ur_orientation_twist"/>
+
+    <node name="ur_path_orientation_controller" pkg="ur_trajectory_follower" type="ur_path_orientation_controller.py" output="screen">
+        <param name="kp_orientation" value="$(arg kp_orientation)"/>
+        <param name="ki_orientation" value="$(arg ki_orientation)"/>
+        <param name="kd_orientation" value="$(arg kd_orientation)"/>
+        <param name="output_smoothing_coeff" value="$(arg output_smoothing_coeff)"/>
+        <param name="initial_path_index" value="$(arg initial_path_index)"/>
+
+        <param name="path_topic" value="$(arg path_topic)"/>
+        <param name="current_pose_topic" value="$(arg current_pose_topic)"/>
+        <param name="path_index_topic" value="$(arg path_index_topic)"/>
+        <param name="velocity_override_topic" value="$(arg velocity_override_topic)"/>
+        <param name="twist_topic" value="$(arg twist_topic)"/>
+    </node>
+</launch>

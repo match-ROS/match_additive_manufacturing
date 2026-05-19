@@ -5,17 +5,19 @@ from nav_msgs.msg import Path
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32, Float32, Bool
 import numpy as np
-from sensor_msgs.msg import JointState
+import tf.transformations as tft
 
 class DirectionController:
     def __init__(self):
-        # height controller: fixed dt assumed
+        # Spray-axis controller: fixed dt assumed
         self.nozzle_height_default = rospy.get_param("~nozzle_height_default", 0.1)
         self.nozzle_height_override = 0.0
         self.kp_z = rospy.get_param("~kp_z", 0.0)
         self.ki_z = rospy.get_param("~ki_z", 0.0)
         self.kd_z = rospy.get_param("~kd_z", 0.0)
-        rospy.loginfo(f"Z-controller gains: kp={self.kp_z}, ki={self.ki_z}, kd={self.kd_z}")
+        rospy.loginfo(f"Spray-axis gains: kp={self.kp_z}, ki={self.ki_z}, kd={self.kd_z}")
+        self.spray_axis_source = rospy.get_param("~spray_axis_source", "tool_z")
+        self.spray_axis_sign = float(rospy.get_param("~spray_axis_sign", 1.0))
         self.joint_state_topic = rospy.get_param("~joint_state_topic", "/mur620c/joint_states")
         self.lift_joint_name = rospy.get_param("~lift_joint_name", "right_lift_joint")
         self.output_smoothing_coeff = rospy.get_param("~output_smoothing_coeff", 0.0)  # between 0 and 1
@@ -31,7 +33,6 @@ class DirectionController:
         self.current_lift_height = 0.0
         self.current_pose = None
         self.node_ready = False
-        self.ff_only = rospy.get_param("~ff_only", False) # feed forward only: direction is calculated only from the trajectory not the current pose
         self.from_index_offset = int(rospy.get_param("~from_index_offset", -1))
         self.goal_index_offset = int(rospy.get_param("~goal_index_offset", 0))
         self.start_condition_topic = rospy.get_param("~start_condition_topic", "/start_condition")
@@ -151,33 +152,62 @@ class DirectionController:
             rospy.logwarn("time difference <=0 encountered in trajectory velocity calculation.")
             self.trajectory_velocity = 0.0
 
-    def get_direction(self, from_offset: int, goal_offset: int):
-        """Get the direction from the current pose to the next waypoint in the path.
-        Returns:
-            direction_xy_norm (np.array): The normalized direction vector in the xy-plane.
-            error_z (float): The error in the z-axis.
-        """
-        # Get direction from current pose and goal pose
+    def _get_goal_pose(self, goal_offset: int) -> PoseStamped:
         if not self.path.poses:
-            return np.array([0, 0]), 0.0
+            return None
         goal_idx = self._clamp_path_index(self.current_index + goal_offset)
-        goal_pose = self.path.poses[goal_idx]
-        if self.ff_only:
-            from_idx = self._clamp_path_index(self.current_index + from_offset)
-            from_pose = self.path.poses[from_idx]
-            from_pose.pose.position.z = self.current_pose.pose.position.z  # use controller for z height even in ff_only mode
-        else:
-            from_pose = self.current_pose
-        direction = np.array([goal_pose.pose.position.x - from_pose.pose.position.x,
-                              goal_pose.pose.position.y - from_pose.pose.position.y,
-                              goal_pose.pose.position.z - from_pose.pose.position.z])
-        direction_xy = direction[:2]
-        norm_xy = np.linalg.norm(direction_xy)
-        if norm_xy < 1e-6:
-            return np.array([0, 0]), direction[2]
-        
-        direction_xy_norm = direction_xy / norm_xy
-        return direction_xy_norm, direction[2]
+        return self.path.poses[goal_idx]
+
+    @staticmethod
+    def _normalize_vector(vec: np.ndarray, fallback: np.ndarray) -> np.ndarray:
+        norm = np.linalg.norm(vec)
+        if norm < 1e-6:
+            return fallback
+        return vec / norm
+
+    def _get_spray_axis(self, goal_pose: PoseStamped) -> np.ndarray:
+        orientation = goal_pose.pose.orientation
+        quat = np.array([orientation.x, orientation.y, orientation.z, orientation.w], dtype=float)
+        quat_norm = np.linalg.norm(quat)
+        if quat_norm < 1e-6:
+            return np.array([0.0, 0.0, 1.0])
+        quat /= quat_norm
+        rotation = tft.quaternion_matrix(quat)
+        axes = {
+            "tool_x": rotation[0:3, 0],
+            "tool_y": rotation[0:3, 1],
+            "tool_z": rotation[0:3, 2],
+        }
+        axis = axes.get(self.spray_axis_source, axes["tool_z"])
+        axis = self._normalize_vector(axis, np.array([0.0, 0.0, 1.0]))
+        if self.spray_axis_sign < 0.0:
+            axis = -axis
+        return axis
+
+    def get_direction(self, from_offset: int, goal_offset: int):
+        """Get the motion direction orthogonal to the spray axis and the spray-axis error.
+        Returns:
+            direction_plane_norm (np.array): normalized direction orthogonal to spray axis (world frame).
+            error_spray (float): signed error along the spray axis.
+            spray_axis (np.array): normalized spray axis in world frame.
+        """
+        if not self.path.poses or self.current_pose is None:
+            return np.zeros(3), 0.0, np.array([0.0, 0.0, 1.0])
+
+        goal_pose = self._get_goal_pose(goal_offset)
+        if goal_pose is None:
+            return np.zeros(3), 0.0, np.array([0.0, 0.0, 1.0])
+
+        direction = np.array([
+            goal_pose.pose.position.x - self.current_pose.pose.position.x,
+            goal_pose.pose.position.y - self.current_pose.pose.position.y,
+            goal_pose.pose.position.z - self.current_pose.pose.position.z,
+        ])
+        spray_axis = self._get_spray_axis(goal_pose)
+        error_spray = float(np.dot(direction, spray_axis))
+        direction_plane = direction - error_spray * spray_axis
+        direction_plane_norm = self._normalize_vector(direction_plane, np.zeros(3))
+        return direction_plane_norm, error_spray, spray_axis
 
     def smooth_output(self, control_command: Twist):
         """Smooth the output command using exponential moving average."""
@@ -197,27 +227,33 @@ class DirectionController:
         """Control the direction of the robot to follow the path."""
 
         rospy.logdebug(f"Calculating twist at index {self.current_index} with from_offset {from_offset} and goal_offset {goal_offset}.")
-        if not self.ff_only and self.current_pose is None:
+        if self.current_pose is None:
             rospy.logwarn("No current pose received yet.")
             return
         if not self.control_enabled:
             return
         
-        direction_xy_norm, error_z = self.get_direction(from_offset, goal_offset)
-        v_xy=direction_xy_norm*self.trajectory_velocity*self.velocity_override
+        direction_plane_norm, error_spray, spray_axis = self.get_direction(from_offset, goal_offset)
+        v_plane = direction_plane_norm * self.trajectory_velocity * self.velocity_override
         
-        # v_z pid controller (Annahme fester Regeltakt, ohne dt)
+        # Spray-axis PID controller (fixed dt assumed).
+        error_spray += self.nozzle_height_default + self.nozzle_height_override
+        v_spray = (
+            error_spray * self.kp_z
+            + self.integral_z * self.ki_z
+            + (error_spray - self.prev_error_z) * self.kd_z
+        )
+        self.integral_z += error_spray
+        self.prev_error_z = error_spray
 
-        error_z += self.nozzle_height_default + self.nozzle_height_override 
-        v_z=error_z*self.kp_z+self.integral_z*self.ki_z+(error_z-self.prev_error_z)*self.kd_z
-        self.integral_z+=error_z
-        self.prev_error_z=error_z
+        v_spray_vec = spray_axis * v_spray
+        v_cmd = v_plane + v_spray_vec
 
         # Create a Twist message to publish the control command (world_frame)
         control_command = Twist()
-        control_command.linear.x = v_xy[0]
-        control_command.linear.y = v_xy[1]
-        control_command.linear.z = v_z
+        control_command.linear.x = v_cmd[0]
+        control_command.linear.y = v_cmd[1]
+        control_command.linear.z = v_cmd[2]
         control_command_smoothed = self.smooth_output(control_command)
 
         self.pub_ur_velocity_world.publish(control_command_smoothed)

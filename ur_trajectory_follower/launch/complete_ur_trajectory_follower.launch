@@ -21,6 +21,7 @@
         <arg name="robot_name" value="$(arg robot_name)" />
     </include>
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch" />
+    <include file="$(find ur_trajectory_follower)/launch/ur_orientation_controller.launch" />
     <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
         <arg name="node_name" value="pid_twist_controller_direction" />
         <arg name="input_twist_topic" value="/ur_error_world" />
