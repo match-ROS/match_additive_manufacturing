@@ -2,15 +2,18 @@
 <arg name="robot_name" default="mur620a" />
 <arg name="prefix_ur" default="UR10_r/" />
 <arg name="group_name" default="UR_arm_r" />
+<arg name="auto_switch_controllers" default="true" />
 
 <!-- TODO: switch controllers -->
 <group ns="$(arg robot_name)">
 
-    <node name="controller_stop_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_l/arm_controller" />
-    <node name="controller_start_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_l/unsafe" />
+    <group if="$(arg auto_switch_controllers)">
+        <node name="controller_stop_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_l/arm_controller" />
+        <node name="controller_start_l" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_l/unsafe" />
 
-    <node name="controller_stop_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_r/arm_controller" />
-    <node name="controller_start_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_r/unsafe" />
+        <node name="controller_stop_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="stop UR10_r/arm_controller" />
+        <node name="controller_start_r" pkg="controller_manager" type="controller_manager" respawn="false" output="screen" args="start joint_group_vel_controller_r/unsafe" />
+    </group>
 
 
     <!-- Launch the twist_sim node -->

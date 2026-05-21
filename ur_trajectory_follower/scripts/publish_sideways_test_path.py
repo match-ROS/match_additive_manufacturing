@@ -85,8 +85,8 @@ class SidewaysTestPathPublisher:
             start = np.array(
                 [
                     pose_msg.pose.position.x,
-                    pose_msg.pose.position.y,
-                    pose_msg.pose.position.z,
+                    pose_msg.pose.position.y+0.25,
+                    pose_msg.pose.position.z+0.5,
                 ],
                 dtype=float,
             )

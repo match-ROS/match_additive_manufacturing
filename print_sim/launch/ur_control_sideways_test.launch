@@ -2,16 +2,17 @@
     <!-- Wrapper for the sideways-nozzle UR simulation test. -->
     <arg name="robot_name" default="mur620a"/>
     <arg name="prefix_ur" default="UR10_r/"/>
-    <arg name="robot_x" default="51.0"/>
-    <arg name="robot_y" default="39.0"/>
+    <arg name="robot_x" default="0.0"/>
+    <arg name="robot_y" default="0.0"/>
     <arg name="robot_yaw" default="0.0"/>
     <arg name="tool" default="bauschaum_ee"/>
     <arg name="use_rviz" default="true"/>
-    <arg name="path_length" default="0.6"/>
+    <arg name="path_length" default="0.3"/>
     <arg name="num_points" default="50"/>
     <arg name="time_step" default="0.1"/>
     <arg name="spray_axis_source" default="tool_y"/>
     <arg name="spray_axis_sign" default="1.0"/>
+    <arg name="use_empty_world" default="true"/>
 
     <include file="$(find print_sim)/launch/ur_control_sim_test.launch">
         <arg name="robot_name" value="$(arg robot_name)"/>
@@ -21,6 +22,7 @@
         <arg name="robot_yaw" value="$(arg robot_yaw)"/>
         <arg name="tool" value="$(arg tool)"/>
         <arg name="use_rviz" value="$(arg use_rviz)"/>
+        <arg name="use_empty_world" value="$(arg use_empty_world)"/>
         <arg name="path_length" value="$(arg path_length)"/>
         <arg name="num_points" value="$(arg num_points)"/>
         <arg name="time_step" value="$(arg time_step)"/>

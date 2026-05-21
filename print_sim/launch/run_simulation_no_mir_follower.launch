@@ -21,13 +21,16 @@
     </include>
     
     <include file="$(find parse_mir_path)/launch/parse_mir_path.launch">
+        <arg name="path_ns" value="$(arg robot1_name)" />
     </include>
 
     <include file="$(find parse_ur_path)/launch/parse_ur_path.launch">
+        <arg name="path_ns" value="$(arg robot1_name)" />
     </include>
 
     <include file="$(find move_mir_to_start_pose)/launch/move_mir_to_start_pose.launch">
         <arg name="robot_name" value="$(arg robot1_name)" />
+        <arg name="path_ns" value="$(arg robot1_name)" />
     </include>
 
     <include file="$(find move_ur_to_start_pose)/launch/move_ur_to_start_pose.launch">
@@ -37,6 +40,7 @@
         <!-- <arg name="manipulator_base_link" value="$(arg robot1_name)/UR10_l/base_link" /> -->
         <arg name="manipulator_tcp_link" value="UR10_r/tool0" />
         <arg name="planning_group" value="UR_arm_r" />
+        <arg name="path_ns" value="$(arg robot1_name)" />
     </include>
 
     <include file="$(find print_sim)/launch/layer_spawner.launch">

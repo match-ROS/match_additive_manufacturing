@@ -6,6 +6,11 @@
     <arg name="robot_yaw" default="0.0"/>
     <arg name="tool" default="bauschaum_ee"/>
     <arg name="use_rviz" default="true"/>
+    <arg name="use_empty_world" default="true"/>
+    <arg name="node_start_delay" default="20.0"/>
+    <arg name="wait_for_start_condition" default="true"/>
+    <arg name="start_condition_topic" default="/start_condition"/>
+    <arg name="start_service_name" default="/start_trajectory_following"/>
 
     <!-- Sideways test path parameters -->
     <arg name="path_length" default="0.6"/>
@@ -14,7 +19,8 @@
     <arg name="spray_axis_source" default="tool_y"/>
     <arg name="spray_axis_sign" default="1.0"/>
 
-    <include file="$(find match_gazebo)/launch/scale.launch" />
+    <include if="$(arg use_empty_world)" file="$(find gazebo_ros)/launch/empty_world.launch" />
+    <include unless="$(arg use_empty_world)" file="$(find match_gazebo)/launch/scale.launch" />
 
     <include file="$(find mur_launch_sim)/launch/mur_620.launch">
         <arg name="robot_x" value="$(arg robot_x)" />
@@ -36,10 +42,27 @@
         <rosparam param="nozzle_axis">[0.0, 1.0, 0.0]</rosparam>
     </node>
 
+    <include file="$(find move_ur_to_start_pose)/launch/move_ur_to_start_pose.launch">
+        <arg name="node_start_delay" value="$(arg node_start_delay)" />
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="manipulator_base_link" value="base_footprint" />
+        <arg name="manipulator_tcp_link" value="UR10_r/tool0" />
+        <arg name="planning_group" value="UR_arm_r" />
+        <arg name="path_ns" value="$(arg robot_name)" />
+    </include>
+
     <include file="$(find ur_trajectory_follower)/launch/twist_sim.launch">
         <arg name="robot_name" value="$(arg robot_name)" />
         <arg name="prefix_ur" value="$(arg prefix_ur)" />
+        <arg name="auto_switch_controllers" value="false" />
     </include>
+
+    <node name="start_ur_trajectory_following_service" pkg="print_sim" type="start_ur_trajectory_following_service.py" output="screen">
+        <param name="robot_name" value="$(arg robot_name)" />
+        <param name="prefix_ur" value="$(arg prefix_ur)" />
+        <param name="start_condition_topic" value="$(arg start_condition_topic)" />
+        <param name="service_name" value="$(arg start_service_name)" />
+    </node>
 
     <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
         <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" />
@@ -60,7 +83,8 @@
 
     <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
         <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
-        <arg name="wait_for_start_condition" value="false" />
+        <arg name="start_condition_topic" value="$(arg start_condition_topic)" />
+        <arg name="wait_for_start_condition" value="$(arg wait_for_start_condition)" />
         <arg name="spray_axis_source" value="$(arg spray_axis_source)" />
         <arg name="spray_axis_sign" value="$(arg spray_axis_sign)" />
     </include>

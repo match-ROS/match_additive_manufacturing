@@ -68,12 +68,23 @@ roslaunch ur_trajectory_follower compensate_mir.launch ur_cmd_vel_local_topic:="
     - Or maybe new node for PID from twist error to twist command
 
 # Test
-To start a full UR control test in simulation with a generated sideways-nozzle path, run:
+To run the sideways UR control simulation test (arm only, no MiR motion, empty world), start:
 ```sh
 roslaunch print_sim ur_control_sideways_test.launch
 ```
 
-This launch file wraps the complete simulation setup and publishes a path whose nozzle orientation is rotated sideways for controller validation.
+This launch file now:
+- uses `gazebo_ros/empty_world.launch` by default,
+- keeps the mobile base fixed,
+- publishes a short, reachable sideways-nozzle UR path,
+- moves the arm to the path start pose with MoveIt first,
+- waits for a service call before switching to twist control and starting trajectory following.
+
+After MoveIt reached the start pose, trigger trajectory following with:
+
+```sh
+rosservice call /start_trajectory_following "{}"
+```
 
 ```sh
 roslaunch match_gazebo scale.launch
