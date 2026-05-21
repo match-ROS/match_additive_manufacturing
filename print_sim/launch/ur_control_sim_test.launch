@@ -1,0 +1,82 @@
+<launch xmlns:xacro="http://ros.org/wiki/xacro">
+    <arg name="robot_name" default="mur620a"/>
+    <arg name="prefix_ur" default="UR10_r/"/>
+    <arg name="robot_x" default="51.0"/>
+    <arg name="robot_y" default="39.0"/>
+    <arg name="robot_yaw" default="0.0"/>
+    <arg name="tool" default="bauschaum_ee"/>
+    <arg name="use_rviz" default="true"/>
+
+    <!-- Sideways test path parameters -->
+    <arg name="path_length" default="0.6"/>
+    <arg name="num_points" default="50"/>
+    <arg name="time_step" default="0.1"/>
+    <arg name="spray_axis_source" default="tool_y"/>
+    <arg name="spray_axis_sign" default="1.0"/>
+
+    <include file="$(find match_gazebo)/launch/scale.launch" />
+
+    <include file="$(find mur_launch_sim)/launch/mur_620.launch">
+        <arg name="robot_x" value="$(arg robot_x)" />
+        <arg name="robot_y" value="$(arg robot_y)" />
+        <arg name="robot_yaw" value="$(arg robot_yaw)" />
+        <arg name="tf_prefix" value="$(arg robot_name)" />
+        <arg name="tool" value="$(arg tool)" />
+        <arg name="enable_dual_collison_avoidance" value="false" />
+    </include>
+
+    <node name="sideways_ur_test_path" pkg="ur_trajectory_follower" type="publish_sideways_test_path.py" output="screen">
+        <param name="frame_id" value="map" />
+        <param name="use_current_pose" value="true" />
+        <param name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <param name="path_length" value="$(arg path_length)" />
+        <param name="num_points" value="$(arg num_points)" />
+        <param name="time_step" value="$(arg time_step)" />
+        <rosparam param="direction">[1.0, 0.0, 0.0]</rosparam>
+        <rosparam param="nozzle_axis">[0.0, 1.0, 0.0]</rosparam>
+    </node>
+
+    <include file="$(find ur_trajectory_follower)/launch/twist_sim.launch">
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="prefix_ur" value="$(arg prefix_ur)" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/combine_twists.launch">
+        <arg name="combined_twist_topic" value="/$(arg robot_name)/$(arg prefix_ur)twist_fb_command" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/compensate_mir.launch">
+        <arg name="robot_name" value="$(arg robot_name)" />
+        <arg name="prefix_ur" value="$(arg prefix_ur)" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/path_idx_advancer.launch">
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/transform_twist_to_mir.launch">
+        <arg name="robot_name" value="$(arg robot_name)" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/ur_direction_controller.launch">
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+        <arg name="wait_for_start_condition" value="false" />
+        <arg name="spray_axis_source" value="$(arg spray_axis_source)" />
+        <arg name="spray_axis_sign" value="$(arg spray_axis_sign)" />
+    </include>
+
+    <include file="$(find ur_trajectory_follower)/launch/ur_orientation_controller.launch">
+        <arg name="current_pose_topic" value="/$(arg robot_name)/$(arg prefix_ur)global_tcp_pose" />
+    </include>
+
+    <include file="$(find additive_manufacturing_helpers)/launch/pid_twist_controller.launch">
+        <arg name="node_name" value="pid_twist_controller_direction" />
+        <arg name="input_twist_topic" value="/ur_error_world" />
+        <arg name="output_twist_topic" value="/ur_twist_world" />
+        <arg name="pid_values_path" value="$(find additive_manufacturing_helpers)/config/pid_twist_controller.yaml" />
+    </include>
+
+    <group if="$(arg use_rviz)">
+        <node type="rviz" name="rviz_handling" pkg="rviz" args="-d $(find print_sim)/rviz/print_simulation.rviz" />
+    </group>
+</launch>

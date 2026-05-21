@@ -64,6 +64,12 @@ roslaunch print_sim run_simulation_complete.launch
 roslaunch ur_trajectory_follower complete_ur_trajectory_follower_ff_only.launch
 ```
 
+To start the one-command UR control simulation test with a sideways nozzle path:
+
+```sh
+roslaunch print_sim ur_control_sideways_test.launch
+```
+
 ## Measurement Data
 
 Measurement results in Rosbag format can be found at the following link

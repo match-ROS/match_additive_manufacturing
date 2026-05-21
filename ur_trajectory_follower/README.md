@@ -68,6 +68,13 @@ roslaunch ur_trajectory_follower compensate_mir.launch ur_cmd_vel_local_topic:="
     - Or maybe new node for PID from twist error to twist command
 
 # Test
+To start a full UR control test in simulation with a generated sideways-nozzle path, run:
+```sh
+roslaunch print_sim ur_control_sideways_test.launch
+```
+
+This launch file wraps the complete simulation setup and publishes a path whose nozzle orientation is rotated sideways for controller validation.
+
 ```sh
 roslaunch match_gazebo scale.launch
 roslaunch mur_launch_sim mur_620.launch enable_dual_collison_avoidance:=false robot_x:=51.61532 robot_y:=39.752500
