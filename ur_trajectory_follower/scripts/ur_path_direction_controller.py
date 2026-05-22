@@ -88,9 +88,12 @@ class DirectionController:
 
     def index_callback(self, index_msg: Int32):
         self.current_index = index_msg.data
-        self.get_traj_velocity(self.from_index_offset, self.goal_index_offset)
         if not self.node_ready:
             return
+        if not self.control_enabled:
+            return
+
+        self.get_traj_velocity(self.from_index_offset, self.goal_index_offset)
         self.calculate_twist(self.from_index_offset, self.goal_index_offset)
 
     def start_condition_callback(self, msg: Bool):

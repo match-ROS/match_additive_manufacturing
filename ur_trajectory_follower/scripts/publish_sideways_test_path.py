@@ -1,10 +1,27 @@
 #!/usr/bin/env python3
+from typing import Any
+
 import numpy as np
 import rospy
 import tf.transformations as tft
 from geometry_msgs.msg import PoseStamped, Vector3
 from nav_msgs.msg import Path
 from additive_manufacturing_msgs.msg import Vector3Array
+from std_msgs.msg import Bool
+
+
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize(vec: np.ndarray, fallback: np.ndarray) -> np.ndarray:
@@ -43,6 +60,8 @@ class SidewaysTestPathPublisher:
 
         self.use_current_pose = rospy.get_param("~use_current_pose", True)
         self.current_pose_topic = rospy.get_param("~current_pose_topic", "/mur620a/UR10_r/global_tcp_pose")
+        self.wait_for_home_pose = rospy.get_param("~wait_for_home_pose", True)
+        self.home_pose_ready_topic = rospy.get_param("~home_pose_ready_topic", "/home_pose_ready")
         self.start_offset = np.array(rospy.get_param("~start_offset", [0.0, 0.0, 0.0]), dtype=float)
         self.start_xyz = np.array(
             [
@@ -57,10 +76,10 @@ class SidewaysTestPathPublisher:
         self.nozzle_axis = np.array(rospy.get_param("~nozzle_axis", [0.0, 1.0, 0.0]), dtype=float)
         self.x_axis_hint = np.array(rospy.get_param("~x_axis_hint", [1.0, 0.0, 0.0]), dtype=float)
 
-        self.path_length = float(rospy.get_param("~path_length", 0.6))
-        self.num_points = int(rospy.get_param("~num_points", 50))
-        self.time_step = float(rospy.get_param("~time_step", 0.1))
-        self.publish_rate = float(rospy.get_param("~publish_rate", 1.0))
+        self.path_length = _as_float(rospy.get_param("~path_length", 0.6), 0.6)
+        self.num_points = _as_int(rospy.get_param("~num_points", 50), 50)
+        self.time_step = _as_float(rospy.get_param("~time_step", 0.1), 0.1)
+        self.publish_rate = _as_float(rospy.get_param("~publish_rate", 1.0), 1.0)
 
         if self.num_points < 2:
             rospy.logwarn("num_points must be >= 2; clamping to 2.")
@@ -69,6 +88,11 @@ class SidewaysTestPathPublisher:
         self.path_pub = rospy.Publisher(self.path_topic, Path, queue_size=1, latch=True)
         self.original_pub = rospy.Publisher(self.original_path_topic, Path, queue_size=1, latch=True)
         self.normals_pub = rospy.Publisher(self.normals_topic, Vector3Array, queue_size=1, latch=True)
+
+        if self.wait_for_home_pose:
+            rospy.loginfo("Waiting for home pose ready on %s", self.home_pose_ready_topic)
+            rospy.wait_for_message(self.home_pose_ready_topic, Bool)
+            rospy.loginfo("Home pose ready received; generating sideways test path.")
 
         start_point = self._resolve_start_point()
         self.path_msg, self.normals_msg = self._build_messages(start_point)
@@ -82,11 +106,13 @@ class SidewaysTestPathPublisher:
         if self.use_current_pose:
             rospy.loginfo("Waiting for current pose on %s", self.current_pose_topic)
             pose_msg = rospy.wait_for_message(self.current_pose_topic, PoseStamped)
+            if pose_msg is None or pose_msg.pose is None:
+                raise rospy.ROSException("Failed to read current pose.")
             start = np.array(
                 [
                     pose_msg.pose.position.x,
-                    pose_msg.pose.position.y+0.25,
-                    pose_msg.pose.position.z+0.5,
+                    pose_msg.pose.position.y,
+                    pose_msg.pose.position.z,
                 ],
                 dtype=float,
             )
@@ -101,15 +127,19 @@ class SidewaysTestPathPublisher:
 
         path_msg = Path()
         path_msg.header.frame_id = self.frame_id
+        path_poses = path_msg.poses
+        assert path_poses is not None
 
         normals_msg = Vector3Array()
         normals_msg.header.frame_id = self.frame_id
+        normal_vectors = normals_msg.vectors
+        assert normal_vectors is not None
 
         start_time = rospy.Time.now()
         for i in range(self.num_points):
             pose = PoseStamped()
             pose.header.frame_id = self.frame_id
-            pose.header.stamp = start_time + rospy.Duration(self.time_step * i)
+            pose.header.stamp = start_time + rospy.Duration.from_sec(self.time_step * i)
 
             position = start_point + direction * (step * i)
             pose.pose.position.x = position[0]
@@ -119,9 +149,9 @@ class SidewaysTestPathPublisher:
             pose.pose.orientation.y = quat[1]
             pose.pose.orientation.z = quat[2]
             pose.pose.orientation.w = quat[3]
-            path_msg.poses.append(pose)
+            path_poses.append(pose)
 
-            normals_msg.vectors.append(
+            normal_vectors.append(
                 Vector3(x=float(nozzle_axis[0]), y=float(nozzle_axis[1]), z=float(nozzle_axis[2]))
             )
 

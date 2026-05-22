@@ -17,6 +17,7 @@ from sensor_msgs.msg import JointState
 from controller_manager_msgs.srv import ListControllers
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest, LoadController, LoadControllerRequest
 from math import pi
+from std_msgs.msg import Bool
 
 class MoveManipulatorToTarget:
     def __init__(self):
@@ -55,13 +56,23 @@ class MoveManipulatorToTarget:
 
         # Initialize MoveIt
         roscpp_initialize(sys.argv)
-        self.move_group = MoveGroupCommander(self.planning_group, ns=self.robot_name, robot_description=f"{self.robot_name}/robot_description")
-        self.move_group.set_pose_reference_frame(self.manipulator_base_link)
+        self.move_group = MoveGroupCommander(self.planning_group, ns=f"{self.robot_name}", robot_description=f"{self.robot_name}/robot_description")
+        self.move_group.set_pose_reference_frame(f"{self.manipulator_base_link}")
         rospy.loginfo(f"MoveIt MoveGroup for {self.planning_group} initialized.")
 
+
+        # Wait for home pose before proceeding
+        self.wait_for_home_pose = rospy.get_param('~wait_for_home_pose', True)
+        self.home_pose_ready_topic = rospy.get_param('~home_pose_ready_topic', '/home_pose_ready')
+        if self.wait_for_home_pose:
+            rospy.loginfo("Waiting for home pose ready on %s", self.home_pose_ready_topic)
+            rospy.wait_for_message(self.home_pose_ready_topic, Bool)
+            rospy.loginfo("Home pose ready received; proceeding to move UR to start pose.")
+            
         # Initialize the subscribers for the path and nozzle override
         self.path_sub = rospy.Subscriber(self.path_topic, Path, self.path_callback)
         self.nozzle_override_sub = rospy.Subscriber('/nozzle_height_override', Float32, self.nozzle_override_callback)
+        rospy.loginfo(f"Subscribed to path on topic: {self.path_topic}")
         
         # TF listener
         self.tf_listener = tf.TransformListener()
@@ -71,55 +82,61 @@ class MoveManipulatorToTarget:
         self.display_trajectory_publisher = rospy.Publisher('move_group/display_planned_path', DisplayTrajectory, queue_size=10)
 
         # check if arm controller is loaded
-        list_controllers_service = f'/{self.robot_name}/{self.UR_prefix}/controller_manager/list_controllers'
+        list_controllers_service = f'/{self.robot_name}/controller_manager/list_controllers'
         print(f"Waiting for controller list on topic: {list_controllers_service}")
         try:
-            rospy.wait_for_service(list_controllers_service, timeout=5)
+            self._wait_for_service(list_controllers_service)
             rospy.loginfo("Controller list service is available.")
 
             controllers_list = rospy.ServiceProxy(list_controllers_service, ListControllers)()
             rospy.loginfo("Controller list retrieved successfully.")
-            # get arm_controller state
-            arm_controller_state = [controller for controller in controllers_list.controller if controller.name == 'arm_controller']
-            print(f"Arm controller state: {arm_controller_state}")
-            if not arm_controller_state:
-                # load the arm controller
-                rospy.logwarn("Arm controller not loaded. Trying to load it.")
-                rospy.wait_for_service(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/load_controller')
-                try:
-                    load_controller_client = rospy.ServiceProxy(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/load_controller', LoadController)
-                    load_controller_request = LoadControllerRequest()
-                    load_controller_request.name = 'arm_controller'
-                    load_controller_client(load_controller_request)
-                except rospy.ServiceException as e:
-                    rospy.logerr(f"Failed to load arm controller: {e}")
-            if arm_controller_state[0].state == 'running':
-                rospy.loginfo("Arm controller is running.")
-            elif arm_controller_state[0].state == 'stopped' or arm_controller_state[0].state == 'initialized':
-                # switch on the arm controller
-                rospy.wait_for_service(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller')
-                try:
-                    switch_controller_client = rospy.ServiceProxy(f'/{self.robot_name}/{self.UR_prefix}/controller_manager/switch_controller', SwitchController)
-                    switch_controller_request = SwitchControllerRequest()
-                    switch_controller_request.start_controllers = ['arm_controller']
-                    switch_controller_request.stop_controllers = ['twist_controller']
-                    switch_controller_request.strictness = 2  # Best effort
-                    switch_controller_client(switch_controller_request)
-                except rospy.ServiceException as e:
-                    rospy.logerr(f"Failed to start arm controller: {e}")
-            else:        
-                rospy.logwarn(f"Arm controller is in an unexpected state: {arm_controller_state[0].state}")
+            # get arm_controller state - controller name is prefixed with UR arm namespace
+            controller_name = f"{self.UR_prefix}/arm_controller"
+            arm_controller_state = [controller for controller in controllers_list.controller if controller.name == controller_name]
+            rospy.loginfo(f"Looking for controller: {controller_name}")
+            rospy.loginfo(f"Available controllers: {[c.name for c in controllers_list.controller]}")
+            
+            if arm_controller_state:
+                rospy.loginfo(f"Arm controller state: {arm_controller_state[0].state}")
+                if arm_controller_state[0].state == 'stopped' or arm_controller_state[0].state == 'initialized':
+                    # switch on the arm controller
+                    self._wait_for_service(f'/{self.robot_name}/controller_manager/switch_controller')
+                    try:
+                        switch_controller_client = rospy.ServiceProxy(f'/{self.robot_name}/controller_manager/switch_controller', SwitchController)
+                        switch_controller_request = SwitchControllerRequest()
+                        switch_controller_request.start_controllers = ['arm_controller']
+                        switch_controller_request.stop_controllers = ['twist_controller']
+                        switch_controller_request.strictness = 2  # Best effort
+                        switch_controller_client(switch_controller_request)
+                    except rospy.ServiceException as e:
+                        rospy.logerr(f"Failed to start arm controller: {e}")
+            else:
+                # Arm controller not found in list, assume it's already running (used by home pose node)
+                rospy.loginfo("Arm controller not found in controller list; assuming it's already active from home pose move.")
         except rospy.ROSException as e:
-            rospy.WARN(f"Failed to get controllers list: {e}")
-            return
+            rospy.logwarn(f"Failed to get controllers list: {e}")
+
+    def _wait_for_service(self, service_name: str):
+        while not rospy.is_shutdown():
+            try:
+                rospy.wait_for_service(service_name, timeout=5.0)
+                return
+            except rospy.ROSException:
+                rospy.logwarn(f"Waiting for service {service_name}...")
+                rospy.sleep(1.0)
             
 
     def nozzle_override_callback(self, override_msg: Float32):
         self.nozzle_height_override = override_msg.data
 
     def path_callback(self, path_msg):
+        rospy.loginfo(f"Path callback received with {len(path_msg.poses)} poses")
         if len(path_msg.poses) == 0:
             rospy.logwarn("Received an empty path!")
+            return
+        
+        if len(path_msg.poses) < 2:
+            rospy.logwarn(f"Path has only {len(path_msg.poses)} pose(s), need at least 2 for orientation")
             return
 
         # Get the first TCP pose from the path
@@ -130,8 +147,8 @@ class MoveManipulatorToTarget:
         # Get the current pose of the manipulator base in the map frame
         try:
             now = rospy.Time(0)
-            self.tf_listener.waitForTransform("map", self.robot_name+"/"+self.manipulator_base_link, now, rospy.Duration(2.0))
-            (trans, rot) = self.tf_listener.lookupTransform("map", self.robot_name+"/"+self.manipulator_base_link, now)
+            self.tf_listener.waitForTransform("map", "/" + self.robot_name + "/" + self.manipulator_base_link, now, rospy.Duration(2.0))
+            (trans, rot) = self.tf_listener.lookupTransform("map", "/" + self.robot_name + "/" + self.manipulator_base_link, now)
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
             rospy.logerr(f"TF error: {e}")
             return
@@ -176,8 +193,9 @@ class MoveManipulatorToTarget:
         
         # Set the target pose for MoveIt
         self.move_group.set_pose_target(relative_pose, end_effector_link=self.manipulator_tcp_link)
+        rospy.loginfo(f"Target pose set: position={relative_pose[0:3]}, rotation={relative_pose[3:6]}")
         local_target_pose = PoseStamped()
-        local_target_pose.header.frame_id = self.manipulator_base_link
+        local_target_pose.header.frame_id = f"/{self.robot_name}/{self.manipulator_base_link}"
         local_target_pose.header.stamp = rospy.Time.now()
         local_target_pose.pose.position.x = relative_position[0]
         local_target_pose.pose.position.y = relative_position[1]
@@ -217,9 +235,14 @@ class MoveManipulatorToTarget:
             weight=1.0
         ))
 
-        self.move_group.set_path_constraints(constraints)
+        # Path constraints are too restrictive - commenting out for initial testing
+        # self.move_group.set_path_constraints(constraints)
         
         # Plan and execute the motion
+        rospy.loginfo("Attempting to plan trajectory...")
+        rospy.loginfo(f"Planning group: {self.planning_group}")
+        rospy.loginfo(f"End effector link: {self.manipulator_tcp_link}")
+        rospy.loginfo(f"Reference frame: {f'/{self.robot_name}/{self.manipulator_base_link}'}")
         plan_result = self.move_group.plan()
 
         if isinstance(plan_result, tuple):
@@ -227,6 +250,7 @@ class MoveManipulatorToTarget:
             plan_trajectory = plan_result[1]  # The trajectory is usually the second item
 
             if success:
+                rospy.loginfo("Motion planning succeeded!")
                 plan_to_execute = plan_trajectory
                 corrected_joint_target = None
                 joint_goal_from_plan = None
@@ -291,6 +315,7 @@ class MoveManipulatorToTarget:
                 display_trajectory_publisher.publish(display_trajectory)
 
                 # Execute the motion
+                rospy.loginfo("Executing trajectory...")
                 self.move_group.execute(plan_to_execute, wait=True)
                 rospy.loginfo("Motion executed successfully.")
                 rospy.signal_shutdown("Motion executed successfully.")
