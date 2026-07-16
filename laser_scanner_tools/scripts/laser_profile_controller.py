@@ -29,7 +29,7 @@ class LaserProfileController(object):
         )
         self.lateral_pitch_topic = rospy.get_param(
             "~lateral_pitch_topic",
-            "/profiles_pitch_m"
+            "/ljx8000/profiles_pitch_m"
         )
 
         # Override-Steuerung

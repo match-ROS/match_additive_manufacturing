@@ -161,7 +161,8 @@ class ROSGui(QWidget):
             "Launch Logitch Controller": lambda: self.ros_interface.launch_logitch_controller(),
             "Launch Drivers": lambda: launch_drivers(self),
             "Prepare Driver Cleanup Channel": lambda: self.ros_interface.prime_driver_cleanup_sessions(),
-            "Launch Keyence Scanner": lambda: self.ros_interface.launch_keyence_scanner(),
+            "Launch ljx-7": lambda: self.ros_interface.launch_keyence_ljx7000(),
+            "Launch ljx-8": lambda: self.ros_interface.launch_keyence_ljx8000(),
             "Launch Flow Sensor Bridge": lambda: self.ros_interface.launch_flow_sensor_bridge(),
             "Start Dynamixel Driver": lambda: self.ros_interface.start_dynamixel_driver(),
             "Stop Dynamixel Driver": lambda: self.ros_interface.stop_dynamixel_driver(),
@@ -171,9 +172,14 @@ class ROSGui(QWidget):
             "Start Mocap": lambda: self.ros_interface.start_mocap(),
             "Start Sync": lambda: self.ros_interface.start_sync(),
         }
+        keyence_row = None
         for text, fn in setup_buttons.items():
             b = QPushButton(text); 
-            if text=="Launch Keyence Scanner": self.btn_keyence=b
+            if text == "Launch ljx-7":
+                self.btn_keyence_ljx7000 = b
+                keyence_row = QHBoxLayout()
+            elif text == "Launch ljx-8":
+                self.btn_keyence_ljx8000 = b
             if text=="Launch Flow Sensor Bridge":
                 self.btn_flow_sensor=b
                 b.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -185,7 +191,13 @@ class ROSGui(QWidget):
             if text == "Start Roscore": self.btn_roscore = b
             elif text == "Start Mocap": self.btn_mocap = b
             elif text == "Start Sync": self.btn_sync = b
-            b.clicked.connect(lambda _, f=fn: f()); b.setStyleSheet("background-color: lightgray;"); setup_layout.addWidget(b)
+            b.clicked.connect(lambda _, f=fn: f()); b.setStyleSheet("background-color: lightgray;")
+            if keyence_row is not None and text in ("Launch ljx-7", "Launch ljx-8"):
+                keyence_row.addWidget(b)
+                if text == "Launch ljx-8":
+                    setup_layout.addLayout(keyence_row)
+            else:
+                setup_layout.addWidget(b)
         spray_distance_box = QHBoxLayout(); spray_distance_box.addWidget(QLabel("Spray Distance (m):")); self.spray_distance_spin = QDoubleSpinBox(); self.spray_distance_spin.setRange(0.0, 1.0); self.spray_distance_spin.setDecimals(4); self.spray_distance_spin.setSingleStep(0.001); self.spray_distance_spin.setValue(self.ros_interface.get_cached_spray_distance());
         self._spray_distance_timer = QTimer(self); self._spray_distance_timer.setSingleShot(True); self._spray_distance_timer.setInterval(700); self._spray_distance_timer.timeout.connect(self._persist_pending_spray_distance); self._pending_spray_distance = self.spray_distance_spin.value();
         self.spray_distance_spin.valueChanged.connect(self._handle_spray_distance_changed); spray_distance_box.addWidget(self.spray_distance_spin); left_layout.addLayout(spray_distance_box)

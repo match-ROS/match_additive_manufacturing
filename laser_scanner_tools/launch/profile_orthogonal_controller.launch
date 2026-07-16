@@ -2,7 +2,8 @@
 
     <arg name="tcp_pose_topic" default="/mur620c/UR10_r/ur_calibrated_pose" />
     <arg name="cmd_topic" default="/laser_profile_offset_cmd_vel" />
-    <arg name="profile_topic" default="/profiles_float" />
+    <arg name="profile_topic" default="/ljx8000/profiles_float" />
+    <arg name="profile_pitch_topic" default="/ljx8000/profiles_pitch_m" />
     <arg name="target_layer_height" default="-58.0" />
     <arg name="distance_scanner_to_nozzle" default="0.05" />
     <arg name="velocity_override_topic" default="/velocity_override" />
@@ -20,6 +21,7 @@
         <!-- Transformation parameters -->
         <param name="tcp_pose_topic" value="$(arg tcp_pose_topic)" />
         <param name="cmd_topic" value="$(arg cmd_topic)" />
+        <param name="lateral_pitch_topic" value="$(arg profile_pitch_topic)" />
         <param name="lateral_error_topic" value="/laser_profile/lateral_error" />
         <param name="height_error_topic" value="/laser_profile/height_error" />
     </node>

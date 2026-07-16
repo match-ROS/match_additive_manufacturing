@@ -1007,7 +1007,8 @@ class ROSInterface:
             path_topics.get("ur_path_transformed", "/ur_path_transformed"): {"local": True, "remote": False},
             path_topics.get("mir_path_transformed", "/mir_path_transformed"): {"local": True, "remote": False},
             "/laser_profile_offset_cmd_vel": {"local": False, "remote": True},
-            "/profiles": {"local": False, "remote": True},
+            "/ljx7000/profiles": {"local": False, "remote": True},
+            "/ljx8000/profiles": {"local": False, "remote": True},
             "/path_index": {"local": False, "remote": True},
             "/orthogonal_error": {"local": False, "remote": True},
             "/orthogonal_twist": {"local": False, "remote": True},
@@ -1454,7 +1455,8 @@ class ROSInterface:
         node_cache = self._get_rosnode_list()
         mir = self.is_ros_node_running_fast("/retrieve_and_publish_mir_path", node_cache)
         ur = self.is_ros_node_running_fast("/retrieve_and_publish_ur_path", node_cache)
-        key = self.is_ros_node_running_fast("/keyence_ljx_profile_node", node_cache)
+        keyence_ljx7000 = self.is_ros_node_running_fast("/keyence_ljx7000_driver", node_cache)
+        keyence_ljx8000 = self.is_ros_node_running_fast("/keyence_ljx8000_profile", node_cache)
         flow = self.is_ros_node_running_fast("/flow_serial_bridge", node_cache)
         tgt = self.is_ros_node_running_fast("/target_broadcaster", node_cache)
         laser = self.is_ros_node_running_fast("/laser_profile_controller", node_cache)
@@ -1463,7 +1465,8 @@ class ROSInterface:
         # --- Button coloring ---
         self.gui.btn_parse_mir.setStyleSheet("background-color: lightgreen;" if mir else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_mir") else None
         self.gui.btn_parse_ur.setStyleSheet("background-color: lightgreen;" if ur else "background-color: lightgray;") if hasattr(self.gui,"btn_parse_ur") else None
-        self.gui.btn_keyence.setStyleSheet("background-color: lightgreen;" if key else "background-color: lightgray;") if hasattr(self.gui,"btn_keyence") else None
+        self.gui.btn_keyence_ljx7000.setStyleSheet("background-color: lightgreen;" if keyence_ljx7000 else "background-color: lightgray;") if hasattr(self.gui, "btn_keyence_ljx7000") else None
+        self.gui.btn_keyence_ljx8000.setStyleSheet("background-color: lightgreen;" if keyence_ljx8000 else "background-color: lightgray;") if hasattr(self.gui, "btn_keyence_ljx8000") else None
         if hasattr(self.gui, "btn_flow_sensor"):
             self.gui.btn_flow_sensor.setStyleSheet("background-color: lightgreen;" if flow else "background-color: lightgray;")
         self.gui.btn_target_broadcaster.setStyleSheet("background-color: lightgreen;" if tgt else "background-color: lightgray;") if hasattr(self.gui,"btn_target_broadcaster") else None
@@ -1576,16 +1579,28 @@ class ROSInterface:
             return "red"
 
     def launch_keyence_scanner(self):
-        """Launches the Keyence scanner on the robots PC."""
+        """Launch the LJX-8 Keyence scanner (legacy entry point)."""
+        self.launch_keyence_ljx8000()
+
+    def launch_keyence_ljx7000(self):
+        """Launch the LJX-7 Keyence scanner on the selected robots."""
+        self._launch_keyence_scanner("keyence_scanner_ljx7000.launch", "LJX-7")
+
+    def launch_keyence_ljx8000(self):
+        """Launch the LJX-8 Keyence scanner on the selected robots."""
+        self._launch_keyence_scanner("keyence_scanner_ljx8000.launch", "LJX-8")
+
+    def _launch_keyence_scanner(self, launch_file, scanner_name):
+        """Launch a Keyence scanner using the existing remote-launch workflow."""
         selected_robots = self.gui.get_selected_robots()
         if not selected_robots:
-            print("No robot selected. Skipping Keyence scanner launch.")
+            print(f"No robot selected. Skipping {scanner_name} Keyence scanner launch.")
             return
 
         _run_remote_commands(
             self.gui,
-            "Launching Keyence scanner",
-            ["roslaunch laser_scanner_tools keyence_scanner_ljx8000.launch"],
+            f"Launching {scanner_name} Keyence scanner",
+            [f"roslaunch laser_scanner_tools {launch_file}"],
             use_workspace_debug=True,
             target_robots=selected_robots,
         )

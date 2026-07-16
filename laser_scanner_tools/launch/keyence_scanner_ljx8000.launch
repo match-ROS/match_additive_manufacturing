@@ -5,29 +5,34 @@
   <arg name="parent_frame" default="mur620c/UR10_r/gripper" />
   <arg name="base_frame" default="mur620c/UR10_r/base" />
   <arg name="tool_frame" default="mur620c/UR10_r/tool0" />
+  <arg name="profiles_topic" default="/ljx8000/profiles" />
+  <arg name="profiles_float_topic" default="/ljx8000/profiles_float" />
+  <arg name="profiles_pitch_topic" default="/ljx8000/profiles_pitch_m" />
 
 
   <param name="lj_v7200_robot_description" command="cat '$(find keyence_scanner)/urdf/7200.urdf'" />
   <!-- load robot description of scanner -->
 
-  <node pkg="tf2_ros" type="static_transform_publisher" name="tool_nozzle_transform" args="0.0 0.0 0.63409 0 0.0 0.0 $(arg tool_frame) nozzle_frame" output="screen"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="gripper_sensor_transform" args="0.228 0.0 0.0 0.0 -1.57079632679 0.0 $(arg parent_frame) sensor_optical_frame" output="screen"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="sensor_transform" args="0 0 0.0 -2.1 0 0 sensor_optical_frame sensor_frame" output="screen"/>
-  <node pkg="tf2_ros" type="static_transform_publisher" name="world_transform" args="0 0 0 0 0 0 map world" output="screen"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="ljx8000_tool_nozzle_transform" args="0.0 0.0 0.63409 0 0.0 0.0 $(arg tool_frame) nozzle_ljx8000_frame" output="screen"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="ljx8000_gripper_sensor_transform" args="0.228 0.0 0.0 0.0 -1.57079632679 0.0 $(arg parent_frame) sensor_ljx8000_optical_frame" output="screen"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="ljx8000_sensor_transform" args="0 0 0.0 -2.1 0 0 sensor_ljx8000_optical_frame sensor_ljx8000_frame" output="screen"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="ljx8000_world_transform" args="0 0 0 0 0 0 map world_ljx8000" output="screen"/>
   <!-- <node pkg="rviz" type="rviz" name="rviz" args="-s '' -d $(find keyence_scanner)/config/v7200.rviz" output="screen" required="true"/> -->
 
   <!-- <node pkg="keyence_scanner" type="keyence_transform_node.py" name="keyence_transform_node" output="screen" />  -->
-  <node pkg="keyence_lj-x8400" type="keyence_ljx_profile_node.py" name="keyence_ljx_profile_node" output="screen" >
+  <node pkg="keyence_lj-x8400" type="keyence_ljx_profile_node.py" name="keyence_ljx8000_profile" output="screen" >
     <param name="ip_address" value="192.168.12.88" />
-    <param name="frame_id" value="sensor_optical_frame" />
+    <param name="frame_id" value="sensor_ljx8000_optical_frame" />
+    <remap from="/profiles" to="$(arg profiles_topic)" />
+    <remap from="/profiles_float" to="$(arg profiles_float_topic)" />
+    <remap from="/profiles_pitch_m" to="$(arg profiles_pitch_topic)" />
   </node>
 
   <!-- robot-side median publisher: computes & publishes medians at 10Hz -->
-  <node pkg="laser_scanner_tools" type="profiles_median_node.py" name="profiles_median_node" output="screen">
+  <!-- <node pkg="laser_scanner_tools" type="profiles_median_node.py" name="profiles_median_node" output="screen">
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="map_frame" value="map" />
-  </node>
+  </node> -->
 
 </launch>
-
 
